@@ -38,7 +38,6 @@ Pebble(페블)은 `Category → Milestone → Task`의 3단계 계층 구조를 
 | Activity | `/api/v1/activity` | 징검다리(활동 기록) 조회 |
 | Notification | `/api/v1/notifications` | 알림 목록 조회·삭제, 읽음 처리 |
 | Report | `/api/v1/reports` | 월말 리포트 조회·다운로드 |
-| Subscription | `/api/v1/subscriptions` | 구독 상태·결제 내역 조회 |
 
 ---
 
@@ -123,7 +122,6 @@ src/
 ├── task/
 ├── follow/
 ├── notification/
-├── subscription/
 ├── report/
 ├── config/               # 환경변수, DB 연결, 외부 서비스 설정
 ├── middlewares/          # 인증(JWT), 에러 핸들링
