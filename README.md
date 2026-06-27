@@ -244,6 +244,6 @@ npm cache clean --force
 npm install --legacy-peer-deps
 ```
 
-**Q. TypeScript 경로 별칭(`@/...`)에서 에러가 나요.**
+**Q. import한 모듈을 찾을 수 없다는 에러가 나요.**
 
 VS Code에서 `Ctrl+Shift+P → TypeScript: Restart TS server`를 실행해 주세요.
