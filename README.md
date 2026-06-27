@@ -219,8 +219,7 @@ npm run type-check && npm run lint
 
 ## 🔗 링크
 
-- [ERD](https://app.notion.com/p/38a643b12bce8197adabf0c1d6ff7a50)
-- [코드 컨벤션](https://app.notion.com/p/38b643b12bce81f1b970ccd62b67f968)
+- [ERD](https://app.notion.com/p/ERD-38b3a369b7a880339570cf95613b04c2)
 - API 문서 — 준비 중
 
 ---
