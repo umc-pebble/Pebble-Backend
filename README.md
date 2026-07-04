@@ -153,16 +153,20 @@ npm run type-check   # TypeScript 타입 검사
 ### 1. Git Flow 및 브랜치 전략
 
 ```
-main (배포용) → dev → feat/#이슈번호
+main (배포용) → dev → <type>/#이슈번호-설명
 ```
 
 | 타입 | 설명 | 예시 |
 |---|---|---|
-| feat | 새로운 기능 추가 | `feat/#5` |
-| fix | 버그 수정 | `fix/#12` |
-| refactor | 리팩토링 | `refactor/#8` |
-| docs | 문서 수정 | `docs/#3` |
-| chore | 패키지·빌드 설정 변경 | `chore/#1` |
+| feat | 새로운 기능 추가 | `feat/#5-kakao-login` |
+| fix | 버그 수정 | `fix/#12-jwt-refresh` |
+| docs | 문서만 수정 | `docs/#3-readme` |
+| style | 포맷/공백 등 (로직 변화 없음) | `style/#9-prettier` |
+| refactor | 리팩토링 (기능 변화 없음) | `refactor/#8-auth-logic` |
+| test | 테스트 추가/수정 | `test/#15-auth-test` |
+| chore | 빌드/설정/의존성/CI 등 | `chore/#1-eslint-setup` |
+| perf | 성능 개선 | `perf/#20-query-index` |
+| revert | 되돌리기 | `revert/#21-rollback` |
 
 - PR은 **`dev`로만** 머지, `main`은 팀장만 머지합니다.
 - 팀장 승인 없이 강제 머지는 금지합니다.
