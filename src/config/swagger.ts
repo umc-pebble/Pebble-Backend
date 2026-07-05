@@ -196,6 +196,31 @@ const options: swaggerJSDoc.Options = {
             },
           },
         },
+        GrassDay: {
+          type: 'object',
+          description:
+            '징검다리(활동기록) 일별 통계. ERD의 ActivityLog 한 행에 대응 (UK: userId+date). ' +
+            'level은 DB에 저장하지 않고 완료 수로 계산하는 값 (PLB-023: 0개=0(빈 칸), 1~2개=1, 3~4개=2, 5개 이상=3).',
+          properties: {
+            date: {
+              type: 'string',
+              format: 'date',
+              description: 'YYYY-MM-DD (KST 0시~23:59 기준)',
+              example: '2026-06-30',
+            },
+            completedTaskCount: {
+              type: 'integer',
+              description: '해당 날짜에 완료한 태스크 수 (PLB-022: 마일스톤·카테고리는 카운트하지 않음)',
+              example: 5,
+            },
+            level: {
+              type: 'integer',
+              enum: [0, 1, 2, 3],
+              description: '진하기 단계 — 0개: 0 / 1~2개: 1 / 3~4개: 2 / 5개 이상: 3',
+              example: 3,
+            },
+          },
+        },
         SharedCategoryMember: {
           type: 'object',
           description: '공유 카테고리 멤버. @@unique(categoryId, userId)',
@@ -317,6 +342,7 @@ const options: swaggerJSDoc.Options = {
     './src/milestone/*.route.ts',
     './src/task/*.route.ts',
     './src/shared/*.route.ts',
+    './src/activity/*.route.ts',
   ],
 };
 

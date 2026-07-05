@@ -8,6 +8,7 @@ import categoryRouter from './category/category.route';
 import milestoneRouter from './milestone/milestone.route';
 import taskRouter from './task/task.route';
 import sharedRouter from './shared/shared.route';
+import activityRouter from './activity/activity.route';
 import { ERROR_CODE } from './constants/error-code';
 
 dotenv.config();
@@ -33,6 +34,7 @@ app.use('/api/v1', categoryRouter);
 app.use('/api/v1', milestoneRouter);
 app.use('/api/v1', taskRouter);
 app.use('/api/v1', sharedRouter);
+app.use('/api/v1', activityRouter);
 // app.use('/api/v1/auth', authRouter);
 // app.use('/api/v1/users', userRouter);
 // app.use('/api/v1/follows', followRouter);
