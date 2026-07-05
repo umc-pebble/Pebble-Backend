@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { errorHandler } from './middlewares/error.middleware';
+import { ERROR_CODE } from './constants/error-code';
 
 dotenv.config();
 
@@ -27,10 +28,10 @@ app.get('/health', (_req, res) => {
 // app.use('/api/v1/reports', reportRouter);
 
 app.use((_req, res) => {
-  res.status(404).json({
+  res.status(ERROR_CODE.COMMON_NOT_FOUND.status).json({
     success: false,
     message: '요청한 리소스를 찾을 수 없습니다.',
-    error: { code: 'NOT_FOUND' },
+    error: { code: ERROR_CODE.COMMON_NOT_FOUND.code },
   });
 });
 
