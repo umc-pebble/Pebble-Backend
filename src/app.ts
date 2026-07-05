@@ -8,6 +8,7 @@ import categoryRouter from './category/category.route';
 import milestoneRouter from './milestone/milestone.route';
 import taskRouter from './task/task.route';
 import sharedRouter from './shared/shared.route';
+import { ERROR_CODE } from './constants/error-code';
 
 dotenv.config();
 
@@ -39,10 +40,10 @@ app.use('/api/v1', sharedRouter);
 // app.use('/api/v1/reports', reportRouter);
 
 app.use((_req, res) => {
-  res.status(404).json({
+  res.status(ERROR_CODE.COMMON_NOT_FOUND.status).json({
     success: false,
     message: '요청한 리소스를 찾을 수 없습니다.',
-    error: { code: 'NOT_FOUND' },
+    error: { code: ERROR_CODE.COMMON_NOT_FOUND.code },
   });
 });
 

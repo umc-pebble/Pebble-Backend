@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { ERROR_CODE } from '../constants/error-code';
 
 export interface AuthRequest extends Request {
   userId?: number;
@@ -13,10 +14,10 @@ export const authMiddleware = (
   const token = req.headers.authorization?.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({
+    return res.status(ERROR_CODE.COMMON_UNAUTHORIZED.status).json({
       success: false,
       message: '인증 토큰이 없습니다.',
-      error: { code: 'UNAUTHORIZED' },
+      error: { code: ERROR_CODE.COMMON_UNAUTHORIZED.code },
     });
   }
 
@@ -25,10 +26,10 @@ export const authMiddleware = (
     req.userId = decoded.userId;
     next();
   } catch {
-    return res.status(401).json({
+    return res.status(ERROR_CODE.AUTH_TOKEN_EXPIRED.status).json({
       success: false,
-      message: '유효하지 않은 토큰입니다.',
-      error: { code: 'UNAUTHORIZED' },
+      message: '유효하지 않거나 만료된 토큰입니다.',
+      error: { code: ERROR_CODE.AUTH_TOKEN_EXPIRED.code },
     });
   }
 };
