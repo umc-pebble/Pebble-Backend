@@ -1,7 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
 import { errorHandler } from './middlewares/error.middleware';
+import { swaggerSpec } from './config/swagger';
+import categoryRouter from './category/category.route';
+import milestoneRouter from './milestone/milestone.route';
+import taskRouter from './task/task.route';
+import sharedRouter from './shared/shared.route';
 
 dotenv.config();
 
@@ -16,12 +22,18 @@ app.get('/health', (_req, res) => {
   res.json({ success: true, message: 'Pebble API is running' });
 });
 
+// Swagger UI (API 문서)
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 // 라우터 등록
+// 담당 도메인 4개는 경로가 교차(category/:id/milestones 등)하므로 /api/v1 에 함께 마운트하고,
+// 각 라우트 파일 내부에서 전체 경로를 정의한다.
+app.use('/api/v1', categoryRouter);
+app.use('/api/v1', milestoneRouter);
+app.use('/api/v1', taskRouter);
+app.use('/api/v1', sharedRouter);
 // app.use('/api/v1/auth', authRouter);
 // app.use('/api/v1/users', userRouter);
-// app.use('/api/v1/categories', categoryRouter);
-// app.use('/api/v1/milestones', milestoneRouter);
-// app.use('/api/v1/tasks', taskRouter);
 // app.use('/api/v1/follows', followRouter);
 // app.use('/api/v1/notifications', notificationRouter);
 // app.use('/api/v1/reports', reportRouter);
