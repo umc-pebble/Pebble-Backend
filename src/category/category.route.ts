@@ -50,7 +50,7 @@ const router = Router();
  *               message: 카테고리 조회 성공
  *               data:
  *                 categories:
- *                   - categoryId: 1
+ *                   - id: 1
  *                     name: 학교
  *                     color: '#FF6B6B'
  *                     imageUrl: null
@@ -202,7 +202,7 @@ router.get('/categories/:categoryId', getCategory);
  *               code: 201
  *               message: 카테고리 생성 성공
  *               data:
- *                 categoryId: 5
+ *                 id: 5
  *                 name: 학교
  *                 color: '#FF6B6B'
  *                 displayOrder: 3

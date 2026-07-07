@@ -54,13 +54,13 @@ const router = Router();
  *               message: 마일스톤 조회 성공
  *               data:
  *                 milestones:
- *                   - milestoneId: 8
+ *                   - id: 8
  *                     name: 공모전 마감
  *                     dateType: SINGLE
  *                     startDate: '2026-07-10'
  *                     endDate: null
  *                     isCompleted: false
- *                   - milestoneId: 9
+ *                   - id: 9
  *                     name: 팀회의
  *                     dateType: REPEAT
  *                     repeatDays: MON

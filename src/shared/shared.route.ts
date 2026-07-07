@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { shareCategory, removeMember, unshareCategory } from './shared.controller';
+import { shareCategory, removeMember, deleteSharedCategory } from './shared.controller';
 
 const router = Router();
 
@@ -174,6 +174,6 @@ router.patch('/categories/:categoryId/members/:userId', removeMember);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.delete('/categories/:categoryId/share', unshareCategory);
+router.delete('/categories/:categoryId/share', deleteSharedCategory);
 
 export default router;

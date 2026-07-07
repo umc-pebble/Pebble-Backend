@@ -52,7 +52,7 @@ const router = Router();
  *               message: 태스크 조회 성공
  *               data:
  *                 tasks:
- *                   - taskId: 12
+ *                   - id: 12
  *                     name: 기획서 작성
  *                     dateType: SINGLE
  *                     startDate: '2026-07-01'
@@ -209,7 +209,7 @@ router.patch('/tasks/order', reorderTasks);
  *               code: 201
  *               message: 태스크 생성 성공
  *               data:
- *                 taskId: 12
+ *                 id: 12
  *                 name: 기획서 작성
  *                 isCompleted: false
  *       400:
@@ -388,7 +388,7 @@ router.patch('/tasks/:taskId', updateTask);
  *                   code: 200
  *                   message: 완료 처리 성공
  *                   data:
- *                     taskId: 12
+ *                     id: 12
  *                     isCompleted: true
  *                     completedAt: '2026-06-30T14:20:00+09:00'
  *               repeatOccurrence:
@@ -397,7 +397,7 @@ router.patch('/tasks/:taskId', updateTask);
  *                   code: 200
  *                   message: 완료 처리 성공
  *                   data:
- *                     taskId: 20
+ *                     id: 20
  *                     originalDate: '2026-07-14'
  *                     isCompleted: true
  *                     completedAt: '2026-07-14T09:10:00+09:00'

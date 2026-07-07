@@ -12,6 +12,6 @@ export const removeMember = (_req: Request, res: Response) => {
   res.status(200).json({ code: 200, message: '공유 멤버 강퇴 (미구현)', data: null });
 };
 
-export const unshareCategory = (_req: Request, res: Response) => {
+export const deleteSharedCategory = (_req: Request, res: Response) => {
   res.status(200).json({ code: 200, message: '공유 카테고리 삭제 (미구현)', data: null });
 };

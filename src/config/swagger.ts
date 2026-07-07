@@ -7,7 +7,7 @@ const options: swaggerJSDoc.Options = {
       title: 'Pebble API',
       version: '1.0.0',
       description:
-        'Pebble 백엔드 API 문서. 현재는 Category / Milestone / Task / SharedCategory 도메인만 포함합니다.',
+        'Pebble 백엔드 API 문서. 현재는 Category / Milestone / Task / SharedCategory / Activity 도메인을 포함합니다.',
     },
     servers: [
       {
