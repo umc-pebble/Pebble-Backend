@@ -28,7 +28,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/health', (_req, res) => {
-  res.json({ code: 200, message: 'Pebble API is running', data: null });
+  res.json({ success: true, message: 'Pebble API is running' });
 });
 
 // Swagger UI (API 문서)
@@ -52,9 +52,9 @@ app.use('/api/v1', subscriptionRouter);
 
 app.use((_req, res) => {
   res.status(ERROR_CODE.COMMON_NOT_FOUND.status).json({
-    code: ERROR_CODE.COMMON_NOT_FOUND.status,
+    success: false,
     message: '요청한 리소스를 찾을 수 없습니다.',
-    data: null,
+    error: { code: ERROR_CODE.COMMON_NOT_FOUND.code },
   });
 });
 

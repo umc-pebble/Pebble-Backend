@@ -15,9 +15,9 @@ export const authMiddleware = (
 
   if (!token) {
     return res.status(ERROR_CODE.COMMON_UNAUTHORIZED.status).json({
-      code: ERROR_CODE.COMMON_UNAUTHORIZED.status,
+      success: false,
       message: '인증 토큰이 없습니다.',
-      data: null,
+      error: { code: ERROR_CODE.COMMON_UNAUTHORIZED.code },
     });
   }
 
@@ -27,9 +27,9 @@ export const authMiddleware = (
     next();
   } catch {
     return res.status(ERROR_CODE.AUTH_TOKEN_EXPIRED.status).json({
-      code: ERROR_CODE.AUTH_TOKEN_EXPIRED.status,
+      success: false,
       message: '유효하지 않거나 만료된 토큰입니다.',
-      data: null,
+      error: { code: ERROR_CODE.AUTH_TOKEN_EXPIRED.code },
     });
   }
 };

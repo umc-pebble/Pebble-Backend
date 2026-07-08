@@ -10,16 +10,16 @@ export const errorHandler = (
 ) => {
   if (err instanceof AppError) {
     return res.status(err.status).json({
-      code: err.status,
+      success: false,
       message: err.message,
-      data: null,
+      error: { code: err.code },
     });
   }
 
   console.error(err.stack);
   res.status(ERROR_CODE.COMMON_INTERNAL_ERROR.status).json({
-    code: ERROR_CODE.COMMON_INTERNAL_ERROR.status,
+    success: false,
     message: '서버 오류가 발생했습니다.',
-    data: null,
+    error: { code: ERROR_CODE.COMMON_INTERNAL_ERROR.code },
   });
 };
