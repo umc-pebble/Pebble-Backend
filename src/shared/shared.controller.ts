@@ -8,6 +8,18 @@ export const shareCategory = (_req: Request, res: Response) => {
   res.status(200).json({ code: 200, message: '공유 카테고리 전환 (미구현)', data: null });
 };
 
+export const inviteMember = (_req: Request, res: Response) => {
+  res.status(201).json({ code: 201, message: '공유 멤버 추가 초대 (미구현)', data: null });
+};
+
+export const respondInvite = (_req: Request, res: Response) => {
+  res.status(200).json({ code: 200, message: '공유 초대 수락/거절 (미구현)', data: null });
+};
+
+export const leaveSharedCategory = (_req: Request, res: Response) => {
+  res.status(200).json({ code: 200, message: '공유 카테고리 자진 탈퇴 (미구현)', data: null });
+};
+
 export const removeMember = (_req: Request, res: Response) => {
   res.status(200).json({ code: 200, message: '공유 멤버 강퇴 (미구현)', data: null });
 };
