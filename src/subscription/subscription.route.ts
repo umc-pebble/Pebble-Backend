@@ -81,7 +81,7 @@ router.get('/subscriptions/me', getMySubscription);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 영수증 검증에 실패했습니다., data: null }
+ *             example: { success: false, message: 영수증 검증에 실패했습니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:

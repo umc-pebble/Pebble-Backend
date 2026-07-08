@@ -61,7 +61,7 @@ const router = Router();
  *                       items:
  *                         $ref: '#/components/schemas/SharedCategoryMember'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 전환·초대 완료
  *               data: {}
  *       400:
@@ -71,9 +71,10 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 400
+ *               success: false
  *               message: 팔로잉 관계가 아닌 유저는 초대할 수 없습니다.
- *               data: null
+ *               error:
+ *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -119,7 +120,7 @@ router.post('/categories/:categoryId/share', shareCategory);
  *                   properties:
  *                     data: { $ref: '#/components/schemas/SharedCategoryMember' }
  *             example:
- *               code: 201
+ *               success: true
  *               message: 초대 성공
  *               data:
  *                 id: 6
@@ -132,7 +133,7 @@ router.post('/categories/:categoryId/share', shareCategory);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 이미 초대되었거나 멤버인 유저입니다., data: null }
+ *             example: { success: false, message: 이미 초대되었거나 멤버인 유저입니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -140,13 +141,13 @@ router.post('/categories/:categoryId/share', shareCategory);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 403, message: 오너만 멤버를 초대할 수 있습니다., data: null }
+ *             example: { success: false, message: 오너만 멤버를 초대할 수 있습니다., error: { code: "COMMON_FORBIDDEN" } }
  *       404:
  *         description: 공유 카테고리 또는 대상 유저 없음
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 404, message: 대상 유저를 찾을 수 없습니다., data: null }
+ *             example: { success: false, message: 대상 유저를 찾을 수 없습니다., error: { code: "COMMON_NOT_FOUND" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -184,7 +185,7 @@ router.post('/categories/:categoryId/members', inviteMember);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 초대를 수락했습니다., data: null }
+ *             example: { success: true, message: 초대를 수락했습니다., data: null }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:
@@ -194,7 +195,7 @@ router.post('/categories/:categoryId/members', inviteMember);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 404, message: 대기 중인 초대를 찾을 수 없습니다., data: null }
+ *             example: { success: false, message: 대기 중인 초대를 찾을 수 없습니다., error: { code: "COMMON_NOT_FOUND" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -220,13 +221,13 @@ router.patch('/categories/:categoryId/members/me', respondInvite);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 공유 카테고리에서 나갔습니다., data: null }
+ *             example: { success: true, message: 공유 카테고리에서 나갔습니다., data: null }
  *       400:
  *         description: 오너는 탈퇴 불가 (공유 삭제를 사용)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 오너는 탈퇴할 수 없습니다. 공유 삭제를 이용해주세요., data: null }
+ *             example: { success: false, message: 오너는 탈퇴할 수 없습니다. 공유 삭제를 이용해주세요., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -234,7 +235,7 @@ router.patch('/categories/:categoryId/members/me', respondInvite);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 404, message: 멤버가 아닙니다., data: null }
+ *             example: { success: false, message: 멤버가 아닙니다., error: { code: "COMMON_NOT_FOUND" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -275,7 +276,7 @@ router.delete('/categories/:categoryId/members/me', leaveSharedCategory);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 강퇴 완료
  *               data: {}
  *       401:
@@ -287,9 +288,10 @@ router.delete('/categories/:categoryId/members/me', leaveSharedCategory);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 403
+ *               success: false
  *               message: 공유 카테고리의 오너만 멤버를 강퇴할 수 있습니다.
- *               data: null
+ *               error:
+ *                 code: COMMON_FORBIDDEN
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:
@@ -318,7 +320,7 @@ router.patch('/categories/:categoryId/members/:userId', removeMember);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 삭제 완료
  *               data: {}
  *       401:
@@ -330,9 +332,10 @@ router.patch('/categories/:categoryId/members/:userId', removeMember);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 403
+ *               success: false
  *               message: 공유 카테고리의 오너만 삭제할 수 있습니다.
- *               data: null
+ *               error:
+ *                 code: COMMON_FORBIDDEN
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:

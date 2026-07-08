@@ -77,7 +77,7 @@ router.get('/reports', getReports);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: month는 YYYY-MM 형식이어야 합니다., data: null }
+ *             example: { success: false, message: month는 YYYY-MM 형식이어야 합니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -85,7 +85,7 @@ router.get('/reports', getReports);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 404, message: 리포트를 찾을 수 없습니다., data: null }
+ *             example: { success: false, message: 리포트를 찾을 수 없습니다., error: { code: "COMMON_NOT_FOUND" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */

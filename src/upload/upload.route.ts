@@ -52,7 +52,7 @@ const router = Router();
  *                           type: string
  *                           example: https://storage.pebble.app/uploads/9f3a1c2e.png
  *             example:
- *               code: 201
+ *               success: true
  *               message: 이미지 업로드 성공
  *               data:
  *                 imageUrl: https://storage.pebble.app/uploads/9f3a1c2e.png
@@ -61,7 +61,7 @@ const router = Router();
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 허용되지 않은 파일 형식이거나 크기가 너무 큽니다., data: null }
+ *             example: { success: false, message: 허용되지 않은 파일 형식이거나 크기가 너무 큽니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:

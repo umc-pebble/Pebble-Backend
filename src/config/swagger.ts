@@ -27,9 +27,9 @@ const options: swaggerJSDoc.Options = {
       schemas: {
         ApiResponse: {
           type: 'object',
-          description: '공통 응답 포맷',
+          description: '공통 성공 응답 포맷',
           properties: {
-            code: { type: 'integer', example: 200 },
+            success: { type: 'boolean', example: true },
             message: { type: 'string', example: '요청 성공' },
             data: {
               type: 'object',
@@ -37,7 +37,22 @@ const options: swaggerJSDoc.Options = {
               description: '응답 데이터 (엔드포인트마다 형태가 다름)',
             },
           },
-          required: ['code', 'message'],
+          required: ['success', 'message'],
+        },
+        ErrorResponse: {
+          type: 'object',
+          description: '공통 실패 응답 포맷. error.code는 문자열 에러코드(ERROR_CODE 상수).',
+          properties: {
+            success: { type: 'boolean', example: false },
+            message: { type: 'string', example: '요청 값이 올바르지 않습니다.' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', example: 'COMMON_INVALID_INPUT' },
+              },
+            },
+          },
+          required: ['success', 'message', 'error'],
         },
         Category: {
           type: 'object',
@@ -443,8 +458,8 @@ const options: swaggerJSDoc.Options = {
             '잘못된 요청 — 필수 필드 누락, 형식 오류(날짜 YYYY-MM-DD / 시간 HH:mm 위반), editScope=THIS_ONLY인데 originalDate 누락, REPEAT 완료 토글에 originalDate 누락 등',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 400, message: '요청 값이 올바르지 않습니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '요청 값이 올바르지 않습니다.', error: { code: 'COMMON_INVALID_INPUT' } },
             },
           },
         },
@@ -452,8 +467,8 @@ const options: swaggerJSDoc.Options = {
           description: '인증 실패 — Authorization 헤더 누락, 토큰 만료/변조',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 401, message: '유효하지 않은 토큰입니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '유효하지 않은 토큰입니다.', error: { code: 'COMMON_UNAUTHORIZED' } },
             },
           },
         },
@@ -461,8 +476,8 @@ const options: swaggerJSDoc.Options = {
           description: '권한 없음 — 본인 소유 리소스가 아니거나, 공유 카테고리에서 OWNER 권한이 필요한 작업',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 403, message: '해당 작업에 대한 권한이 없습니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '해당 작업에 대한 권한이 없습니다.', error: { code: 'COMMON_FORBIDDEN' } },
             },
           },
         },
@@ -470,8 +485,8 @@ const options: swaggerJSDoc.Options = {
           description: '리소스를 찾을 수 없음 — 존재하지 않는 id이거나 이미 삭제된 리소스',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 404, message: '요청한 리소스를 찾을 수 없습니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '요청한 리소스를 찾을 수 없습니다.', error: { code: 'COMMON_NOT_FOUND' } },
             },
           },
         },
@@ -479,8 +494,8 @@ const options: swaggerJSDoc.Options = {
           description: '서버 내부 오류',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 500, message: '서버 오류가 발생했습니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '서버 오류가 발생했습니다.', error: { code: 'COMMON_INTERNAL_ERROR' } },
             },
           },
         },

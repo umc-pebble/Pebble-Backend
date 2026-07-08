@@ -102,7 +102,7 @@ router.get('/follows/search', searchUsers);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 이미 팔로우 요청한 유저입니다., data: null }
+ *             example: { success: false, message: 이미 팔로우 요청한 유저입니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -185,7 +185,7 @@ router.get('/follows', getFollows);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 팔로우 요청을 수락했습니다., data: null }
+ *             example: { success: true, message: 팔로우 요청을 수락했습니다., data: null }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:
@@ -195,7 +195,7 @@ router.get('/follows', getFollows);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 403, message: 처리 권한이 없습니다., data: null }
+ *             example: { success: false, message: 처리 권한이 없습니다., error: { code: "COMMON_FORBIDDEN" } }
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:
@@ -225,7 +225,7 @@ router.patch('/follows/:followId', respondFollow);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 팔로잉을 취소했습니다., data: null }
+ *             example: { success: true, message: 팔로잉을 취소했습니다., data: null }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:

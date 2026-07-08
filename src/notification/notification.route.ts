@@ -75,7 +75,7 @@ router.get('/notifications', getNotifications);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 알림을 읽음 처리했습니다., data: null }
+ *             example: { success: true, message: 알림을 읽음 처리했습니다., data: null }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -109,7 +109,7 @@ router.patch('/notifications/:notificationId/read', readNotification);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 알림을 삭제했습니다., data: null }
+ *             example: { success: true, message: 알림을 삭제했습니다., data: null }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -138,7 +138,7 @@ router.delete('/notifications/:notificationId', deleteNotification);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 알림을 모두 삭제했습니다., data: null }
+ *             example: { success: true, message: 알림을 모두 삭제했습니다., data: null }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:

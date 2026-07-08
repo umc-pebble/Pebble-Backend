@@ -85,7 +85,7 @@ router.get('/users/me', getMe);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 닉네임은 15일마다 변경할 수 있습니다., data: null }
+ *             example: { success: false, message: 닉네임은 15일마다 변경할 수 있습니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
@@ -111,7 +111,7 @@ router.patch('/users/me', updateMe);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 회원탈퇴가 완료되었습니다., data: null }
+ *             example: { success: true, message: 회원탈퇴가 완료되었습니다., data: null }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
@@ -254,13 +254,13 @@ router.patch('/users/me/settings', updateSettings);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 비밀번호가 변경되었습니다., data: null }
+ *             example: { success: true, message: 비밀번호가 변경되었습니다., data: null }
  *       400:
  *         description: 현재 비밀번호 불일치, 형식 오류, 또는 소셜 전용 계정
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 현재 비밀번호가 올바르지 않습니다., data: null }
+ *             example: { success: false, message: 현재 비밀번호가 올바르지 않습니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
@@ -292,7 +292,7 @@ router.patch('/users/me/password', changePassword);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 새 이메일로 인증 링크를 발송했습니다., data: null }
+ *             example: { success: true, message: 새 이메일로 인증 링크를 발송했습니다., data: null }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:
@@ -302,7 +302,7 @@ router.patch('/users/me/password', changePassword);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 409, message: 이미 사용 중인 이메일입니다., data: null }
+ *             example: { success: false, message: 이미 사용 중인 이메일입니다., error: { code: "AUTH_EMAIL_DUPLICATED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -342,7 +342,7 @@ router.post('/users/me/email/change-request', requestEmailChange);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 인증 링크가 만료되었습니다., data: null }
+ *             example: { success: false, message: 인증 링크가 만료되었습니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:

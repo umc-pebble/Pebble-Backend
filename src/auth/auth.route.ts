@@ -67,7 +67,7 @@ const router = Router();
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
- *             example: { code: 409, message: 이미 사용 중인 이메일입니다., data: null }
+ *             example: { success: false, message: 이미 사용 중인 이메일입니다., error: { code: "AUTH_EMAIL_DUPLICATED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -117,7 +117,7 @@ router.post('/auth/signup', signup);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
- *             example: { code: 401, message: 이메일 또는 비밀번호가 올바르지 않습니다., data: null }
+ *             example: { success: false, message: 이메일 또는 비밀번호가 올바르지 않습니다., error: { code: "COMMON_UNAUTHORIZED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -165,7 +165,7 @@ router.post('/auth/login', login);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 401, message: 소셜 인증에 실패했습니다., data: null }
+ *             example: { success: false, message: 소셜 인증에 실패했습니다., error: { code: "COMMON_UNAUTHORIZED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -211,7 +211,7 @@ router.post('/auth/social/google', googleLogin);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 401, message: 소셜 인증에 실패했습니다., data: null }
+ *             example: { success: false, message: 소셜 인증에 실패했습니다., error: { code: "COMMON_UNAUTHORIZED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -252,7 +252,7 @@ router.post('/auth/social/naver', naverLogin);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 401, message: 유효하지 않은 토큰입니다., data: null }
+ *             example: { success: false, message: 유효하지 않은 토큰입니다., error: { code: "COMMON_UNAUTHORIZED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -273,7 +273,7 @@ router.post('/auth/refresh', refresh);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 로그아웃 성공, data: null }
+ *             example: { success: true, message: 로그아웃 성공, data: null }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
@@ -307,13 +307,13 @@ router.post('/auth/logout', logout);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 입력하신 이메일로 재설정 링크를 발송했습니다., data: null }
+ *             example: { success: true, message: 입력하신 이메일로 재설정 링크를 발송했습니다., data: null }
  *       400:
  *         description: 소셜 전용 계정이라 자체 비밀번호 재설정 불가
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 소셜 로그인 계정입니다. 해당 플랫폼에서 관리해주세요., data: null }
+ *             example: { success: false, message: 소셜 로그인 계정입니다. 해당 플랫폼에서 관리해주세요., error: { code: "COMMON_INVALID_INPUT" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -345,13 +345,13 @@ router.post('/auth/password/reset-request', requestPasswordReset);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 200, message: 비밀번호가 변경되었습니다. 다시 로그인해주세요., data: null }
+ *             example: { success: true, message: 비밀번호가 변경되었습니다. 다시 로그인해주세요., data: null }
  *       400:
  *         description: 토큰 만료/사용됨/위조 또는 비밀번호 형식 오류
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { code: 400, message: 링크가 만료되었습니다. 다시 요청해주세요., data: null }
+ *             example: { success: false, message: 링크가 만료되었습니다. 다시 요청해주세요., error: { code: "COMMON_INVALID_INPUT" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
