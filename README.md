@@ -216,7 +216,7 @@ npm run type-check && npm run lint
 
 ### 4. 머지(Merge) 조건
 
-- 팀원 중 **최소 1명 이상의 Approve**를 받아야 합니다.
+- 팀원 중 **최소 2명 이상의 Approve**를 받아야 합니다.
 - `npm run type-check && npm run lint`를 로컬에서 통과해야 합니다.
 - **API 테스트 스크린샷**이 PR 본문에 첨부되어야 합니다.
 - 모든 피드백 반영 후, PR을 올린 본인이 직접 Merge합니다.
