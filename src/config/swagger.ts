@@ -461,7 +461,7 @@ const options: swaggerJSDoc.Options = {
       responses: {
         BadRequest: {
           description:
-            '잘못된 요청 — 필수 필드 누락, 형식 오류(날짜 YYYY-MM-DD / 시간 HH:mm 위반), editScope=THIS_ONLY인데 originalDate 누락, REPEAT 완료 토글에 originalDate 누락 등',
+            '잘못된 요청 — 필수 필드 누락, 형식 오류(날짜 YYYY-MM-DD / 시간 HH:mm 위반), 허용되지 않는 파라미터 조합 등. 세부 사유는 각 엔드포인트의 400 설명 참고',
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/ErrorResponse' },
