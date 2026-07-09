@@ -1,0 +1,17 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: pebble-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: pebble
+      MYSQL_USER: pebble
+      MYSQL_PASSWORD: pebble
+    ports:
+      - '3307:3306'
+    volumes:
+      - pebble-mysql-data:/var/lib/mysql
+
+volumes:
+  pebble-mysql-data:
