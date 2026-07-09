@@ -9,6 +9,13 @@ import milestoneRouter from './milestone/milestone.route';
 import taskRouter from './task/task.route';
 import sharedRouter from './shared/shared.route';
 import activityRouter from './activity/activity.route';
+import authRouter from './auth/auth.route';
+import userRouter from './user/user.route';
+import uploadRouter from './upload/upload.route';
+import followRouter from './follow/follow.route';
+import notificationRouter from './notification/notification.route';
+import reportRouter from './report/report.route';
+import subscriptionRouter from './subscription/subscription.route';
 import { ERROR_CODE } from './constants/error-code';
 
 dotenv.config();
@@ -28,18 +35,20 @@ app.get('/health', (_req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // 라우터 등록
-// 담당 도메인 4개는 경로가 교차(category/:id/milestones 등)하므로 /api/v1 에 함께 마운트하고,
-// 각 라우트 파일 내부에서 전체 경로를 정의한다.
+// 경로가 교차(category/:id/milestones, users/me/settings 등)하므로 모두 /api/v1 에 함께 마운트하고,
+// 각 라우트 파일 내부에서 전체 경로(/auth/signup, /users/me 등)를 정의한다.
 app.use('/api/v1', categoryRouter);
 app.use('/api/v1', milestoneRouter);
 app.use('/api/v1', taskRouter);
 app.use('/api/v1', sharedRouter);
 app.use('/api/v1', activityRouter);
-// app.use('/api/v1/auth', authRouter);
-// app.use('/api/v1/users', userRouter);
-// app.use('/api/v1/follows', followRouter);
-// app.use('/api/v1/notifications', notificationRouter);
-// app.use('/api/v1/reports', reportRouter);
+app.use('/api/v1', authRouter);
+app.use('/api/v1', userRouter);
+app.use('/api/v1', uploadRouter);
+app.use('/api/v1', followRouter);
+app.use('/api/v1', notificationRouter);
+app.use('/api/v1', reportRouter);
+app.use('/api/v1', subscriptionRouter);
 
 app.use((_req, res) => {
   res.status(ERROR_CODE.COMMON_NOT_FOUND.status).json({

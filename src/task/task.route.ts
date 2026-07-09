@@ -48,11 +48,11 @@ const router = Router();
  *                           items:
  *                             $ref: '#/components/schemas/Task'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 태스크 조회 성공
  *               data:
  *                 tasks:
- *                   - taskId: 12
+ *                   - id: 12
  *                     name: 기획서 작성
  *                     dateType: SINGLE
  *                     startDate: '2026-07-01'
@@ -106,7 +106,7 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 순서 변경 성공
  *               data: {}
  *       400:
@@ -116,9 +116,12 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 400
+ *               success: false
  *               message: 다른 마일스톤의 태스크가 포함되어 있습니다.
- *               data: null
+
+ *               error:
+
+ *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -206,10 +209,10 @@ router.patch('/tasks/order', reorderTasks);
  *                     data:
  *                       $ref: '#/components/schemas/Task'
  *             example:
- *               code: 201
+ *               success: true
  *               message: 태스크 생성 성공
  *               data:
- *                 taskId: 12
+ *                 id: 12
  *                 name: 기획서 작성
  *                 isCompleted: false
  *       400:
@@ -219,9 +222,12 @@ router.patch('/tasks/order', reorderTasks);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 400
+ *               success: false
  *               message: 요청 값이 올바르지 않습니다.
- *               data: null
+
+ *               error:
+
+ *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -231,9 +237,12 @@ router.patch('/tasks/order', reorderTasks);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 404
+ *               success: false
  *               message: 마일스톤을 찾을 수 없습니다.
- *               data: null
+
+ *               error:
+
+ *                 code: COMMON_NOT_FOUND
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -335,9 +344,12 @@ router.post('/tasks', createTask);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 400
+ *               success: false
  *               message: 이 회차만 수정하려면 originalDate가 필요합니다.
- *               data: null
+
+ *               error:
+
+ *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -385,19 +397,19 @@ router.patch('/tasks/:taskId', updateTask);
  *               singleOrRange:
  *                 summary: SINGLE/RANGE 태스크
  *                 value:
- *                   code: 200
+ *                   success: true
  *                   message: 완료 처리 성공
  *                   data:
- *                     taskId: 12
+ *                     id: 12
  *                     isCompleted: true
  *                     completedAt: '2026-06-30T14:20:00+09:00'
  *               repeatOccurrence:
  *                 summary: REPEAT 태스크 회차
  *                 value:
- *                   code: 200
+ *                   success: true
  *                   message: 완료 처리 성공
  *                   data:
- *                     taskId: 20
+ *                     id: 20
  *                     originalDate: '2026-07-14'
  *                     isCompleted: true
  *                     completedAt: '2026-07-14T09:10:00+09:00'
@@ -408,9 +420,12 @@ router.patch('/tasks/:taskId', updateTask);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 400
+ *               success: false
  *               message: 반복 태스크는 originalDate가 필요합니다.
- *               data: null
+
+ *               error:
+
+ *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -443,7 +458,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 태스크 삭제 성공
  *               data: {}
  *       401:

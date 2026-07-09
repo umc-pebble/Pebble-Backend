@@ -50,7 +50,7 @@ const router = Router();
  *                           items:
  *                             $ref: '#/components/schemas/GrassDay'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 징검다리 조회 성공
  *               data:
  *                 grass:
@@ -112,9 +112,10 @@ router.get('/activity', getMyGrass);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 403
+ *               success: false
  *               message: 징검다리를 조회할 권한이 없습니다.
- *               data: null
+ *               error:
+ *                 code: COMMON_FORBIDDEN
  *       404:
  *         description: 유저를 찾을 수 없음
  *         content:
@@ -122,9 +123,10 @@ router.get('/activity', getMyGrass);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 404
+ *               success: false
  *               message: 유저를 찾을 수 없습니다.
- *               data: null
+ *               error:
+ *                 code: COMMON_NOT_FOUND
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */

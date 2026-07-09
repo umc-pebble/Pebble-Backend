@@ -50,17 +50,17 @@ const router = Router();
  *                           items:
  *                             $ref: '#/components/schemas/Milestone'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 마일스톤 조회 성공
  *               data:
  *                 milestones:
- *                   - milestoneId: 8
+ *                   - id: 8
  *                     name: 공모전 마감
  *                     dateType: SINGLE
  *                     startDate: '2026-07-10'
  *                     endDate: null
  *                     isCompleted: false
- *                   - milestoneId: 9
+ *                   - id: 9
  *                     name: 팀회의
  *                     dateType: REPEAT
  *                     repeatDays: MON
@@ -144,9 +144,12 @@ router.get('/categories/:categoryId/milestones', getMilestones);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 400
+ *               success: false
  *               message: 요청 값이 올바르지 않습니다.
- *               data: null
+
+ *               error:
+
+ *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -191,7 +194,7 @@ router.post('/categories/:categoryId/milestones', createMilestone);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 순서 변경 성공
  *               data: {}
  *       400:
@@ -201,9 +204,12 @@ router.post('/categories/:categoryId/milestones', createMilestone);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 400
+ *               success: false
  *               message: 다른 카테고리의 마일스톤이 포함되어 있습니다.
- *               data: null
+
+ *               error:
+
+ *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -300,9 +306,12 @@ router.patch('/categories/:categoryId/milestones/order', reorderMilestones);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 400
+ *               success: false
  *               message: 이 회차만 수정하려면 originalDate가 필요합니다.
- *               data: null
+
+ *               error:
+
+ *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -333,7 +342,7 @@ router.patch('/milestones/:milestoneId', updateMilestone);
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
- *               code: 200
+ *               success: true
  *               message: 마일스톤 삭제 성공
  *               data: {}
  *       401:

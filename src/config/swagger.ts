@@ -7,7 +7,7 @@ const options: swaggerJSDoc.Options = {
       title: 'Pebble API',
       version: '1.0.0',
       description:
-        'Pebble 백엔드 API 문서. 현재는 Category / Milestone / Task / SharedCategory 도메인만 포함합니다.',
+        'Pebble 백엔드 API 문서. Auth / User / Upload / Category / Milestone / Task / SharedCategory / Activity / Follow / Notification / Report / Subscription 도메인을 포함합니다.',
     },
     servers: [
       {
@@ -27,9 +27,9 @@ const options: swaggerJSDoc.Options = {
       schemas: {
         ApiResponse: {
           type: 'object',
-          description: '공통 응답 포맷',
+          description: '공통 성공 응답 포맷',
           properties: {
-            code: { type: 'integer', example: 200 },
+            success: { type: 'boolean', example: true },
             message: { type: 'string', example: '요청 성공' },
             data: {
               type: 'object',
@@ -37,7 +37,22 @@ const options: swaggerJSDoc.Options = {
               description: '응답 데이터 (엔드포인트마다 형태가 다름)',
             },
           },
-          required: ['code', 'message'],
+          required: ['success', 'message'],
+        },
+        ErrorResponse: {
+          type: 'object',
+          description: '공통 실패 응답 포맷. error.code는 문자열 에러코드(ERROR_CODE 상수).',
+          properties: {
+            success: { type: 'boolean', example: false },
+            message: { type: 'string', example: '요청 값이 올바르지 않습니다.' },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', example: 'COMMON_INVALID_INPUT' },
+              },
+            },
+          },
+          required: ['success', 'message', 'error'],
         },
         Category: {
           type: 'object',
@@ -250,6 +265,158 @@ const options: swaggerJSDoc.Options = {
             },
           },
         },
+        User: {
+          type: 'object',
+          description: '회원 공개 정보. password·refreshToken 등 민감 필드는 응답에서 제외.',
+          properties: {
+            id: { type: 'integer', example: 42 },
+            email: { type: 'string', format: 'email', example: 'pebble@umc.com' },
+            nickname: { type: 'string', maxLength: 100, example: '조약돌' },
+            uniqueTag: {
+              type: 'string',
+              maxLength: 10,
+              description: '닉네임#태그 식별자 (친구 검색용)',
+              example: '0417',
+            },
+            profileImageUrl: { type: 'string', maxLength: 500, nullable: true, example: null },
+            bio: { type: 'string', nullable: true, example: '한 걸음씩' },
+            lastNicknameChangedAt: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true,
+              description: '마지막 닉네임 변경 시각 (15일 쿨다운 계산용, PLB-043)',
+              example: null,
+            },
+            activityColor: {
+              type: 'string',
+              maxLength: 20,
+              nullable: true,
+              description: '징검다리 색상 (팔레트 내 선택, PLB-026)',
+              example: '#7ED321',
+            },
+            notifyTaskDue: { type: 'boolean', description: '당일/마감 알림 on/off', example: true },
+            theme: { type: 'string', enum: ['LIGHT', 'DARK'], example: 'LIGHT' },
+            isTempPassword: {
+              type: 'boolean',
+              description: '임시 비밀번호 상태 (재설정 직후 true, 변경 유도)',
+              example: false,
+            },
+            createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+            updatedAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+          },
+        },
+        AuthTokens: {
+          type: 'object',
+          description: '로그인/토큰 재발급 응답. accessToken은 Authorization Bearer로 사용, refreshToken으로 재발급.',
+          properties: {
+            accessToken: { type: 'string', example: 'eyJhbGciOiJIUzI1Ni.access...' },
+            refreshToken: { type: 'string', example: 'eyJhbGciOiJIUzI1Ni.refresh...' },
+          },
+        },
+        SocialAccount: {
+          type: 'object',
+          description: '소셜 로그인 연동 정보. @@unique(provider, providerAccountId)',
+          properties: {
+            id: { type: 'integer', example: 3 },
+            userId: { type: 'integer', example: 42 },
+            provider: { type: 'string', enum: ['google', 'naver'], example: 'google' },
+            providerAccountId: { type: 'string', maxLength: 255, example: '109876543210987654321' },
+            createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+          },
+        },
+        Follow: {
+          type: 'object',
+          description:
+            '팔로우 관계. @@unique(followerId, followingId), 자기 자신 불가. 맞팔 개념 없는 단방향(PLB-041).',
+          properties: {
+            id: { type: 'integer', example: 15 },
+            followerId: { type: 'integer', description: '팔로우 요청자', example: 42 },
+            followingId: { type: 'integer', description: '팔로우 대상', example: 7 },
+            status: { type: 'string', enum: ['PENDING', 'ACCEPTED'], example: 'PENDING' },
+            createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+            updatedAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+          },
+        },
+        Notification: {
+          type: 'object',
+          description:
+            '인앱 알림. relatedId는 type별로 가리키는 대상이 달라 FK가 아님. 최대 30일 보관 후 자동 삭제(PLB-038).',
+          properties: {
+            id: { type: 'integer', example: 88 },
+            userId: { type: 'integer', example: 42 },
+            type: {
+              type: 'string',
+              enum: [
+                'FOLLOW_REQUEST',
+                'FOLLOW_ACCEPTED',
+                'FOLLOW_REJECTED',
+                'TASK_DUE',
+                'MILESTONE_DUE',
+                'REPORT',
+                'CATEGORY_INVITE',
+                'CATEGORY_DELETED',
+                'CATEGORY_ACCEPTED',
+              ],
+              example: 'FOLLOW_REQUEST',
+            },
+            relatedId: {
+              type: 'integer',
+              nullable: true,
+              description: 'type별 관련 리소스 id (FK 아님)',
+              example: 15,
+            },
+            isRead: { type: 'boolean', example: false },
+            expiresAt: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true,
+              description: '자동 삭제 예정 시각',
+              example: '2026-08-04T10:30:00+09:00',
+            },
+            createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+          },
+        },
+        Report: {
+          type: 'object',
+          description: '월간 리포트. 매월 1일 전월 집계 GIF 생성·발송, 발송 후 1주일 활성(PLB-027~029).',
+          properties: {
+            id: { type: 'integer', example: 4 },
+            userId: { type: 'integer', example: 42 },
+            month: { type: 'string', maxLength: 7, description: 'YYYY-MM', example: '2026-06' },
+            gifUrl: {
+              type: 'string',
+              maxLength: 500,
+              example: 'https://storage.pebble.app/reports/42-2026-06.gif',
+            },
+            expiresAt: {
+              type: 'string',
+              format: 'date-time',
+              description: '자동 삭제 일시 (발송 후 1주일)',
+              example: '2026-07-08T00:00:00+09:00',
+            },
+            createdAt: { type: 'string', format: 'date-time', example: '2026-07-01T00:00:00+09:00' },
+          },
+        },
+        Subscription: {
+          type: 'object',
+          description: '구독(애플 IAP). 결제 이력 보존을 위해 User 1:N Subscription.',
+          properties: {
+            id: { type: 'integer', example: 2 },
+            userId: { type: 'integer', example: 42 },
+            status: { type: 'string', enum: ['ACTIVE', 'CANCELED', 'EXPIRED'], example: 'ACTIVE' },
+            originalTransactionId: {
+              type: 'string',
+              maxLength: 255,
+              nullable: true,
+              description: '애플 IAP 원본 트랜잭션 ID',
+              example: '1000000123456789',
+            },
+            startDate: { type: 'string', format: 'date-time', example: '2026-07-01T00:00:00+09:00' },
+            endDate: { type: 'string', format: 'date-time', example: '2026-08-01T00:00:00+09:00' },
+            createdAt: { type: 'string', format: 'date-time', example: '2026-07-01T00:00:00+09:00' },
+            updatedAt: { type: 'string', format: 'date-time', example: '2026-07-01T00:00:00+09:00' },
+          },
+        },
       },
       parameters: {
         CategoryIdPath: {
@@ -291,8 +458,8 @@ const options: swaggerJSDoc.Options = {
             '잘못된 요청 — 필수 필드 누락, 형식 오류(날짜 YYYY-MM-DD / 시간 HH:mm 위반), editScope=THIS_ONLY인데 originalDate 누락, REPEAT 완료 토글에 originalDate 누락 등',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 400, message: '요청 값이 올바르지 않습니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '요청 값이 올바르지 않습니다.', error: { code: 'COMMON_INVALID_INPUT' } },
             },
           },
         },
@@ -300,8 +467,8 @@ const options: swaggerJSDoc.Options = {
           description: '인증 실패 — Authorization 헤더 누락, 토큰 만료/변조',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 401, message: '유효하지 않은 토큰입니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '유효하지 않은 토큰입니다.', error: { code: 'COMMON_UNAUTHORIZED' } },
             },
           },
         },
@@ -309,8 +476,8 @@ const options: swaggerJSDoc.Options = {
           description: '권한 없음 — 본인 소유 리소스가 아니거나, 공유 카테고리에서 OWNER 권한이 필요한 작업',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 403, message: '해당 작업에 대한 권한이 없습니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '해당 작업에 대한 권한이 없습니다.', error: { code: 'COMMON_FORBIDDEN' } },
             },
           },
         },
@@ -318,8 +485,8 @@ const options: swaggerJSDoc.Options = {
           description: '리소스를 찾을 수 없음 — 존재하지 않는 id이거나 이미 삭제된 리소스',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 404, message: '요청한 리소스를 찾을 수 없습니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '요청한 리소스를 찾을 수 없습니다.', error: { code: 'COMMON_NOT_FOUND' } },
             },
           },
         },
@@ -327,8 +494,8 @@ const options: swaggerJSDoc.Options = {
           description: '서버 내부 오류',
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/ApiResponse' },
-              example: { code: 500, message: '서버 오류가 발생했습니다.', data: null },
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: { success: false, message: '서버 오류가 발생했습니다.', error: { code: 'COMMON_INTERNAL_ERROR' } },
             },
           },
         },
@@ -336,13 +503,20 @@ const options: swaggerJSDoc.Options = {
     },
     security: [{ bearerAuth: [] }],
   },
-  // 현재는 내 담당 4개 도메인 라우트만 스캔한다.
+  // 전 도메인 라우트의 JSDoc을 스캔한다.
   apis: [
     './src/category/*.route.ts',
     './src/milestone/*.route.ts',
     './src/task/*.route.ts',
     './src/shared/*.route.ts',
     './src/activity/*.route.ts',
+    './src/auth/*.route.ts',
+    './src/user/*.route.ts',
+    './src/upload/*.route.ts',
+    './src/follow/*.route.ts',
+    './src/notification/*.route.ts',
+    './src/report/*.route.ts',
+    './src/subscription/*.route.ts',
   ],
 };
 
