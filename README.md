@@ -35,7 +35,7 @@ Pebble(페블)은 `Category → Milestone → Task`의 3단계 계층 구조를 
 | Milestone | `/api/v1/milestones` | 마일스톤 CRUD, 정렬 |
 | Task | `/api/v1/tasks` | 태스크 CRUD, 완료 처리, 정렬 |
 | Follow | `/api/v1/follows` | 팔로우 요청·수락·거절, 목록 조회 |
-| Activity | `/api/v1/activity` | 징검다리(활동 기록) 조회 |
+| Activity | `/api/v1/activity-logs` | 징검다리(활동 기록) 조회 |
 | Notification | `/api/v1/notifications` | 알림 목록 조회·삭제, 읽음 처리 |
 | Report | `/api/v1/reports` | 월말 리포트 조회·다운로드 |
 
