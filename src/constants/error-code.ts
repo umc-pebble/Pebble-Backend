@@ -33,11 +33,6 @@ export const ERROR_CODE = {
   // CATEGORY_NOT_OWNER: { code: 'CATEGORY_NOT_OWNER', status: 403 },   // 공유 카테고리 삭제/강퇴 권한 없음 (PLB-045)
   // FOLLOW_DUPLICATED: { code: 'FOLLOW_DUPLICATED', status: 409 },     // 중복 팔로우 요청
   // FOLLOW_SELF: { code: 'FOLLOW_SELF', status: 400 },                 // 자기 자신 팔로우 시도
-
-  // 공유 카테고리(SharedCategory) 도메인 — PLB-044~048, 팀장 승인 후 활성화 예정
-  // CATEGORY_NOT_FRIEND: { code: 'CATEGORY_NOT_FRIEND', status: 400 },             // 팔로잉 관계가 아닌 유저 초대 시도 (PLB-048)
-  // CATEGORY_MEMBER_DUPLICATED: { code: 'CATEGORY_MEMBER_DUPLICATED', status: 409 }, // 이미 멤버이거나 초대 대기 중인 유저 재초대
-  // CATEGORY_INVITE_NOT_PENDING: { code: 'CATEGORY_INVITE_NOT_PENDING', status: 400 }, // 이미 처리된(ACCEPTED) 초대를 수락/거절 시도
 } as const;
 
 export type ErrorCodeKey = keyof typeof ERROR_CODE;
