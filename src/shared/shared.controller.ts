@@ -13,6 +13,10 @@ export const inviteMember = (_req: Request, res: Response) => {
   sendSuccess(res, null, '공유 멤버 추가 초대 (미구현)', 201);
 };
 
+export const getMembers = (_req: Request, res: Response) => {
+  sendSuccess(res, null, '공유 멤버 목록 조회 (미구현)');
+};
+
 export const respondInvite = (_req: Request, res: Response) => {
   sendSuccess(res, null, '공유 초대 수락/거절 (미구현)');
 };

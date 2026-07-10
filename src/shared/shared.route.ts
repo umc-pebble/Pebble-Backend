@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   shareCategory,
   inviteMember,
+  getMembers,
   respondInvite,
   leaveSharedCategory,
   removeMember,
@@ -63,7 +64,17 @@ const router = Router();
  *             example:
  *               success: true
  *               message: 전환·초대 완료
- *               data: {}
+ *               data:
+ *                 - id: 5
+ *                   categoryId: 1
+ *                   userId: 42
+ *                   role: OWNER
+ *                   status: ACCEPTED
+ *                 - id: 6
+ *                   categoryId: 1
+ *                   userId: 7
+ *                   role: MEMBER
+ *                   status: PENDING
  *       400:
  *         description: 팔로잉 관계가 아닌 유저 포함
  *         content:
@@ -74,7 +85,7 @@ const router = Router();
  *               success: false
  *               message: 팔로잉 관계가 아닌 유저는 초대할 수 없습니다.
  *               error:
- *                 code: COMMON_INVALID_INPUT
+ *                 code: CATEGORY_NOT_FRIEND
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -133,7 +144,16 @@ router.post('/categories/:categoryId/share', shareCategory);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 이미 초대되었거나 멤버인 유저입니다., error: { code: "COMMON_INVALID_INPUT" } }
+ *             examples:
+ *               noTarget:
+ *                 summary: nickname/email 둘 다 없음
+ *                 value: { success: false, message: 닉네임 또는 이메일을 입력해주세요., error: { code: "COMMON_INVALID_INPUT" } }
+ *               notFriend:
+ *                 summary: 팔로잉 관계가 아님
+ *                 value: { success: false, message: 팔로잉 관계가 아닌 유저는 초대할 수 없습니다., error: { code: "CATEGORY_NOT_FRIEND" } }
+ *               duplicated:
+ *                 summary: 이미 멤버이거나 초대 대기 중
+ *                 value: { success: false, message: 이미 초대되었거나 멤버인 유저입니다., error: { code: "CATEGORY_MEMBER_DUPLICATED" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -141,7 +161,7 @@ router.post('/categories/:categoryId/share', shareCategory);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 오너만 멤버를 초대할 수 있습니다., error: { code: "COMMON_FORBIDDEN" } }
+ *             example: { success: false, message: 오너만 멤버를 초대할 수 있습니다., error: { code: "CATEGORY_NOT_OWNER" } }
  *       404:
  *         description: 공유 카테고리 또는 대상 유저 없음
  *         content:
@@ -152,6 +172,61 @@ router.post('/categories/:categoryId/share', shareCategory);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/categories/:categoryId/members', inviteMember);
+
+/**
+ * @swagger
+ * /categories/{categoryId}/members:
+ *   get:
+ *     summary: 공유 멤버 목록 조회
+ *     description: >
+ *       공유 카테고리의 멤버 목록을 조회합니다. 역할(OWNER/MEMBER)과 초대 상태(PENDING/ACCEPTED)를 포함합니다.
+ *     tags: [SharedCategory]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/CategoryIdPath'
+ *     responses:
+ *       200:
+ *         description: 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/SharedCategoryMember'
+ *             example:
+ *               success: true
+ *               message: 조회 성공
+ *               data:
+ *                 - id: 5
+ *                   categoryId: 1
+ *                   userId: 42
+ *                   role: OWNER
+ *                   status: ACCEPTED
+ *                 - id: 6
+ *                   categoryId: 1
+ *                   userId: 9
+ *                   role: MEMBER
+ *                   status: PENDING
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 이 카테고리의 멤버가 아님
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             example: { success: false, message: 이 카테고리의 멤버가 아닙니다., error: { code: "COMMON_FORBIDDEN" } }
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get('/categories/:categoryId/members', getMembers);
 
 // NOTE: '/members/me'(본인 액션)는 '/members/:userId'(오너의 멤버 관리)보다 먼저 등록해야
 // 'me'가 :userId로 매칭되는 충돌을 피할 수 있다.
@@ -244,30 +319,17 @@ router.delete('/categories/:categoryId/members/me', leaveSharedCategory);
 /**
  * @swagger
  * /categories/{categoryId}/members/{userId}:
- *   patch:
+ *   delete:
  *     summary: 공유 멤버 관리 — 강퇴 (PLB-045)
  *     description: >
  *       오너가 특정 멤버를 강퇴합니다. 해당 SharedCategoryMember 레코드가 제거되지만,
- *       강퇴된 멤버가 만든 마일스톤/태스크는 유지됩니다.
+ *       강퇴된 멤버가 만든 마일스톤/태스크는 유지됩니다. 강퇴된 멤버에게는 별도 알림을 보내지 않습니다.
  *     tags: [SharedCategory]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/CategoryIdPath'
  *       - $ref: '#/components/parameters/MemberUserIdPath'
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [action]
- *             properties:
- *               action:
- *                 type: string
- *                 enum: [KICK]
- *                 description: 수행할 멤버 관리 동작 (현재 KICK만 지원)
- *                 example: KICK
  *     responses:
  *       200:
  *         description: 강퇴 완료
@@ -278,7 +340,7 @@ router.delete('/categories/:categoryId/members/me', leaveSharedCategory);
  *             example:
  *               success: true
  *               message: 강퇴 완료
- *               data: {}
+ *               data: null
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -291,13 +353,13 @@ router.delete('/categories/:categoryId/members/me', leaveSharedCategory);
  *               success: false
  *               message: 공유 카테고리의 오너만 멤버를 강퇴할 수 있습니다.
  *               error:
- *                 code: COMMON_FORBIDDEN
+ *                 code: CATEGORY_NOT_OWNER
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/categories/:categoryId/members/:userId', removeMember);
+router.delete('/categories/:categoryId/members/:userId', removeMember);
 
 /**
  * @swagger
@@ -322,7 +384,7 @@ router.patch('/categories/:categoryId/members/:userId', removeMember);
  *             example:
  *               success: true
  *               message: 삭제 완료
- *               data: {}
+ *               data: null
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -335,7 +397,7 @@ router.patch('/categories/:categoryId/members/:userId', removeMember);
  *               success: false
  *               message: 공유 카테고리의 오너만 삭제할 수 있습니다.
  *               error:
- *                 code: COMMON_FORBIDDEN
+ *                 code: CATEGORY_NOT_OWNER
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:
