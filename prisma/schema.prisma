@@ -128,12 +128,12 @@ model Follow {
 }
 
 model Report {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  month     String   @db.VarChar(7) // YYYY-MM
-  gifUrl    String   @db.VarChar(500)
-  expiresAt DateTime // 발송 후 1주일
-  createdAt DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  month          String   @db.VarChar(7) // YYYY-MM
+  reportImageUrl String   @db.VarChar(500)
+  expiresAt      DateTime // 발송 후 1주일
+  createdAt      DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
