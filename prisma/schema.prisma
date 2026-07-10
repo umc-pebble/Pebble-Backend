@@ -183,38 +183,18 @@ model Milestone {
   dateType     DateType
   startDate    DateTime  @db.Date
   endDate      DateTime? @db.Date
-  repeatDays   String?   @db.VarChar(30) // 예: MON,WED,FRI
+  repeatDays   String?   @db.VarChar(30) // 예: MON,WED,FRI (REPEAT일 때 이 회차가 속한 반복 규칙, 회차 row마다 동일하게 복제 저장)
+  seriesId     Int? // REPEAT 회차들을 묶는 그룹 키. 단일/기간 마일스톤은 NULL (PLB-012, seriesId 방식/B안 - 07-10 확정)
   isCompleted  Boolean   @default(false)
   displayOrder Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  category   Category             @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  tasks      Task[]
-  exceptions MilestoneException[]
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tasks    Task[]
 
   @@index([categoryId, startDate])
-}
-
-// PLB-012 관련: 반복 마일스톤의 특정 회차만 수정/삭제(스킵)하기 위한 예외 테이블.
-// ERD 상 논의 중인 항목(seriesId 방식 대안 제안됨) — 07-08 기준 "일단 유지, 백엔드 회의에서 재논의" 상태.
-// 참고: ERD 상세 스펙 표에는 isCompleted가 nullable로 표기되어 있으나(TaskException은 NOT NULL),
-// 두 Exception 테이블 간 표기가 서로 달라 오타로 판단하고 부모 테이블(Milestone/Task)과 동일하게
-// NOT NULL + default(false)로 통일함. 회의에서 확인 필요.
-model MilestoneException {
-  id           Int       @id @default(autoincrement())
-  milestoneId  Int
-  originalDate DateTime  @db.Date
-  isSkipped    Boolean   @default(false)
-  name         String?   @db.VarChar(100)
-  isCompleted  Boolean   @default(false)
-  completedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
-
-  @@unique([milestoneId, originalDate])
+  @@index([seriesId])
 }
 
 model Task {
@@ -225,7 +205,8 @@ model Task {
   dateType     DateType
   startDate    DateTime  @db.Date
   endDate      DateTime? @db.Date
-  repeatDays   String?   @db.VarChar(30) // 예: MON,WED,FRI
+  repeatDays   String?   @db.VarChar(30) // 예: MON,WED,FRI (REPEAT일 때 이 회차가 속한 반복 규칙, 회차 row마다 동일하게 복제 저장)
+  seriesId     Int? // REPEAT 회차들을 묶는 그룹 키. 단일/기간 태스크는 NULL (PLB-017, seriesId 방식/B안 - 07-10 확정)
   taskTime     DateTime? @db.Time // 시:분 입력
   memo         String?   @db.Text
   color        String?   @db.VarChar(20) // 단일 태스크만 사용 (종속 태스크는 카테고리 색상 계열 따름)
@@ -235,35 +216,12 @@ model Task {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  milestone  Milestone?      @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
-  exceptions TaskException[]
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 
   @@index([userId, startDate])
   @@index([milestoneId, startDate])
-}
-
-// PLB-017 관련: 반복 태스크의 특정 회차만 수정/삭제(스킵)하기 위한 예외 테이블.
-// MilestoneException과 동일한 논의 대상 (07-08 기준 유지, 재논의 예정).
-// 참고: ERD 상세 스펙 표에는 originalDate가 nullable로 표기되어 있으나(MilestoneException은 NOT NULL),
-// originalDate는 어느 회차를 override하는지 식별하는 값이라 구조상 필수이므로 NOT NULL로 통일함.
-model TaskException {
-  id           Int       @id @default(autoincrement())
-  taskId       Int
-  originalDate DateTime  @db.Date
-  isSkipped    Boolean   @default(false)
-  name         String?   @db.VarChar(100)
-  taskTime     DateTime? @db.Time // 시:분 입력
-  memo         String?   @db.Text
-  color        String?   @db.VarChar(20)
-  isCompleted  Boolean   @default(false)
-  completedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  @@unique([taskId, originalDate])
+  @@index([seriesId])
 }
 
 // UK: userId + date (PLB-022, PLB-023 징검다리 집계용 일별 스냅샷)
