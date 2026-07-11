@@ -13,12 +13,8 @@ export const login = (_req: Request, res: Response) => {
   sendSuccess(res, null, '로그인 (미구현)');
 };
 
-export const googleLogin = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '구글 소셜 로그인 (미구현)');
-};
-
-export const naverLogin = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '네이버 소셜 로그인 (미구현)');
+export const socialLogin = (_req: Request, res: Response) => {
+  sendSuccess(res, null, '소셜 로그인 (미구현)');
 };
 
 export const refresh = (_req: Request, res: Response) => {
@@ -29,10 +25,6 @@ export const logout = (_req: Request, res: Response) => {
   sendSuccess(res, null, '로그아웃 (미구현)');
 };
 
-export const requestPasswordReset = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '비밀번호 재설정 링크 발송 (미구현)');
-};
-
-export const resetPassword = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '비밀번호 재설정 확정 (미구현)');
+export const issueTempPassword = (_req: Request, res: Response) => {
+  sendSuccess(res, null, '임시 비밀번호 발급 (미구현)');
 };
