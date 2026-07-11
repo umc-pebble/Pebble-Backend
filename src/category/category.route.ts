@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authMiddleware } from '../middlewares/auth.middleware';
 import {
   getCategories,
   getCategory,
@@ -9,6 +10,9 @@ import {
 } from './category.controller';
 
 const router = Router();
+
+// 카테고리 API는 모두 로그인 필요(bearerAuth). authMiddleware가 req.userId를 채운다.
+router.use(authMiddleware);
 
 /**
  * @swagger
