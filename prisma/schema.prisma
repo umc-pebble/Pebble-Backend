@@ -41,7 +41,6 @@ enum DateType {
 enum NotificationType {
   FOLLOW_REQUEST
   FOLLOW_ACCEPTED
-  FOLLOW_REJECTED
   TASK_DUE
   MILESTONE_DUE
   REPORT
