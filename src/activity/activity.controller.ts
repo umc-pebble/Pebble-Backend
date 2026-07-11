@@ -13,7 +13,7 @@ export const getActivityByUserId = (req: Request, res: Response) => {
     {
       userId,
       nickname: '페블이',
-      activityColor: 'GREEN',
+      activityColor: '22C55E',
       baseDate: baseDate ?? '2026-06-11',
       logs: [
         {

@@ -58,7 +58,9 @@ const router = Router();
  *                           example: 페블이
  *                         activityColor:
  *                           type: string
- *                           example: GREEN
+ *                           description: 활동기록 색상 HEX 문자열
+ *                           pattern: '^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$'
+ *                           example: '#22C55E'
  *                         baseDate:
  *                           type: string
  *                           format: date
@@ -73,7 +75,7 @@ const router = Router();
  *               data:
  *                 userId: 1
  *                 nickname: 페블이
- *                 activityColor: GREEN
+ *                 activityColor: '#22C55E'
  *                 baseDate: 2026-06-11
  *                 logs:
  *                   - date: 2026-06-05
