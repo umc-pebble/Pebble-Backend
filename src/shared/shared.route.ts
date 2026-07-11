@@ -48,9 +48,14 @@ const router = Router();
  *                 type: array
  *                 items:
  *                   type: object
- *                   properties:
- *                     nickname: { type: string, description: 닉네임#태그 또는 닉네임, example: 큰바위 }
- *                     email: { type: string, format: email, description: 이메일로 초대 시, example: friend@umc.com }
+ *                   description: nickname 또는 email 중 정확히 하나만 지정
+ *                   oneOf:
+ *                     - required: [nickname]
+ *                       properties:
+ *                         nickname: { type: string, description: 닉네임#태그 또는 닉네임, example: 큰바위 }
+ *                     - required: [email]
+ *                       properties:
+ *                         email: { type: string, format: email, description: 이메일로 초대 시, example: friend@umc.com }
  *                 example:
  *                   - nickname: 큰바위
  *                   - email: friend@umc.com
@@ -83,7 +88,7 @@ const router = Router();
  *                   role: MEMBER
  *                   status: PENDING
  *       400:
- *         description: 대상 미지정(nickname·email 둘 다 없음), 팔로잉 관계가 아닌 유저 포함, 또는 이미 멤버/초대됨
+ *         description: 대상 미지정(nickname·email 둘 다 없음), 또는 팔로잉 관계가 아닌 유저 포함
  *         content:
  *           application/json:
  *             schema:
@@ -95,9 +100,6 @@ const router = Router();
  *               notFriend:
  *                 summary: 팔로잉 관계가 아님
  *                 value: { success: false, message: 팔로잉 관계가 아닌 유저는 초대할 수 없습니다., error: { code: "CATEGORY_NOT_FRIEND" } }
- *               duplicated:
- *                 summary: 이미 멤버이거나 초대 대기 중
- *                 value: { success: false, message: 이미 초대되었거나 멤버인 유저입니다., error: { code: "CATEGORY_MEMBER_DUPLICATED" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       404:
@@ -111,6 +113,17 @@ const router = Router();
  *               message: 대상 유저를 찾을 수 없습니다.
  *               error:
  *                 code: COMMON_NOT_FOUND
+ *       409:
+ *         description: 이미 멤버이거나 초대 대기 중인 유저 포함
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *             example:
+ *               success: false
+ *               message: 이미 초대되었거나 멤버인 유저입니다.
+ *               error:
+ *                 code: CATEGORY_MEMBER_DUPLICATED
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -137,9 +150,13 @@ router.post('/categories/:categoryId/share', shareCategory);
  *         application/json:
  *           schema:
  *             type: object
- *             properties:
- *               nickname: { type: string, description: 닉네임#태그 또는 닉네임, example: 큰바위 }
- *               email: { type: string, format: email, description: 이메일로 초대 시, example: friend@umc.com }
+ *             oneOf:
+ *               - required: [nickname]
+ *                 properties:
+ *                   nickname: { type: string, description: 닉네임#태그 또는 닉네임, example: 큰바위 }
+ *               - required: [email]
+ *                 properties:
+ *                   email: { type: string, format: email, description: 이메일로 초대 시, example: friend@umc.com }
  *     responses:
  *       201:
  *         description: 초대 성공 (PENDING 등록)
@@ -161,7 +178,7 @@ router.post('/categories/:categoryId/share', shareCategory);
  *                 role: MEMBER
  *                 status: PENDING
  *       400:
- *         description: 대상 미지정(nickname·email 둘 다 없음), 팔로잉 관계 아님, 또는 이미 멤버/초대됨
+ *         description: 대상 미지정(nickname·email 둘 다 없음), 또는 팔로잉 관계 아님
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
@@ -172,9 +189,6 @@ router.post('/categories/:categoryId/share', shareCategory);
  *               notFriend:
  *                 summary: 팔로잉 관계가 아님
  *                 value: { success: false, message: 팔로잉 관계가 아닌 유저는 초대할 수 없습니다., error: { code: "CATEGORY_NOT_FRIEND" } }
- *               duplicated:
- *                 summary: 이미 멤버이거나 초대 대기 중
- *                 value: { success: false, message: 이미 초대되었거나 멤버인 유저입니다., error: { code: "CATEGORY_MEMBER_DUPLICATED" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -189,6 +203,12 @@ router.post('/categories/:categoryId/share', shareCategory);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
  *             example: { success: false, message: 대상 유저를 찾을 수 없습니다., error: { code: "COMMON_NOT_FOUND" } }
+ *       409:
+ *         description: 이미 멤버이거나 초대 대기 중
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             example: { success: false, message: 이미 초대되었거나 멤버인 유저입니다., error: { code: "CATEGORY_MEMBER_DUPLICATED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */

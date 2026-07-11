@@ -30,7 +30,7 @@ export const ERROR_CODE = {
   // SharedCategory (PLB-044~048) — 팀장 승인 필요, PR에서 확인 요청
   CATEGORY_NOT_OWNER: { code: 'CATEGORY_NOT_OWNER', status: 403 }, // 오너 전용 작업(초대/강퇴/삭제)을 멤버가 시도
   CATEGORY_NOT_FRIEND: { code: 'CATEGORY_NOT_FRIEND', status: 400 }, // 팔로잉 관계가 아닌 유저를 초대 시도
-  CATEGORY_MEMBER_DUPLICATED: { code: 'CATEGORY_MEMBER_DUPLICATED', status: 400 }, // 이미 멤버이거나 초대 대기 중인 유저 재초대
+  CATEGORY_MEMBER_DUPLICATED: { code: 'CATEGORY_MEMBER_DUPLICATED', status: 409 }, // 이미 멤버이거나 초대 대기 중인 유저 재초대
 
   // ─────────────────────────────────────────────
   // 제안 중 — 팀 승인 전까지 사용 보류
