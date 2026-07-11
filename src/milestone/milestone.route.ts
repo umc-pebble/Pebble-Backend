@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authMiddleware } from '../middlewares/auth.middleware';
 import {
   getMilestones,
   createMilestone,
@@ -8,6 +9,9 @@ import {
 } from './milestone.controller';
 
 const router = Router();
+
+// 마일스톤 API는 모두 로그인 필요(bearerAuth). authMiddleware가 req.userId를 채운다.
+router.use(authMiddleware);
 
 /**
  * @swagger
