@@ -35,18 +35,25 @@ const router = Router();
  *       - $ref: '#/components/parameters/CategoryIdPath'
  *     requestBody:
  *       required: true
+ *       description: >
+ *         초대할 친구 목록. 카테고리 생성/편집 화면에서 닉네임 또는 이메일로 검색해 모은 목록을
+ *         한 번에 전달한다 (항목당 nickname 또는 email 중 하나 지정).
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [inviteUserIds]
+ *             required: [invites]
  *             properties:
- *               inviteUserIds:
+ *               invites:
  *                 type: array
  *                 items:
- *                   type: integer
- *                 description: 초대할 사용자 id 목록 (팔로잉 관계만 가능, PENDING 상태로 등록)
- *                 example: [7, 8]
+ *                   type: object
+ *                   properties:
+ *                     nickname: { type: string, description: 닉네임#태그 또는 닉네임, example: 큰바위 }
+ *                     email: { type: string, format: email, description: 이메일로 초대 시, example: friend@umc.com }
+ *                 example:
+ *                   - nickname: 큰바위
+ *                   - email: friend@umc.com
  *     responses:
  *       200:
  *         description: 전환·초대 완료
@@ -76,20 +83,34 @@ const router = Router();
  *                   role: MEMBER
  *                   status: PENDING
  *       400:
- *         description: 팔로잉 관계가 아닌 유저 포함
+ *         description: 대상 미지정(nickname·email 둘 다 없음), 팔로잉 관계가 아닌 유저 포함, 또는 이미 멤버/초대됨
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *             examples:
+ *               noTarget:
+ *                 summary: nickname/email 둘 다 없음
+ *                 value: { success: false, message: 닉네임 또는 이메일을 입력해주세요., error: { code: "COMMON_INVALID_INPUT" } }
+ *               notFriend:
+ *                 summary: 팔로잉 관계가 아님
+ *                 value: { success: false, message: 팔로잉 관계가 아닌 유저는 초대할 수 없습니다., error: { code: "CATEGORY_NOT_FRIEND" } }
+ *               duplicated:
+ *                 summary: 이미 멤버이거나 초대 대기 중
+ *                 value: { success: false, message: 이미 초대되었거나 멤버인 유저입니다., error: { code: "CATEGORY_MEMBER_DUPLICATED" } }
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: 카테고리 또는 대상 유저를 찾을 수 없음
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
  *               success: false
- *               message: 팔로잉 관계가 아닌 유저는 초대할 수 없습니다.
+ *               message: 대상 유저를 찾을 수 없습니다.
  *               error:
- *                 code: CATEGORY_NOT_FRIEND
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       404:
- *         $ref: '#/components/responses/NotFound'
+ *                 code: COMMON_NOT_FOUND
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -369,6 +390,7 @@ router.delete('/categories/:categoryId/members/:userId', removeMember);
  *     description: >
  *       오너가 공유 카테고리를 삭제합니다. 전체 멤버의 목록에서 즉시 제거되고
  *       하위 마일스톤/태스크도 전부 삭제(CASCADE)됩니다. 복구할 수 없습니다.
+ *       삭제 전 멤버 목록을 조회해 각 멤버에게 "{카테고리명} 카테고리가 삭제되었습니다." 알림(CATEGORY_DELETED)을 발송합니다.
  *     tags: [SharedCategory]
  *     security:
  *       - bearerAuth: []
