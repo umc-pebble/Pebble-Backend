@@ -805,8 +805,8 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *           type: string
  *           enum: [THIS_ONLY, ALL]
  *         description: >
- *           MULTI 태스크 삭제 범위입니다.
- *           기본값은 없으며, MULTI 태스크 삭제 시 필수입니다.
+ *           다중 태스크 삭제 범위입니다.
+ *           기본값은 없으며, 다중 태스크 삭제 시 필수입니다.
  *           THIS_ONLY는 taskDateId에 해당하는 TaskDate를 삭제합니다.
  *           ALL은 미래 미완료 TaskDate만 삭제하고 과거/완료 회차는 보존합니다.
  *         example: THIS_ONLY
@@ -815,7 +815,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *         required: false
  *         schema:
  *           type: integer
- *         description: MULTI 태스크에서 THIS_ONLY 삭제 시 대상 TaskDate ID
+ *         description: 다중 태스크에서 THIS_ONLY 삭제 시 대상 TaskDate ID
  *         example: 101
  *     responses:
  *       200:
@@ -826,14 +826,14 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *               $ref: '#/components/schemas/ApiResponse'
  *             examples:
  *               singleOrRange:
- *                 summary: SINGLE/RANGE 삭제 성공
+ *                 summary: 일반/기간 삭제 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 삭제 성공
  *                   data:
  *                     deletedCount: 1
  *               multiThisOnly:
- *                 summary: MULTI 이 항목만 삭제 성공
+ *                 summary: 다중 이 항목만 삭제 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 회차 삭제 성공
@@ -842,7 +842,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *                     deletedTaskDateIds: [101]
  *                     deletedCount: 1
  *               multiAll:
- *                 summary: MULTI 전체 삭제 성공
+ *                 summary: 다중 전체 삭제 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 회차 삭제 성공
@@ -859,7 +859,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *               $ref: '#/components/schemas/ApiResponse'
  *             examples:
  *               missingDeleteScope:
- *                 summary: MULTI 태스크인데 deleteScope 누락
+ *                 summary: 다중 태스크인데 deleteScope 누락
  *                 value:
  *                   success: false
  *                   message: 다중 태스크 삭제 시 deleteScope가 필요합니다.
@@ -873,7 +873,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *                   error:
  *                     code: COMMON_INVALID_INPUT
  *               nonMultiWithDeleteScope:
- *                 summary: SINGLE/RANGE 태스크에 deleteScope 전달
+ *                 summary: 일반/기간 태스크에 deleteScope 전달
  *                 value:
  *                   success: false
  *                   message: 다중 태스크가 아닌 경우 deleteScope를 사용할 수 없습니다.
