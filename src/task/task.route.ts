@@ -24,6 +24,8 @@ const router = Router();
  *     summary: 하위 태스크 목록 조회 (PLB-020·021)
  *     description: >
  *       특정 마일스톤에 속한 하위 태스크 목록을 조회합니다.
+ *       기본 정렬은 D-Day가 가까운 순(오름차순)입니다.
+ *       사용자가 순서를 직접 변경한 경우 저장된 displayOrder 순서대로 조회합니다.
  *       상위 카테고리가 숨김 처리된 경우 캘린더에 노출되지 않습니다.
  *     tags: [Task]
  *     security:
@@ -203,9 +205,10 @@ router.get('/tasks', getTasks);
  * @swagger
  * /tasks/order:
  *   patch:
- *     summary: 태스크 순서 변경 (PLB-021)
+ *     summary: 하위 태스크 순서 변경 (PLB-021)
  *     description: >
  *       같은 마일스톤 내에서 태스크 순서를 변경합니다.
+ *       전달된 orderedIds 순서가 displayOrder로 저장되며, 이후 하위 태스크 목록 조회 시 해당 순서가 반영됩니다.
  *       다른 마일스톤으로의 이동은 지원하지 않습니다.
  *     tags: [Task]
  *     security:
