@@ -61,35 +61,43 @@ const router = Router();
  *                     dateType: SINGLE
  *                     startDate: '2026-07-01'
  *                     endDate: null
- *                     dates: null
  *                     color: null
  *                     isCompleted: false
  *                     completedAt: null
  *                     displayOrder: 1
+ *                   - id: 13
+ *                     userId: 1
+ *                     milestoneId: 10
+ *                     name: 보고서 작성
+ *                     dateType: RANGE
+ *                     startDate: '2026-07-10'
+ *                     endDate: '2026-07-20'
+ *                     color: null
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
  *                   - id: 30
  *                     userId: 1
  *                     milestoneId: 10
- *                     name: 운동하기
+ *                     name: 자료 조사
  *                     dateType: MULTI
  *                     startDate: null
  *                     endDate: null
- *                     dates:
+ *                     color: null
+ *                     displayOrder: 3
+ *                     taskDates:
  *                       - taskDateId: 101
  *                         date: '2026-07-10'
  *                         isCompleted: true
  *                         completedAt: '2026-07-10T09:10:00+09:00'
- *                         name: 운동하기
+ *                         name: 자료 조사
  *                         color: null
  *                       - taskDateId: 102
  *                         date: '2026-07-14'
  *                         isCompleted: false
  *                         completedAt: null
- *                         name: 운동하기
+ *                         name: 자료 조사
  *                         color: null
- *                     color: null
- *                     isCompleted: false
- *                     completedAt: null
- *                     displayOrder: 2
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -100,7 +108,6 @@ const router = Router();
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/milestones/:milestoneId/tasks', getTasks);
-
 /**
  * @swagger
  * /tasks:
