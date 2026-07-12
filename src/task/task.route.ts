@@ -708,6 +708,7 @@ router.post('/tasks', createTask);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.patch('/tasks/:taskId', updateTask);
+
 /**
  * @swagger
  * /tasks/{taskId}/complete:
@@ -715,7 +716,8 @@ router.patch('/tasks/:taskId', updateTask);
  *     summary: 태스크 완료 토글 (PLB-022)
  *     description: >
  *       태스크의 완료 상태를 토글합니다.
- *       SINGLE/RANGE는 Task의 완료 상태를 변경하고, MULTI는 TaskDate의 완료 상태를 변경합니다.
+ *       일반(SINGLE)은 태스크 하나에 체크박스 하나가 있으며, 기간(RANGE)은 시작일~종료일 전체에 체크박스 하나가 있습니다.
+ *       일반/기간은 Task의 완료 상태를 변경하고, 다중(MULTI)은 날짜별 TaskDate의 완료 상태를 변경합니다.
  *     tags: [Task]
  *     security:
  *       - bearerAuth: []
@@ -726,7 +728,7 @@ router.patch('/tasks/:taskId', updateTask);
  *         required: false
  *         schema:
  *           type: integer
- *         description: MULTI 태스크에서 완료 상태를 변경할 TaskDate ID
+ *         description: 다중 태스크에서 완료 상태를 변경할 TaskDate ID
  *         example: 101
  *     responses:
  *       200:
@@ -742,7 +744,7 @@ router.patch('/tasks/:taskId', updateTask);
  *                       type: object
  *             examples:
  *               singleOrRange:
- *                 summary: SINGLE/RANGE 완료 토글
+ *                 summary: 일반/기간 완료 토글
  *                 value:
  *                   success: true
  *                   message: 완료 처리 성공
@@ -751,7 +753,7 @@ router.patch('/tasks/:taskId', updateTask);
  *                     isCompleted: true
  *                     completedAt: '2026-07-10T14:20:00+09:00'
  *               multi:
- *                 summary: MULTI 날짜별 완료 토글
+ *                 summary: 다중 날짜별 완료 토글
  *                 value:
  *                   success: true
  *                   message: 완료 처리 성공
@@ -762,7 +764,7 @@ router.patch('/tasks/:taskId', updateTask);
  *                     isCompleted: true
  *                     completedAt: '2026-07-10T09:10:00+09:00'
  *       400:
- *         description: MULTI 태스크인데 taskDateId 누락
+ *         description: 다중 태스크인데 taskDateId 누락
  *         content:
  *           application/json:
  *             schema:
