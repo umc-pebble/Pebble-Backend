@@ -108,6 +108,7 @@ const router = Router();
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/milestones/:milestoneId/tasks', getTasks);
+
 /**
  * @swagger
  * /tasks:
@@ -158,7 +159,6 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *                     dateType: SINGLE
  *                     startDate: '2026-07-10'
  *                     endDate: null
- *                     dates: null
  *                     color: '#A5B4FC'
  *                     isCompleted: false
  *                     completedAt: null
@@ -170,7 +170,6 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *                     dateType: RANGE
  *                     startDate: '2026-07-10'
  *                     endDate: '2026-07-20'
- *                     dates: null
  *                     color: '#F9A8D4'
  *                     isCompleted: false
  *                     completedAt: null
@@ -182,7 +181,9 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *                     dateType: MULTI
  *                     startDate: null
  *                     endDate: null
- *                     dates:
+ *                     color: '#86EFAC'
+ *                     displayOrder: 3
+ *                     taskDates:
  *                       - taskDateId: 201
  *                         date: '2026-07-10'
  *                         isCompleted: false
@@ -195,10 +196,6 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *                         completedAt: '2026-07-14T09:10:00+09:00'
  *                         name: 운동하기
  *                         color: '#86EFAC'
- *                     color: '#86EFAC'
- *                     isCompleted: false
- *                     completedAt: null
- *                     displayOrder: 3
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
