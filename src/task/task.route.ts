@@ -898,7 +898,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *         description: 다중 태스크에서 THIS_ONLY 삭제 시 대상 TaskDate ID
  *         example: 101
  *     responses:
- *       200:
+  *       200:
  *         description: 삭제 성공
  *         content:
  *           application/json:
@@ -918,7 +918,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *                   success: true
  *                   message: 태스크 회차 삭제 성공
  *                   data:
- *                     scope: THIS_ONLY
+ *                     deleteScope: THIS_ONLY
  *                     deletedTaskDateIds: [101]
  *                     deletedCount: 1
  *               multiAll:
@@ -927,7 +927,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *                   success: true
  *                   message: 태스크 회차 삭제 성공
  *                   data:
- *                     scope: ALL
+ *                     deleteScope: ALL
  *                     deletedTaskDateIds: [102, 103]
  *                     deletedCount: 2
  *                     preservedCount: 1
