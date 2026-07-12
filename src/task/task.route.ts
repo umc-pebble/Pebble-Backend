@@ -406,13 +406,76 @@ router.patch('/tasks/order', reorderTasks);
  *                     color: '#A5B4FC'
  *                     isCompleted: false
  *                     completedAt: null
+ *                     displayOrder: 1
+ *               independentRangeTask:
+ *                 summary: 독립 기간 태스크 생성 성공
+ *                 value:
+ *                   success: true
+ *                   message: 태스크 생성 성공
+ *                   data:
+ *                     id: 13
+ *                     userId: 1
+ *                     milestoneId: null
+ *                     name: 여행 준비
+ *                     dateType: RANGE
+ *                     startDate: '2026-07-10'
+ *                     endDate: '2026-07-20'
+ *                     color: '#F9A8D4'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *               independentMultiTask:
+ *                 summary: 독립 다중 태스크 생성 성공
+ *                 value:
+ *                   success: true
+ *                   message: 태스크 생성 성공
+ *                   data:
+ *                     id: 14
+ *                     userId: 1
+ *                     milestoneId: null
+ *                     name: 운동하기
+ *                     dateType: MULTI
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#86EFAC'
+ *                     displayOrder: 3
+ *                     taskDates:
+ *                       - taskDateId: 101
+ *                         date: '2026-07-10'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동하기
+ *                         color: '#86EFAC'
+ *                       - taskDateId: 102
+ *                         date: '2026-07-14'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동하기
+ *                         color: '#86EFAC'
+ *               childSingleTask:
+ *                 summary: 하위 일반 태스크 생성 성공
+ *                 value:
+ *                   success: true
+ *                   message: 태스크 생성 성공
+ *                   data:
+ *                     id: 20
+ *                     userId: 1
+ *                     milestoneId: 10
+ *                     name: 기획서 작성
+ *                     dateType: SINGLE
+ *                     startDate: '2026-07-10'
+ *                     endDate: null
+ *                     color: null
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
  *               childRangeTask:
  *                 summary: 하위 기간 태스크 생성 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 생성 성공
  *                   data:
- *                     id: 20
+ *                     id: 21
  *                     userId: 1
  *                     milestoneId: 10
  *                     name: 기획서 작성
@@ -422,6 +485,7 @@ router.patch('/tasks/order', reorderTasks);
  *                     color: null
  *                     isCompleted: false
  *                     completedAt: null
+ *                     displayOrder: 2
  *               childMultiTask:
  *                 summary: 하위 다중 태스크 생성 성공
  *                 value:
@@ -436,15 +500,20 @@ router.patch('/tasks/order', reorderTasks);
  *                     startDate: null
  *                     endDate: null
  *                     color: null
+ *                     displayOrder: 3
  *                     taskDates:
- *                       - taskDateId: 101
+ *                       - taskDateId: 201
  *                         date: '2026-07-10'
  *                         isCompleted: false
  *                         completedAt: null
- *                       - taskDateId: 102
+ *                         name: 자료 조사
+ *                         color: null
+ *                       - taskDateId: 202
  *                         date: '2026-07-14'
  *                         isCompleted: false
  *                         completedAt: null
+ *                         name: 자료 조사
+ *                         color: null
  *       400:
  *         description: 입력값 오류
  *         content:
@@ -502,6 +571,7 @@ router.post('/tasks', createTask);
  *       태스크 정보를 수정합니다. dateType과 소속 마일스톤은 변경할 수 없습니다.
  *       다중 태스크의 이름/색상 수정은 editScope로 이 항목만 수정할지 전체 수정할지 지정합니다.
  *       날짜 수정은 editScope를 사용하지 않고 현재 dateType에 맞는 날짜 필드를 직접 수정합니다.
+ *       editScope=ALL인 경우 오늘 이후 미완료 회차에만 적용되며, 과거 또는 완료 회차의 기존 이름/색상은 서버에서 보존합니다.
  *     tags: [Task]
  *     security:
  *       - bearerAuth: []
@@ -620,28 +690,38 @@ router.post('/tasks', createTask);
  *                   message: 태스크 수정 성공
  *                   data:
  *                     id: 12
+ *                     dateType: SINGLE
  *                     name: 기획서 최종본 작성
  *                     startDate: '2026-07-11'
+ *                     endDate: null
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
  *               multiThisOnly:
  *                 summary: 다중 이 항목만 수정 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 수정 성공
  *                   data:
- *                     scope: THIS_ONLY
+ *                     editScope: THIS_ONLY
+ *                     taskId: 30
  *                     taskDateId: 101
- *                     exception:
- *                       name: 이번 회차만 병원 가기
- *                       color: null
+ *                     date: '2026-07-10'
+ *                     name: 이번 회차만 병원 가기
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
  *               multiAll:
  *                 summary: 다중 전체 수정 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 수정 성공
  *                   data:
- *                     scope: ALL
- *                     affectedCount: 3
- *                     snapshottedCount: 2
+ *                     editScope: ALL
+ *                     id: 30
+ *                     dateType: MULTI
+ *                     name: 아침 운동
+ *                     color: '#A5B4FC'
  *       400:
  *         description: 입력값 오류 또는 수정 범위 오류
  *         content:
