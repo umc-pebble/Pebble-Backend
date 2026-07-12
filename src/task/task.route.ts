@@ -378,7 +378,7 @@ router.patch('/tasks/order', reorderTasks);
  *                 dateType: MULTI
  *                 dates: ['2026-07-10', '2026-07-14', '2026-07-20']
  *     responses:
- *       201:
+  *       201:
  *         description: 태스크 생성 성공
  *         content:
  *           application/json:
@@ -391,7 +391,7 @@ router.patch('/tasks/order', reorderTasks);
  *                       type: object
  *             examples:
  *               independentSingleTask:
- *                 summary: 독립 일반 날짜 태스크 생성 성공
+ *                 summary: 독립 일반 태스크 생성 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 생성 성공
@@ -423,7 +423,7 @@ router.patch('/tasks/order', reorderTasks);
  *                     isCompleted: false
  *                     completedAt: null
  *               childMultiTask:
- *                 summary: 하위 다중 날짜 태스크 생성 성공
+ *                 summary: 하위 다중 태스크 생성 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 생성 성공
@@ -437,11 +437,11 @@ router.patch('/tasks/order', reorderTasks);
  *                     endDate: null
  *                     color: null
  *                     taskDates:
- *                       - id: 101
+ *                       - taskDateId: 101
  *                         date: '2026-07-10'
  *                         isCompleted: false
  *                         completedAt: null
- *                       - id: 102
+ *                       - taskDateId: 102
  *                         date: '2026-07-14'
  *                         isCompleted: false
  *                         completedAt: null
