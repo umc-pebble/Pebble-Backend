@@ -76,6 +76,21 @@ export const milestoneService = {
   ) {
     const existing = await getOwnedMilestoneOrThrow(userId, milestoneId);
 
+    // dateType-endDate 정합성: endDate는 RANGE 전용. 생성 시 zod가 막는 규칙을
+    // 수정에서도 유지한다(기존 row의 dateType은 DB 조회 후에만 알 수 있어 여기서 검사).
+    if (existing.dateType !== 'RANGE' && input.endDate) {
+      throw new AppError(
+        'COMMON_INVALID_INPUT',
+        'RANGE 마일스톤이 아니면 endDate를 지정할 수 없습니다.',
+      );
+    }
+    if (existing.dateType === 'RANGE' && input.endDate === null) {
+      throw new AppError(
+        'COMMON_INVALID_INPUT',
+        'RANGE 마일스톤의 endDate는 비울 수 없습니다.',
+      );
+    }
+
     // 날짜 정합성: 최종 startDate/endDate 기준 endDate < startDate면 400.
     const effectiveStart = input.startDate
       ? new Date(input.startDate)
