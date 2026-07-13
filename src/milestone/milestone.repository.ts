@@ -22,13 +22,18 @@ export const milestoneRepository = {
     });
   },
 
-  // 카테고리 내 마일스톤 개수. 생성 시 displayOrder(맨 뒤) 계산용.
-  countByCategoryId(categoryId: number) {
-    return prisma.milestone.count({ where: { categoryId } });
-  },
-
-  create(data: Prisma.MilestoneUncheckedCreateInput) {
-    return prisma.milestone.create({ data });
+  // 생성. displayOrder는 "현재 최대값 + 1"로 목록 맨 뒤에 붙인다.
+  // 조회와 생성을 한 트랜잭션으로 묶어, 삭제로 생긴 순번 공백·동시 생성으로 인한 중복을 방지한다.
+  create(data: Omit<Prisma.MilestoneUncheckedCreateInput, 'displayOrder'>) {
+    return prisma.$transaction(async (tx) => {
+      const max = await tx.milestone.aggregate({
+        where: { categoryId: data.categoryId },
+        _max: { displayOrder: true },
+      });
+      return tx.milestone.create({
+        data: { ...data, displayOrder: (max._max.displayOrder ?? -1) + 1 },
+      });
+    });
   },
 
   update(milestoneId: number, data: Prisma.MilestoneUncheckedUpdateInput) {

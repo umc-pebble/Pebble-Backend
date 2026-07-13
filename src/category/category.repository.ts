@@ -21,15 +21,19 @@ export const categoryRepository = {
     });
   },
 
-  // 유저의 카테고리 개수. 생성 개수 제한(CATEGORY_LIMIT_EXCEEDED) 검사에 사용.
-  countByUserId(userId: number) {
-    return prisma.category.count({ where: { userId } });
-  },
-
-  // 생성. userId·displayOrder 등은 서비스에서 채워 넘긴다.
+  // 생성. displayOrder는 "현재 최대값 + 1"로 목록 맨 뒤에 붙인다.
+  // 조회와 생성을 한 트랜잭션으로 묶어, 삭제로 생긴 순번 공백·동시 생성으로 인한 중복을 방지한다.
   // Unchecked 타입: 관계 대신 userId(FK 스칼라)를 직접 넣기 위함.
-  create(data: Prisma.CategoryUncheckedCreateInput) {
-    return prisma.category.create({ data });
+  create(data: Omit<Prisma.CategoryUncheckedCreateInput, 'displayOrder'>) {
+    return prisma.$transaction(async (tx) => {
+      const max = await tx.category.aggregate({
+        where: { userId: data.userId },
+        _max: { displayOrder: true },
+      });
+      return tx.category.create({
+        data: { ...data, displayOrder: (max._max.displayOrder ?? -1) + 1 },
+      });
+    });
   },
 
   // 부분 수정. 전달된 필드만 갱신된다(undefined인 필드는 건드리지 않음).

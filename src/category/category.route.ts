@@ -1,5 +1,11 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { validateBody } from '../middlewares/validate.middleware';
+import {
+  createCategorySchema,
+  updateCategorySchema,
+  reorderCategoriesSchema,
+} from './category.schema';
 import {
   getCategories,
   getCategory,
@@ -122,7 +128,7 @@ router.get('/categories', getCategories);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/categories/order', reorderCategories);
+router.patch('/categories/order', validateBody(reorderCategoriesSchema), reorderCategories);
 
 /**
  * @swagger
@@ -167,9 +173,9 @@ router.get('/categories/:categoryId', getCategory);
  *       카테고리 기간은 설정하지 않습니다. 생성 시 기본 상태는 "미완료"이나,
  *       이미 끝난 일정을 소급 기입하는 경우 isCompleted=true로 완료 상태로도 생성할 수 있습니다(PLB-007).
  *       이름은 텍스트·특수문자·이모티콘(단일) 지정이 가능하지만 공백 단일은 불가능합니다.
- *       inviteUserIds에 팔로잉 친구를 담아 보내면 생성과 동시에 공유 카테고리로 만들어집니다
- *       (요청자 OWNER, 초대자 PENDING 등록, isShared=true — 공유 전환 /categories/{id}/share와 동일 로직).
- *       초대 처리 중 일부가 실패해도 카테고리 생성 자체는 정상 처리되며, 초대 결과는 응답 data.invites로 반환됩니다(부분 성공).
+ *       ※ 친구 초대(inviteUserIds)는 준비 중입니다 — 현재 지정 시 400을 반환합니다.
+ *       (구현 예정: 지정 시 공유 카테고리로 생성 — 요청자 OWNER, 초대자 PENDING, isShared=true,
+ *       초대 일부 실패해도 생성은 성공하고 결과를 data.invites로 반환하는 부분 성공 방식)
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
@@ -210,14 +216,13 @@ router.get('/categories/:categoryId', getCategory);
  *                 nullable: true
  *                 items:
  *                   type: integer
- *                 description: '함께 초대할 팔로잉 친구 id 목록. 지정 시 공유 카테고리로 생성(isShared=true), 초대자는 PENDING 등록. 팔로잉 관계가 아닌 유저는 실패로 처리되나 생성은 정상 진행 (예: [7, 8])'
+ *                 description: '준비 중 — 현재 지정 시 400을 반환합니다. (구현 예정: 함께 초대할 팔로잉 친구 id 목록, 예: [7, 8])'
  *                 example: null
  *     responses:
  *       201:
  *         description: >
  *           카테고리 생성 성공. data.category에 생성된 카테고리가 담깁니다.
- *           inviteUserIds를 보낸 경우에만 data.invites에 초대 결과(부분 성공)가 포함되고,
- *           초대를 보내지 않았으면 invites는 생략됩니다.
+ *           (초대 기능 구현 시 data.invites에 부분 성공 결과가 추가될 예정)
  *         content:
  *           application/json:
  *             schema:
@@ -230,26 +235,6 @@ router.get('/categories/:categoryId', getCategory);
  *                       properties:
  *                         category:
  *                           $ref: '#/components/schemas/Category'
- *                         invites:
- *                           type: object
- *                           nullable: true
- *                           description: inviteUserIds를 보낸 경우에만 포함되는 초대 처리 결과
- *                           properties:
- *                             succeeded:
- *                               type: array
- *                               items:
- *                                 type: integer
- *                               description: 초대 성공(PENDING 등록)한 userId 목록
- *                             failed:
- *                               type: array
- *                               items:
- *                                 type: object
- *                                 properties:
- *                                   userId:
- *                                     type: integer
- *                                   reason:
- *                                     type: string
- *                                     description: '실패 사유 (예: NOT_FOLLOWING, NOT_FOUND, ALREADY_MEMBER)'
  *             example:
  *               success: true
  *               message: 카테고리 생성 성공
@@ -260,13 +245,8 @@ router.get('/categories/:categoryId', getCategory);
  *                   color: '#FF6B6B'
  *                   isPublic: false
  *                   isCompleted: false
- *                   isShared: true
+ *                   isShared: false
  *                   displayOrder: 3
- *                 invites:
- *                   succeeded: [7]
- *                   failed:
- *                     - userId: 9
- *                       reason: NOT_FOLLOWING
  *       400:
  *         description: 입력값 오류 (이름 공백 단일, 필수 필드 누락 등)
  *         content:
@@ -285,7 +265,7 @@ router.get('/categories/:categoryId', getCategory);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/categories', createCategory);
+router.post('/categories', validateBody(createCategorySchema), createCategory);
 
 /**
  * @swagger
@@ -358,7 +338,7 @@ router.post('/categories', createCategory);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/categories/:categoryId', updateCategory);
+router.patch('/categories/:categoryId', validateBody(updateCategorySchema), updateCategory);
 
 /**
  * @swagger

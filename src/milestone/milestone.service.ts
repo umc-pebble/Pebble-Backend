@@ -19,6 +19,7 @@ interface UpdateMilestoneInput {
   startDate?: string;
   endDate?: string | null;
   isCompleted?: boolean;
+  editScope?: 'THIS_ONLY' | 'ALL';
 }
 
 // 마일스톤 단건 소유권 검증(2-hop). 없으면 404, 상위 카테고리가 남의 것이면 403.
@@ -48,7 +49,7 @@ export const milestoneService = {
   ) {
     await categoryService.getCategory(userId, categoryId);
 
-    const count = await milestoneRepository.countByCategoryId(categoryId);
+    // displayOrder(맨 뒤 순번)는 repository가 트랜잭션 안에서 원자적으로 채번한다.
     const milestone = await milestoneRepository.create({
       categoryId,
       name: input.name,
@@ -61,7 +62,6 @@ export const milestoneService = {
           : null,
       seriesId: null, // MULTI 전용. SINGLE/RANGE는 항상 null
       repeatDays: null, // 삭제 예정 컬럼. 현재는 항상 null
-      displayOrder: count, // 목록 맨 뒤에 추가
     });
 
     // 응답은 배열로 반환한다(MULTI 확장 시 회차 여러 개가 되므로 형태 통일). SINGLE/RANGE는 1건.
@@ -75,6 +75,15 @@ export const milestoneService = {
     input: UpdateMilestoneInput,
   ) {
     const existing = await getOwnedMilestoneOrThrow(userId, milestoneId);
+
+    // editScope는 MULTI 전용 도메인 규칙. 현재 SINGLE/RANGE만 존재하므로 지정 시 400.
+    // (MULTI 구현 시 existing.dateType === 'MULTI'면 허용하도록 완화)
+    if (input.editScope !== undefined) {
+      throw new AppError(
+        'COMMON_INVALID_INPUT',
+        '다중 마일스톤이 아니면 editScope를 지정할 수 없습니다.',
+      );
+    }
 
     // dateType-endDate 정합성: endDate는 RANGE 전용. 생성 시 zod가 막는 규칙을
     // 수정에서도 유지한다(기존 row의 dateType은 DB 조회 후에만 알 수 있어 여기서 검사).
@@ -118,9 +127,19 @@ export const milestoneService = {
     });
   },
 
-  // 삭제(하위 task는 CASCADE). deleteScope는 상위(controller)에서 이미 거른다.
-  async deleteMilestone(userId: number, milestoneId: number) {
+  // 삭제(하위 task는 CASCADE).
+  async deleteMilestone(userId: number, milestoneId: number, deleteScope?: string) {
     await getOwnedMilestoneOrThrow(userId, milestoneId);
+
+    // deleteScope는 MULTI 전용 도메인 규칙. 현재 SINGLE/RANGE만 존재하므로 지정 시 400.
+    // (MULTI 구현 시 dateType 판정으로 완화)
+    if (deleteScope !== undefined) {
+      throw new AppError(
+        'COMMON_INVALID_INPUT',
+        '다중 마일스톤이 아니면 deleteScope를 지정할 수 없습니다.',
+      );
+    }
+
     await milestoneRepository.delete(milestoneId);
   },
 
@@ -137,10 +156,12 @@ export const milestoneService = {
 
     const hasDuplicate = new Set(orderedIds).size !== orderedIds.length;
     const allInCategory = orderedIds.every((id) => idsInCategory.has(id));
-    if (hasDuplicate || !allInCategory) {
+    // 개수 일치 + 전부 이 카테고리 소속 + 중복 없음 = 전체 목록의 순열임이 보장된다.
+    // 일부만 보내면 누락분이 기존 순번을 유지해 displayOrder가 겹치므로 거부한다.
+    if (hasDuplicate || !allInCategory || orderedIds.length !== all.length) {
       throw new AppError(
         'COMMON_INVALID_INPUT',
-        '다른 카테고리의 마일스톤이 포함되어 있거나 잘못된 ID입니다.',
+        '해당 카테고리의 전체 마일스톤 ID를 누락·중복 없이 보내야 합니다.',
       );
     }
 
