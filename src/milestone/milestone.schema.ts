@@ -3,11 +3,19 @@ import { z } from 'zod';
 // Milestone 요청 body 스키마 (라우트의 validateBody 미들웨어에서 사용).
 // 현재는 SINGLE/RANGE만 지원 — MULTI(dates 배열)는 스키마 확정 후 이 파일에 추가한다.
 
-// YYYY-MM-DD 형식 + 실제 유효한 날짜인지 검증.
+// YYYY-MM-DD 형식 + 달력에 실제 존재하는 날짜인지 검증.
+// new Date('2026-02-31')은 에러가 아니라 3월 3일로 "보정"되므로(V8 롤오버),
+// 연·월·일을 분해해 Date로 재조립한 값이 입력과 일치하는지 비교해 보정 발생을 잡아낸다.
 const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD 형식이어야 합니다.')
-  .refine((s) => !Number.isNaN(new Date(s).getTime()), '유효한 날짜가 아닙니다.');
+  .refine((s) => {
+    const [y, m, d] = s.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return (
+      dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d
+    );
+  }, '달력에 존재하지 않는 날짜입니다.');
 
 const nameField = z
   .string()
