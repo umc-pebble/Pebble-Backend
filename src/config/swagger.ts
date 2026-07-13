@@ -333,7 +333,7 @@ const options: swaggerJSDoc.Options = {
         Follow: {
           type: 'object',
           description:
-            '팔로우 관계. @@unique(followerId, followingId), 자기 자신 불가. 맞팔 개념 없는 단방향(PLB-041).',
+            '팔로우 관계. @@unique(followerId, followingId), 자기 자신 불가. 요청 → 수락 승인제이며 row 하나로 양방향 관계 표현 — 수락(ACCEPTED) 시 상호 열람 가능한 친구(PLB-033·034·041).',
           properties: {
             id: { type: 'integer', example: 15 },
             followerId: { type: 'integer', description: '팔로우 요청자', example: 42 },

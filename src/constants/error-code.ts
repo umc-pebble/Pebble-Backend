@@ -10,6 +10,11 @@ export const ERROR_CODE = {
   AUTH_EMAIL_DUPLICATED: { code: 'AUTH_EMAIL_DUPLICATED', status: 409 },
   AUTH_INVALID_CREDENTIAL: { code: 'AUTH_INVALID_CREDENTIAL', status: 401 },
   AUTH_TOKEN_EXPIRED: { code: 'AUTH_TOKEN_EXPIRED', status: 401 },
+  AUTH_SOCIAL_ONLY: { code: 'AUTH_SOCIAL_ONLY', status: 400 }, // 소셜 전용 계정의 비밀번호 발급/변경 시도 (PLB-035/042)
+
+  // Follow
+  FOLLOW_DUPLICATED: { code: 'FOLLOW_DUPLICATED', status: 409 }, // 이미 요청/친구 상태 (PLB-033)
+  FOLLOW_SELF: { code: 'FOLLOW_SELF', status: 400 }, // 자기 자신 팔로우 시도
 
   // User
   USER_NICKNAME_COOLDOWN: { code: 'USER_NICKNAME_COOLDOWN', status: 400 },
@@ -29,10 +34,7 @@ export const ERROR_CODE = {
 
   // ─────────────────────────────────────────────
   // 제안 중 — 팀 승인 전까지 사용 보류
-  // AUTH_SOCIAL_ONLY: { code: 'AUTH_SOCIAL_ONLY', status: 400 },       // 소셜 전용 계정의 비밀번호 변경/재설정 시도 (PLB-035/042)
   // CATEGORY_NOT_OWNER: { code: 'CATEGORY_NOT_OWNER', status: 403 },   // 공유 카테고리 삭제/강퇴 권한 없음 (PLB-045)
-  // FOLLOW_DUPLICATED: { code: 'FOLLOW_DUPLICATED', status: 409 },     // 중복 팔로우 요청
-  // FOLLOW_SELF: { code: 'FOLLOW_SELF', status: 400 },                 // 자기 자신 팔로우 시도
 } as const;
 
 export type ErrorCodeKey = keyof typeof ERROR_CODE;

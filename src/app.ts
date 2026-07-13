@@ -43,9 +43,10 @@ app.use('/api/v1', taskRouter);
 app.use('/api/v1', sharedRouter);
 app.use('/api/v1', activityRouter);
 app.use('/api/v1', authRouter);
+// followRouter가 고정 경로 /users/search를 정의하므로 userRouter(/users/:userId)보다 먼저 마운트해야 한다
+app.use('/api/v1', followRouter);
 app.use('/api/v1', userRouter);
 app.use('/api/v1', uploadRouter);
-app.use('/api/v1', followRouter);
 app.use('/api/v1', notificationRouter);
 app.use('/api/v1', reportRouter);
 app.use('/api/v1', subscriptionRouter);

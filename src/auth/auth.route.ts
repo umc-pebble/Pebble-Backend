@@ -1,14 +1,5 @@
 import { Router } from 'express';
-import {
-  signup,
-  login,
-  googleLogin,
-  naverLogin,
-  refresh,
-  logout,
-  requestPasswordReset,
-  resetPassword,
-} from './auth.controller';
+import { signup, login, socialLogin, refresh, logout, issueTempPassword } from './auth.controller';
 
 const router = Router();
 
@@ -46,7 +37,7 @@ const router = Router();
  *               bio: { type: string, nullable: true, example: null }
  *     responses:
  *       201:
- *         description: 회원가입 성공
+ *         description: 회원가입 성공 (가입 즉시 로그인 상태 — 토큰 발급)
  *         content:
  *           application/json:
  *             schema:
@@ -58,7 +49,8 @@ const router = Router();
  *                       type: object
  *                       properties:
  *                         user: { $ref: '#/components/schemas/User' }
- *                         tokens: { $ref: '#/components/schemas/AuthTokens' }
+ *                         accessToken: { type: string, example: 'eyJhbGciOiJIUzI1Ni.access...' }
+ *                         refreshToken: { type: string, example: 'eyJhbGciOiJIUzI1Ni.refresh...' }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       409:
@@ -67,7 +59,7 @@ const router = Router();
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
- *             example: { success: false, message: 이미 사용 중인 이메일입니다., error: { code: "AUTH_EMAIL_DUPLICATED" } }
+ *             example: { success: false, message: 이미 가입된 이메일입니다., error: { code: "AUTH_EMAIL_DUPLICATED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -96,7 +88,9 @@ router.post('/auth/signup', signup);
  *               password: { type: string, format: password, example: 'pebble1234!' }
  *     responses:
  *       200:
- *         description: 로그인 성공
+ *         description: >
+ *           로그인 성공. 임시 비밀번호로 로그인한 경우 data.mustChangePassword: true가 포함되며
+ *           프론트는 비밀번호 변경 화면으로 이동합니다(와프 U005).
  *         content:
  *           application/json:
  *             schema:
@@ -108,16 +102,21 @@ router.post('/auth/signup', signup);
  *                       type: object
  *                       properties:
  *                         user: { $ref: '#/components/schemas/User' }
- *                         tokens: { $ref: '#/components/schemas/AuthTokens' }
+ *                         accessToken: { type: string, example: 'eyJhbGciOiJIUzI1Ni.access...' }
+ *                         refreshToken: { type: string, example: 'eyJhbGciOiJIUzI1Ni.refresh...' }
+ *                         mustChangePassword:
+ *                           type: boolean
+ *                           description: 임시 비밀번호 상태일 때만 true로 포함
+ *                           example: false
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:
- *         description: 이메일 또는 비밀번호 불일치
+ *         description: 이메일 또는 비밀번호 불일치 (통합 문구, PLB-047)
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
- *             example: { success: false, message: 이메일 또는 비밀번호가 올바르지 않습니다., error: { code: "COMMON_UNAUTHORIZED" } }
+ *             example: { success: false, message: 이메일 또는 비밀번호가 올바르지 않습니다., error: { code: "AUTH_INVALID_CREDENTIAL" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -125,26 +124,36 @@ router.post('/auth/login', login);
 
 /**
  * @swagger
- * /auth/social/google:
+ * /auth/social/{provider}:
  *   post:
- *     summary: 구글 소셜 로그인 (PLB-002)
+ *     summary: 소셜 로그인 (PLB-002)
  *     description: >
- *       클라이언트가 구글에서 받은 idToken(또는 authCode)을 전달하면 서버가 검증하고,
- *       연동된 SocialAccount가 없으면 최초 로그인으로 계정을 생성(온보딩 포함)한 뒤 토큰을 발급합니다.
+ *       구글/네이버 OAuth 인가코드를 받아 로그인 또는 가입 처리합니다.
+ *       인가코드 교환은 서버에서만 수행합니다(클라이언트 시크릿 보호).
+ *       연동된 계정이 없으면 가입 처리 후 isNewUser: true를 반환하며,
+ *       프론트는 이를 보고 프로필 설정 화면으로 유도합니다. 소셜 유저는 password가 NULL입니다.
  *     tags: [Auth]
  *     security: []
+ *     parameters:
+ *       - name: provider
+ *         in: path
+ *         required: true
+ *         schema: { type: string, enum: [google, naver] }
+ *         description: 소셜 플랫폼
+ *         example: google
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [idToken]
+ *             required: [code]
  *             properties:
- *               idToken: { type: string, description: 구글 OAuth idToken, example: 'ya29.a0Af...' }
+ *               code: { type: string, description: 프론트가 OAuth 콜백으로 받은 인가코드, example: '4/0AX4XfW...' }
+ *               redirectUri: { type: string, description: 인가코드 발급에 사용한 redirect URI, example: 'https://pebble.app/oauth/callback' }
  *     responses:
  *       200:
- *         description: 로그인 성공 (신규/기존 공통)
+ *         description: 로그인 성공 (기존 유저)
  *         content:
  *           application/json:
  *             schema:
@@ -156,41 +165,11 @@ router.post('/auth/login', login);
  *                       type: object
  *                       properties:
  *                         user: { $ref: '#/components/schemas/User' }
- *                         tokens: { $ref: '#/components/schemas/AuthTokens' }
+ *                         accessToken: { type: string, example: 'eyJhbGciOiJIUzI1Ni.access...' }
+ *                         refreshToken: { type: string, example: 'eyJhbGciOiJIUzI1Ni.refresh...' }
  *                         isNewUser: { type: boolean, description: 이번 요청으로 계정이 생성됐는지, example: false }
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       401:
- *         description: 구글 토큰 검증 실패
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 소셜 인증에 실패했습니다., error: { code: "COMMON_UNAUTHORIZED" } }
- *       500:
- *         $ref: '#/components/responses/InternalServerError'
- */
-router.post('/auth/social/google', googleLogin);
-
-/**
- * @swagger
- * /auth/social/naver:
- *   post:
- *     summary: 네이버 소셜 로그인 (PLB-002)
- *     description: 네이버 accessToken을 전달받아 검증 후 로그인/최초가입 처리합니다. 흐름은 구글과 동일합니다.
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [accessToken]
- *             properties:
- *               accessToken: { type: string, description: 네이버 OAuth accessToken, example: 'AAAAO...' }
- *     responses:
- *       200:
- *         description: 로그인 성공 (신규/기존 공통)
+ *       201:
+ *         description: 가입 + 로그인 성공 (신규 유저, isNewUser=true — 프로필 설정 화면 유도)
  *         content:
  *           application/json:
  *             schema:
@@ -202,29 +181,35 @@ router.post('/auth/social/google', googleLogin);
  *                       type: object
  *                       properties:
  *                         user: { $ref: '#/components/schemas/User' }
- *                         tokens: { $ref: '#/components/schemas/AuthTokens' }
+ *                         accessToken: { type: string, example: 'eyJhbGciOiJIUzI1Ni.access...' }
+ *                         refreshToken: { type: string, example: 'eyJhbGciOiJIUzI1Ni.refresh...' }
  *                         isNewUser: { type: boolean, example: true }
  *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       401:
- *         description: 네이버 토큰 검증 실패
+ *         description: 지원하지 않는 provider
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 소셜 인증에 실패했습니다., error: { code: "COMMON_UNAUTHORIZED" } }
+ *             example: { success: false, message: 지원하지 않는 소셜 플랫폼입니다., error: { code: "COMMON_INVALID_INPUT" } }
+ *       401:
+ *         description: 인가코드 교환 실패
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             example: { success: false, message: 소셜 인증에 실패했습니다., error: { code: "AUTH_INVALID_CREDENTIAL" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/social/naver', naverLogin);
+router.post('/auth/social/:provider', socialLogin);
 
 /**
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: 액세스 토큰 재발급
+ *     summary: 토큰 재발급
  *     description: >
- *       refreshToken으로 새 accessToken(및 refreshToken)을 재발급합니다.
- *       저장된 refreshToken과 불일치하거나 만료된 경우 실패합니다.
+ *       refreshToken으로 새 accessToken을 재발급합니다. refreshToken도 함께 회전(재발급)되며,
+ *       기존 refreshToken은 무효화되므로 새 것으로 교체 저장해야 합니다.
+ *       저장된 refreshToken과 불일치하거나 만료된 경우 실패합니다(재로그인 유도).
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -248,11 +233,11 @@ router.post('/auth/social/naver', naverLogin);
  *                   properties:
  *                     data: { $ref: '#/components/schemas/AuthTokens' }
  *       401:
- *         description: 유효하지 않거나 만료된 refreshToken
+ *         description: 유효하지 않거나 만료된 refreshToken (재로그인 유도)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 유효하지 않은 토큰입니다., error: { code: "COMMON_UNAUTHORIZED" } }
+ *             example: { success: false, message: 리프레시 토큰이 만료되었거나 유효하지 않습니다., error: { code: "AUTH_TOKEN_EXPIRED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -283,13 +268,15 @@ router.post('/auth/logout', logout);
 
 /**
  * @swagger
- * /auth/password/reset-request:
+ * /auth/password/temp:
  *   post:
- *     summary: 비밀번호 재설정 링크 발송 (PLB-035)
+ *     summary: 임시 비밀번호 발급 (PLB-035)
  *     description: >
- *       가입된 이메일로 재설정 링크를 발송합니다(링크 30분 유효).
- *       소셜 전용 계정이면 자체 비밀번호가 없어 재설정할 수 없습니다.
- *       보안상, 가입되지 않은 이메일이어도 동일한 성공 메시지를 반환하고 실제 발송은 하지 않습니다(계정 존재 노출 방지).
+ *       가입 이메일로 임시 비밀번호를 발송합니다. 기존 비밀번호는 즉시 임시 비밀번호(해시)로
+ *       교체되고 isTempPassword=TRUE가 됩니다. 임시 비밀번호는 만료 없이 새 비밀번호 설정 전까지
+ *       유효하며, 새 비밀번호 설정은 임시 비밀번호로 로그인한 뒤 PATCH /users/me/password에서 처리합니다.
+ *       계정 존재 여부 노출 방지를 위해 가입되지 않은 이메일에도 동일한 성공 응답을 반환합니다(실제 발송은 안 함).
+ *       동일 이메일 재발급은 rate limit(5분 1회)을 적용합니다.
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -307,54 +294,16 @@ router.post('/auth/logout', logout);
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: true, message: 입력하신 이메일로 재설정 링크를 발송했습니다., data: null }
+ *             example: { success: true, message: 입력하신 이메일로 임시 비밀번호를 발송했어요., data: null }
  *       400:
- *         description: 소셜 전용 계정이라 자체 비밀번호 재설정 불가
+ *         description: 이메일 형식 오류(COMMON_INVALID_INPUT) 또는 소셜 전용 계정(AUTH_SOCIAL_ONLY)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 소셜 로그인 계정입니다. 해당 플랫폼에서 관리해주세요., error: { code: "COMMON_INVALID_INPUT" } }
+ *             example: { success: false, message: 소셜 로그인 계정입니다. 해당 플랫폼에서 비밀번호를 변경해주세요., error: { code: "AUTH_SOCIAL_ONLY" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/password/reset-request', requestPasswordReset);
-
-/**
- * @swagger
- * /auth/password/reset:
- *   post:
- *     summary: 비밀번호 재설정 확정 (PLB-035)
- *     description: >
- *       메일 링크의 token과 새 비밀번호로 재설정을 확정합니다.
- *       토큰이 만료/사용됨/위조된 경우 실패하며, 성공 시 기존 세션(refreshToken)은 모두 파기됩니다.
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [token, newPassword]
- *             properties:
- *               token: { type: string, description: 메일 링크의 재설정 토큰, example: '3f9a1c...' }
- *               newPassword: { type: string, format: password, minLength: 8, example: 'newPebble1234!' }
- *     responses:
- *       200:
- *         description: 재설정 성공
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: true, message: 비밀번호가 변경되었습니다. 다시 로그인해주세요., data: null }
- *       400:
- *         description: 토큰 만료/사용됨/위조 또는 비밀번호 형식 오류
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 링크가 만료되었습니다. 다시 요청해주세요., error: { code: "COMMON_INVALID_INPUT" } }
- *       500:
- *         $ref: '#/components/responses/InternalServerError'
- */
-router.post('/auth/password/reset', resetPassword);
+router.post('/auth/password/temp', issueTempPassword);
 
 export default router;
