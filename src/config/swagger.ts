@@ -89,7 +89,7 @@ const options: swaggerJSDoc.Options = {
         Milestone: {
           type: 'object',
           description:
-            'userId 없음 — 카테고리를 통한 2-hop 소유 판정. 날짜 유형(dateType)에 따라 startDate/endDate 사용 여부가 달라집니다. MULTI(다중)는 사용자가 선택한 날짜마다 실제 row로 존재하며 같은 seriesId를 공유합니다.',
+            'userId 없음 — 카테고리를 통한 2-hop 소유 판정. 날짜 유형(dateType)에 따라 startDate/endDate 사용 여부가 달라집니다. ※ MULTI(다중)는 준비 중 — 현재 저장·반환되는 값은 SINGLE/RANGE뿐입니다. (구현 예정: MULTI는 선택한 날짜마다 실제 row로 존재하며 같은 seriesId를 공유)',
           properties: {
             id: { type: 'integer', example: 10 },
             categoryId: { type: 'integer', example: 1 },
@@ -103,6 +103,7 @@ const options: swaggerJSDoc.Options = {
             dateType: {
               type: 'string',
               enum: ['SINGLE', 'RANGE', 'MULTI'],
+              description: '현재 SINGLE/RANGE만 사용됨. MULTI는 준비 중',
               example: 'RANGE',
             },
             startDate: {
