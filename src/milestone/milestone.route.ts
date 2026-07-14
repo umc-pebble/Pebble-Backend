@@ -109,7 +109,7 @@ router.get('/categories/:categoryId/milestones', getMilestones);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, dateType]
+ *             required: [name, dateType, startDate]
  *             properties:
  *               name:
  *                 type: string
@@ -124,8 +124,7 @@ router.get('/categories/:categoryId/milestones', getMilestones);
  *               startDate:
  *                 type: string
  *                 format: date
- *                 nullable: true
- *                 description: SINGLE/RANGE일 때 사용 (YYYY-MM-DD). MULTIPLE에서는 대신 dates로 전달
+ *                 description: 필수 (YYYY-MM-DD)
  *                 example: '2026-07-01'
  *               endDate:
  *                 type: string

@@ -109,8 +109,7 @@ const options: swaggerJSDoc.Options = {
             startDate: {
               type: 'string',
               format: 'date',
-              nullable: true,
-              description: 'YYYY-MM-DD. MULTIPLE 회차 row에서는 해당 회차의 날짜',
+              description: 'YYYY-MM-DD (항상 존재). MULTIPLE 회차 row에서는 해당 회차의 날짜',
               example: '2026-07-01',
             },
             endDate: {
