@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Milestone 요청 body 스키마 (라우트의 validateBody 미들웨어에서 사용).
-// 현재는 SINGLE/RANGE만 지원 — MULTI(dates 배열)는 스키마 확정 후 이 파일에 추가한다.
+// 현재는 SINGLE/RANGE만 지원 — MULTIPLE(dates 배열)은 seriesId 채번 방식 확정 후 이 파일에 추가한다.
 
 // YYYY-MM-DD 형식 + 달력에 실제 존재하는 날짜인지 검증.
 // new Date('2026-02-31')은 에러가 아니라 3월 3일로 "보정"되므로(V8 롤오버),
@@ -25,9 +25,9 @@ const nameField = z
 export const createMilestoneSchema = z
   .object({
     name: nameField,
-    // MULTI는 아직 미지원 → SINGLE/RANGE만 허용.
+    // MULTIPLE는 아직 미지원 → SINGLE/RANGE만 허용.
     dateType: z.enum(['SINGLE', 'RANGE'], {
-      errorMap: () => ({ message: '현재 SINGLE, RANGE만 지원합니다. (MULTI는 준비 중)' }),
+      errorMap: () => ({ message: '현재 SINGLE, RANGE만 지원합니다. (MULTIPLE는 준비 중)' }),
     }),
     startDate: dateString,
     endDate: dateString.nullable().optional(),
@@ -50,7 +50,7 @@ export const updateMilestoneSchema = z.object({
   startDate: dateString.optional(),
   endDate: dateString.nullable().optional(),
   isCompleted: z.boolean().optional(),
-  // 값 형태만 여기서 검사한다. "MULTI가 아니면 지정 불가" 판정은 service의 도메인 규칙.
+  // 값 형태만 여기서 검사한다. "MULTIPLE가 아니면 지정 불가" 판정은 service의 도메인 규칙.
   editScope: z.enum(['THIS_ONLY', 'ALL']).optional(),
 });
 

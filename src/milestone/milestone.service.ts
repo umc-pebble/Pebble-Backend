@@ -1,7 +1,7 @@
 // Milestone Service
 // 비즈니스 로직 계층. 소유권(2-hop: milestone→category→userId)·날짜 규칙을 담당한다.
-// 현재는 SINGLE/RANGE만 지원한다. MULTI(dates→회차, seriesId, editScope/deleteScope)는
-// 스키마 확정(REPEAT→MULTI, repeatDays 삭제) 및 Task enum 조율 후 추가한다.
+// 현재는 SINGLE/RANGE만 지원한다. MULTIPLE(dates→회차, seriesId, editScope/deleteScope)는
+// 스키마는 확정됨(REPEAT→MULTIPLE, repeatDays 삭제) — seriesId 채번 방식 확정 후 구현한다.
 
 import { AppError } from '../utils/app-error';
 import { milestoneRepository } from './milestone.repository';
@@ -60,11 +60,10 @@ export const milestoneService = {
         input.dateType === 'RANGE' && input.endDate
           ? new Date(input.endDate)
           : null,
-      seriesId: null, // MULTI 전용. SINGLE/RANGE는 항상 null
-      repeatDays: null, // 삭제 예정 컬럼. 현재는 항상 null
+      seriesId: null, // MULTIPLE 전용. SINGLE/RANGE는 항상 null
     });
 
-    // 응답은 배열로 반환한다(MULTI 확장 시 회차 여러 개가 되므로 형태 통일). SINGLE/RANGE는 1건.
+    // 응답은 배열로 반환한다(MULTIPLE 확장 시 회차 여러 개가 되므로 형태 통일). SINGLE/RANGE는 1건.
     return { milestones: [milestone] };
   },
 
@@ -76,8 +75,8 @@ export const milestoneService = {
   ) {
     const existing = await getOwnedMilestoneOrThrow(userId, milestoneId);
 
-    // editScope는 MULTI 전용 도메인 규칙. 현재 SINGLE/RANGE만 존재하므로 지정 시 400.
-    // (MULTI 구현 시 existing.dateType === 'MULTI'면 허용하도록 완화)
+    // editScope는 MULTIPLE 전용 도메인 규칙. 현재 SINGLE/RANGE만 존재하므로 지정 시 400.
+    // (MULTIPLE 구현 시 existing.dateType === 'MULTIPLE'면 허용하도록 완화)
     if (input.editScope !== undefined) {
       throw new AppError(
         'COMMON_INVALID_INPUT',
@@ -131,8 +130,8 @@ export const milestoneService = {
   async deleteMilestone(userId: number, milestoneId: number, deleteScope?: string) {
     await getOwnedMilestoneOrThrow(userId, milestoneId);
 
-    // deleteScope는 MULTI 전용 도메인 규칙. 현재 SINGLE/RANGE만 존재하므로 지정 시 400.
-    // (MULTI 구현 시 dateType 판정으로 완화)
+    // deleteScope는 MULTIPLE 전용 도메인 규칙. 현재 SINGLE/RANGE만 존재하므로 지정 시 400.
+    // (MULTIPLE 구현 시 dateType 판정으로 완화)
     if (deleteScope !== undefined) {
       throw new AppError(
         'COMMON_INVALID_INPUT',

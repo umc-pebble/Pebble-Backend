@@ -1,6 +1,6 @@
 // Milestone Repository
 // DB 접근 계층. Prisma 쿼리만 담당한다. 소유권(2-hop)·범위 규칙은 milestoneService가 담당한다.
-// 참고: MULTI(seriesId 회차) 관련 쿼리는 스키마 확정 후 추가 예정. 현재는 SINGLE/RANGE만 사용한다.
+// 참고: MULTIPLE(seriesId 회차) 관련 쿼리는 seriesId 채번 방식 확정 후 추가 예정. 현재는 SINGLE/RANGE만 사용한다.
 
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';

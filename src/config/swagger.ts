@@ -89,35 +89,35 @@ const options: swaggerJSDoc.Options = {
         Milestone: {
           type: 'object',
           description:
-            'userId 없음 — 카테고리를 통한 2-hop 소유 판정. 날짜 유형(dateType)에 따라 startDate/endDate 사용 여부가 달라집니다. ※ MULTI(다중)는 준비 중 — 현재 저장·반환되는 값은 SINGLE/RANGE뿐입니다. (구현 예정: MULTI는 선택한 날짜마다 실제 row로 존재하며 같은 seriesId를 공유)',
+            'userId 없음 — 카테고리를 통한 2-hop 소유 판정. 날짜 유형(dateType)에 따라 startDate/endDate 사용 여부가 달라집니다. ※ MULTIPLE(다중)는 준비 중 — 현재 저장·반환되는 값은 SINGLE/RANGE뿐입니다. (구현 예정: MULTIPLE는 선택한 날짜마다 실제 row로 존재하며 같은 seriesId를 공유)',
           properties: {
             id: { type: 'integer', example: 10 },
             categoryId: { type: 'integer', example: 1 },
             seriesId: {
               type: 'integer',
               nullable: true,
-              description: '다중(MULTI) 회차들이 공유하는 그룹 ID. 단일(SINGLE/RANGE) 마일스톤은 null',
+              description: '다중(MULTIPLE) 회차들이 공유하는 그룹 ID. 단일(SINGLE/RANGE) 마일스톤은 null',
               example: null,
             },
             name: { type: 'string', maxLength: 100, example: '이력서 완성' },
             dateType: {
               type: 'string',
-              enum: ['SINGLE', 'RANGE', 'MULTI'],
-              description: '현재 SINGLE/RANGE만 사용됨. MULTI는 준비 중',
+              enum: ['SINGLE', 'RANGE', 'MULTIPLE'],
+              description: '현재 SINGLE/RANGE만 사용됨. MULTIPLE는 준비 중',
               example: 'RANGE',
             },
             startDate: {
               type: 'string',
               format: 'date',
               nullable: true,
-              description: 'YYYY-MM-DD. MULTI 회차 row에서는 해당 회차의 날짜',
+              description: 'YYYY-MM-DD. MULTIPLE 회차 row에서는 해당 회차의 날짜',
               example: '2026-07-01',
             },
             endDate: {
               type: 'string',
               format: 'date',
               nullable: true,
-              description: 'YYYY-MM-DD. RANGE 전용 — SINGLE/MULTI에서는 null',
+              description: 'YYYY-MM-DD. RANGE 전용 — SINGLE/MULTIPLE에서는 null',
               example: '2026-07-31',
             },
             isCompleted: { type: 'boolean', description: '회차 row별 독립 기록', example: false },
