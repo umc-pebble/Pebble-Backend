@@ -80,16 +80,7 @@ router.get('/users/me', getMe);
  *                 - $ref: '#/components/schemas/ApiResponse'
  *                 - type: object
  *                   properties:
- *                     data:
- *                       type: object
- *                       description: 변경된 필드가 반영된 프로필 요약 (전체 프로필은 GET /users/me 참고)
- *                       properties:
- *                         id: { type: integer, example: 1 }
- *                         nickname: { type: string, example: newName }
- *                         uniqueTag: { type: string, example: '1234' }
- *                         bio: { type: string, nullable: true, example: 새 소개글 }
- *                         profileImageUrl: { type: string, nullable: true, example: 'https://supabase.../new.jpg' }
- *                         lastNicknameChangedAt: { type: string, format: date-time, nullable: true, example: '2026-07-06T00:00:00+09:00' }
+ *                     data: { $ref: '#/components/schemas/UserProfileSummary' }
  *       400:
  *         description: 닉네임 변경 쿨다운(15일) 중이거나 입력값 오류
  *         content:
