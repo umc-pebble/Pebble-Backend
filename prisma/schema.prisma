@@ -161,7 +161,7 @@ model Category {
   color        String   @db.VarChar(20)
   imageUrl     String?  @db.VarChar(500) // NULL이면 기본 이미지
   isHidden     Boolean  @default(false) // 내 화면 숨김 (하위 마일스톤/태스크 연동 숨김)
-  isPublic     Boolean  @default(true) // 팔로워 공개 여부
+  isPublic     Boolean  @default(false) // 팔로워 공개 여부. 기본 비공개 (Category 도메인 구현 기준, 07-14) — ERD 상세 스펙 표는 TRUE로 되어있어 문서 정정 필요
   isCompleted  Boolean  @default(false)
   isShared     Boolean  @default(false)
   displayOrder Int      @default(0)
