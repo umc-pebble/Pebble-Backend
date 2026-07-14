@@ -294,20 +294,13 @@ const options: swaggerJSDoc.Options = {
               description: '닉네임 재변경 가능 시각 (lastNicknameChangedAt + 15일, 서버 계산값, FE 표시용)',
               example: null,
             },
+            createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
           },
         },
         UserProfile: {
           description:
             '프로필 조회/편집 응답 전용 스키마. 테마·알림·징검다리 색상 등 설정값은 포함하지 않으며, 해당 값은 GET/PATCH /users/me/settings에서 다룬다.',
-          allOf: [
-            { $ref: '#/components/schemas/UserPublicProfile' },
-            {
-              type: 'object',
-              properties: {
-                createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
-              },
-            },
-          ],
+          allOf: [{ $ref: '#/components/schemas/UserPublicProfile' }],
         },
         User: {
           description: '회원 공개 정보. password·refreshToken 등 민감 필드는 응답에서 제외.',
@@ -330,7 +323,6 @@ const options: swaggerJSDoc.Options = {
                   description: '임시 비밀번호 상태 (재설정 직후 true, 변경 유도)',
                   example: false,
                 },
-                createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
                 updatedAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
               },
             },
