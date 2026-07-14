@@ -17,7 +17,7 @@ export const updateMeSchema = z.object({
 export const updateSettingsSchema = z.object({
   theme: z.enum(['LIGHT', 'DARK']).optional(),
   notifyTaskDue: z.boolean().optional(),
-  activityColor: colorField.optional(),
+  activityColor: colorField.nullable().optional(),
 });
 
 export const changePasswordSchema = z.object({
