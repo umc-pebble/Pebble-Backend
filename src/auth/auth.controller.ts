@@ -1,27 +1,34 @@
 import { Request, Response, NextFunction } from 'express';
+
 import { sendSuccess } from '../utils/response';
+import { AppError } from '../utils/app-error';
+import { AuthRequest } from '../middlewares/auth.middleware';
+
+import { authService } from './auth.service';
 
 // Auth Controller
-// req/res 처리만 담당한다. 실제 로직은 추후 authService로 위임 예정.
-// 라우트/문서 검증용 스텁이며, 공통 응답 포맷 { success, message, data }는 sendSuccess로 반환한다.
+// req/res 처리만 담당하고 비즈니스 로직은 authService에 위임한다.
 // Express 4는 async 에러를 자동 전파하지 않으므로 try/catch + next(err) 시그니처를 유지한다.
 
-export const signup = async (_req: Request, res: Response, next: NextFunction) => {
+export const signup = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    sendSuccess(res, null, '회원가입 (미구현)', 201);
+    const result = await authService.signup(req.body);
+    sendSuccess(res, result, '회원가입 성공', 201);
   } catch (err) {
     next(err);
   }
 };
 
-export const login = async (_req: Request, res: Response, next: NextFunction) => {
+export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    sendSuccess(res, null, '로그인 (미구현)');
+    const result = await authService.login(req.body);
+    sendSuccess(res, result, '로그인 성공');
   } catch (err) {
     next(err);
   }
 };
 
+// 소셜 로그인은 OAuth 클라이언트 키 발급 후 별도 이슈에서 구현 예정
 export const socialLogin = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     sendSuccess(res, null, '소셜 로그인 (미구현)');
@@ -30,22 +37,28 @@ export const socialLogin = async (_req: Request, res: Response, next: NextFuncti
   }
 };
 
-export const refresh = async (_req: Request, res: Response, next: NextFunction) => {
+export const refresh = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    sendSuccess(res, null, '토큰 재발급 (미구현)');
+    const result = await authService.refresh(req.body.refreshToken);
+    sendSuccess(res, result, '토큰 재발급 성공');
   } catch (err) {
     next(err);
   }
 };
 
-export const logout = async (_req: Request, res: Response, next: NextFunction) => {
+export const logout = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    sendSuccess(res, null, '로그아웃 (미구현)');
+    if (req.userId === undefined) {
+      throw new AppError('COMMON_UNAUTHORIZED', '인증 정보가 없습니다.');
+    }
+    await authService.logout(req.userId);
+    sendSuccess(res, null, '로그아웃 성공');
   } catch (err) {
     next(err);
   }
 };
 
+// 임시 비밀번호 발급은 이메일 발송(Resend) 연동과 함께 이슈 #13에서 구현 예정
 export const issueTempPassword = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     sendSuccess(res, null, '임시 비밀번호 발급 (미구현)');

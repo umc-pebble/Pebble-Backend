@@ -1,5 +1,10 @@
 import { Router } from 'express';
+
+import { validateBody } from '../middlewares/validate.middleware';
+import { authMiddleware } from '../middlewares/auth.middleware';
+
 import { signup, login, socialLogin, refresh, logout, issueTempPassword } from './auth.controller';
+import { signupSchema, loginSchema, refreshSchema } from './auth.schema';
 
 const router = Router();
 
@@ -63,7 +68,7 @@ const router = Router();
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/signup', signup);
+router.post('/auth/signup', validateBody(signupSchema), signup);
 
 /**
  * @swagger
@@ -120,7 +125,7 @@ router.post('/auth/signup', signup);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/login', login);
+router.post('/auth/login', validateBody(loginSchema), login);
 
 /**
  * @swagger
@@ -241,7 +246,7 @@ router.post('/auth/social/:provider', socialLogin);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/refresh', refresh);
+router.post('/auth/refresh', validateBody(refreshSchema), refresh);
 
 /**
  * @swagger
@@ -264,7 +269,7 @@ router.post('/auth/refresh', refresh);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/logout', logout);
+router.post('/auth/logout', authMiddleware, logout);
 
 /**
  * @swagger
