@@ -77,6 +77,9 @@ model User {
   refreshToken          String?   @db.VarChar(500) // 해시로 저장, 로그아웃 시 파기
   theme                 Theme     @default(LIGHT)
   isTempPassword        Boolean   @default(false) // TRUE면 새 비밀번호 설정 강제
+  pendingEmail          String?   @db.VarChar(255) // 이메일 변경 요청 중인 새 이메일. 확정 전까지 email은 그대로 유지 (PLB-042)
+  emailChangeTokenHash  String?   @db.VarChar(255) // 이메일 변경 확정 토큰의 sha256 해시 (refreshToken과 동일하게 원문 미저장)
+  emailChangeTokenExpiresAt DateTime? // 이메일 변경 토큰 만료 시각
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
