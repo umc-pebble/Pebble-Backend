@@ -22,18 +22,27 @@ export const categoryRepository = {
   },
 
   // 생성. displayOrder는 "현재 최대값 + 1"로 목록 맨 뒤에 붙인다.
-  // 조회와 생성을 한 트랜잭션으로 묶어, 삭제로 생긴 순번 공백·동시 생성으로 인한 중복을 방지한다.
+  // 일반 SELECT는 잠금이 없어 동시 생성 시 같은 max를 읽을 수 있으므로(TOCTOU),
+  // FOR UPDATE로 해당 유저의 최대 순번 행을 잠가 채번을 직렬화한다.
+  // 잠글 행이 없는 첫 생성 등에서 갭 락 교착(deadlock)이 가능해 짧은 재시도를 둔다.
   // Unchecked 타입: 관계 대신 userId(FK 스칼라)를 직접 넣기 위함.
-  create(data: Omit<Prisma.CategoryUncheckedCreateInput, 'displayOrder'>) {
-    return prisma.$transaction(async (tx) => {
-      const max = await tx.category.aggregate({
-        where: { userId: data.userId },
-        _max: { displayOrder: true },
-      });
-      return tx.category.create({
-        data: { ...data, displayOrder: (max._max.displayOrder ?? -1) + 1 },
-      });
-    });
+  async create(data: Omit<Prisma.CategoryUncheckedCreateInput, 'displayOrder'>) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const rows = await tx.$queryRaw<{ displayOrder: number }[]>`
+            SELECT displayOrder FROM Category WHERE userId = ${data.userId}
+            ORDER BY displayOrder DESC LIMIT 1 FOR UPDATE`;
+          const next = (rows[0]?.displayOrder ?? -1) + 1;
+          return tx.category.create({ data: { ...data, displayOrder: next } });
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : '';
+        const isDeadlock =
+          (e as { code?: string }).code === 'P2034' || /deadlock/i.test(message);
+        if (!isDeadlock || attempt >= 3) throw e;
+      }
+    }
   },
 
   // 부분 수정. 전달된 필드만 갱신된다(undefined인 필드는 건드리지 않음).
