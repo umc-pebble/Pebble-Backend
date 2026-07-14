@@ -138,6 +138,6 @@ router.get('/reports/:month', getReportByMonth);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/reports/{reportId}/download', downloadReport);
+router.post('/reports/:reportId/download', downloadReport);
 
 export default router;
