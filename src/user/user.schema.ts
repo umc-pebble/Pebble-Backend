@@ -10,8 +10,7 @@ export const updateMeSchema = z.object({
   profileImageUrl: z.string().max(500).nullable().optional(),
 });
 
-// 팔레트 값 목록은 아직 디자인 확정 전이라 hex 형식 여부만 검증한다(category.color와 동일 규칙).
-const activityColorField = z
+const colorField = z
   .string()
   .max(20)
   .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, '색상은 hex 코드 형식이어야 합니다.');
@@ -19,12 +18,12 @@ const activityColorField = z
 export const updateSettingsSchema = z.object({
   theme: z.enum(['LIGHT', 'DARK']).optional(),
   notifyTaskDue: z.boolean().optional(),
-  activityColor: activityColorField.optional(),
+  activityColor: colorField.nullable().optional(),
 });
 
 export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, '현재 비밀번호를 입력해주세요.'),
-  newPassword: z.string().min(8, '비밀번호는 8자 이상이어야 합니다.'),
+  currentPassword: z.string().min(1, 'currentPassword는 비어 있을 수 없습니다.'),
+  newPassword: z.string().min(8, 'newPassword는 8자 이상이어야 합니다.'),
 });
 
 export const requestEmailChangeSchema = z.object({
