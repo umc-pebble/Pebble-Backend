@@ -32,9 +32,10 @@ export const ERROR_CODE = {
   FILE_SIZE_EXCEEDED: { code: 'FILE_SIZE_EXCEEDED', status: 400 },
   FILE_TYPE_NOT_ALLOWED: { code: 'FILE_TYPE_NOT_ALLOWED', status: 400 },
 
-  // ─────────────────────────────────────────────
-  // 제안 중 — 팀 승인 전까지 사용 보류
-  // CATEGORY_NOT_OWNER: { code: 'CATEGORY_NOT_OWNER', status: 403 },   // 공유 카테고리 삭제/강퇴 권한 없음 (PLB-045)
+  // SharedCategory (PLB-044~048)
+  CATEGORY_NOT_OWNER: { code: 'CATEGORY_NOT_OWNER', status: 403 }, // 오너 전용 작업(초대/강퇴/삭제)을 멤버가 시도
+  CATEGORY_NOT_FRIEND: { code: 'CATEGORY_NOT_FRIEND', status: 400 }, // 팔로잉 관계가 아닌 유저를 초대 시도
+  CATEGORY_MEMBER_DUPLICATED: { code: 'CATEGORY_MEMBER_DUPLICATED', status: 409 }, // 이미 멤버이거나 초대 대기 중인 유저 재초대
 } as const;
 
 export type ErrorCodeKey = keyof typeof ERROR_CODE;

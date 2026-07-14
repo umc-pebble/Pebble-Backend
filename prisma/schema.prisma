@@ -7,4 +7,261 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 스키마는 ERD 확정 후 작성 예정
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum Theme {
+  LIGHT
+  DARK
+}
+
+enum SocialProvider {
+  google
+  naver
+}
+
+enum FollowStatus {
+  PENDING
+  ACCEPTED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+}
+
+enum DateType {
+  SINGLE
+  RANGE
+  MULTIPLE
+}
+
+enum NotificationType {
+  FOLLOW_REQUEST
+  FOLLOW_ACCEPTED
+  TASK_DUE
+  MILESTONE_DUE
+  REPORT
+  CATEGORY_INVITE
+  CATEGORY_DELETED
+  CATEGORY_ACCEPTED
+}
+
+enum SharedCategoryRole {
+  OWNER
+  MEMBER
+}
+
+enum SharedCategoryStatus {
+  PENDING
+  ACCEPTED
+}
+
+// ─────────────────────────────────────────────
+// Models
+// ─────────────────────────────────────────────
+
+model User {
+  id                    Int       @id @default(autoincrement())
+  email                 String    @unique @db.VarChar(255)
+  password              String?   @db.VarChar(255) // bcrypt 해시. 소셜 전용 계정은 NULL (PLB-035)
+  nickname              String    @db.VarChar(100) // 중복 허용 - uniqueTag와 조합해서만 유일
+  uniqueTag             String    @db.VarChar(10) // 닉네임#태그의 태그값 (실사용 4자리, 컬럼은 여유있게 VARCHAR(10))
+  profileImageUrl       String?   @db.VarChar(500) // NULL이면 기본 이미지 (PLB-004)
+  bio                   String?   @db.Text
+  lastNicknameChangedAt DateTime? // 15일 쿨다운 계산 기준 (PLB-003)
+  activityColor         String    @default("#FFFFFF") @db.VarChar(20) // 징검다리 기본 색상 (흰색), PLB-026 팔레트 내에서 변경 가능
+  notifyTaskDue         Boolean   @default(true)
+  refreshToken          String?   @db.VarChar(500) // 해시로 저장, 로그아웃 시 파기
+  theme                 Theme     @default(LIGHT)
+  isTempPassword        Boolean   @default(false) // TRUE면 새 비밀번호 설정 강제
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  socialAccounts        SocialAccount[]
+  reports               Report[]
+  subscriptions         Subscription[]
+  categories            Category[]
+  tasks                 Task[]
+  activityLogs          ActivityLog[]
+  notifications         Notification[]
+  sharedCategoryMembers SharedCategoryMember[]
+
+  // Follow.followerId 기준 - 내가 요청한 팔로우 (following 목록)
+  following Follow[] @relation("UserFollowing")
+  // Follow.followingId 기준 - 나를 팔로우한 요청 (follower 목록)
+  followers Follow[] @relation("UserFollowers")
+
+  @@unique([nickname, uniqueTag])
+}
+
+model SocialAccount {
+  id                Int            @id @default(autoincrement())
+  userId            Int
+  provider          SocialProvider
+  providerAccountId String         @db.VarChar(255)
+  createdAt         DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// 자기 자신 팔로우 방지(followerId <> followingId)는 DB CHECK 제약 대신 서비스 레이어에서 검증 (07-09 팀 결정)
+model Follow {
+  id          Int          @id @default(autoincrement())
+  followerId  Int // 요청자
+  followingId Int // 대상
+  status      FollowStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+}
+
+model Report {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  month          String   @db.VarChar(7) // YYYY-MM
+  reportImageUrl String   @db.VarChar(500)
+  expiresAt      DateTime // 발송 후 1주일
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, month])
+}
+
+model Subscription {
+  id                    Int                @id @default(autoincrement())
+  userId                Int
+  status                SubscriptionStatus @default(ACTIVE)
+  originalTransactionId String             @db.VarChar(255) // 애플 IAP 원본 거래 ID
+  startDate             DateTime
+  endDate               DateTime
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Category {
+  id           Int      @id @default(autoincrement())
+  userId       Int // 소유 유저(오너)
+  name         String   @db.VarChar(100)
+  color        String   @db.VarChar(20)
+  imageUrl     String?  @db.VarChar(500) // NULL이면 기본 이미지
+  isHidden     Boolean  @default(false) // 내 화면 숨김 (하위 마일스톤/태스크 연동 숨김)
+  isPublic     Boolean  @default(false) // 팔로워 공개 여부. 기본 비공개 (Category 도메인 구현 기준, 07-14) — ERD 상세 스펙 표는 TRUE로 되어있어 문서 정정 필요
+  isCompleted  Boolean  @default(false)
+  isShared     Boolean  @default(false)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestones Milestone[]
+  members    SharedCategoryMember[]
+
+  @@index([userId])
+}
+
+model Milestone {
+  id           Int       @id @default(autoincrement())
+  categoryId   Int
+  name         String    @db.VarChar(100)
+  dateType     DateType
+  startDate    DateTime  @db.Date
+  endDate      DateTime? @db.Date
+  seriesId     Int? // MULTIPLE(다중 날짜 선택) 회차들을 묶는 그룹 키. 일반/기간 마일스톤은 NULL (PLB-012, 07-14 확정: 반복요일 방식 폐기, 사용자가 날짜를 직접 여러 개 선택하는 방식으로 변경)
+  isCompleted  Boolean   @default(false)
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tasks    Task[]
+
+  @@index([categoryId, startDate])
+  @@index([seriesId])
+}
+
+model Task {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  milestoneId  Int? // 종속 태스크=NOT NULL, 단일 태스크=NULL
+  name         String    @db.VarChar(100)
+  dateType     DateType
+  startDate    DateTime  @db.Date
+  endDate      DateTime? @db.Date
+  seriesId     Int? // MULTIPLE(다중 날짜 선택) 회차들을 묶는 그룹 키. 일반/기간 태스크는 NULL (PLB-017, 07-14 확정: 반복요일 방식 폐기, 사용자가 날짜를 직접 여러 개 선택하는 방식으로 변경)
+  taskTime     DateTime? @db.Time // 시:분 입력
+  memo         String?   @db.Text
+  color        String?   @db.VarChar(20) // 단일 태스크만 사용 (종속 태스크는 카테고리 색상 계열 따름)
+  isCompleted  Boolean   @default(false)
+  completedAt  DateTime? // KST 일별 집계 기준, 완료 해제 시 NULL
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startDate])
+  @@index([milestoneId, startDate])
+  @@index([seriesId])
+}
+
+// UK: userId + date (PLB-022, PLB-023 징검다리 집계용 일별 스냅샷)
+model ActivityLog {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  date               DateTime @db.Date // KST 기준
+  completedTaskCount Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}
+
+// relatedId는 알림 타입에 따라 Follow/Task/Milestone/Report/Category 등 서로 다른 테이블을 가리키는
+// 폴리모픽 참조이므로 DB 레벨 FK 제약을 걸지 않고 애플리케이션에서 type 기준으로 해석한다.
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  relatedId Int?
+  isRead    Boolean          @default(false)
+  expiresAt DateTime? // 생성 후 30일 자동삭제 대상 (PLB-038)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model SharedCategoryMember {
+  id         Int                  @id @default(autoincrement())
+  categoryId Int
+  userId     Int
+  role       SharedCategoryRole   @default(MEMBER)
+  status     SharedCategoryStatus @default(PENDING)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, userId])
+}
