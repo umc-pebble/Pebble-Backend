@@ -9,9 +9,14 @@ const nameField = z
   .max(100)
   .refine((s) => s.trim().length > 0, '카테고리 이름은 공백만으로 지정할 수 없습니다.');
 
+// Swagger 계약("HEX 색상 코드")과 일치하도록 #RGB / #RRGGBB 형식만 허용한다.
+const colorField = z
+  .string()
+  .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, '색상은 hex 코드 형식이어야 합니다.');
+
 export const createCategorySchema = z.object({
   name: nameField,
-  color: z.string().min(1, '색상은 필수입니다.').max(20),
+  color: colorField,
   imageUrl: z.string().max(500).nullable().optional(),
   isPublic: z.boolean().optional(),
   isCompleted: z.boolean().optional(),
@@ -20,7 +25,7 @@ export const createCategorySchema = z.object({
 
 export const updateCategorySchema = z.object({
   name: nameField.optional(),
-  color: z.string().min(1).max(20).optional(),
+  color: colorField.optional(),
   imageUrl: z.string().max(500).nullable().optional(),
   isCompleted: z.boolean().optional(),
   isPublic: z.boolean().optional(),
