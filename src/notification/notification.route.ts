@@ -26,6 +26,19 @@ const router = Router();
  *     tags: [Notification]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - name: offset
+ *         in: query
+ *         required: false
+ *         schema: { type: integer, default: 0 }
+ *         description: 조회 시작 위치
+ *         example: 0
+ *       - name: limit
+ *         in: query
+ *         required: false
+ *         schema: { type: integer, default: 20 }
+ *         description: 조회 개수
+ *         example: 20
  *     responses:
  *       200:
  *         description: 조회 성공
@@ -46,6 +59,12 @@ const router = Router();
  *                           type: integer
  *                           description: 안읽은 알림 수 (뱃지 표시용)
  *                           example: 3
+ *                         page:
+ *                           type: object
+ *                           properties:
+ *                             offset: { type: integer, example: 0 }
+ *                             limit: { type: integer, example: 20 }
+ *                             total: { type: integer, example: 42 }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:

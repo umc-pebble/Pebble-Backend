@@ -39,7 +39,7 @@ const router = Router();
  *                 - $ref: '#/components/schemas/ApiResponse'
  *                 - type: object
  *                   properties:
- *                     data: { $ref: '#/components/schemas/User' }
+ *                     data: { $ref: '#/components/schemas/UserProfile' }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
@@ -54,8 +54,9 @@ router.get('/users/me', getMe);
  *     summary: 프로필 편집 (PLB-043·003)
  *     description: >
  *       닉네임·Bio·프로필 이미지를 수정합니다. 전달된 필드만 부분 수정됩니다.
- *       닉네임 변경은 마지막 변경 후 15일(360시간) 쿨다운이 있으며, 쿨다운 중이면 400을 반환합니다.
- *       profileImageUrl에 null을 보내면 기본 이미지로 대체됩니다.
+ *       닉네임은 중복 가능하며, 마지막 변경 후 15일(360시간) 쿨다운이 있어 이내 재변경 시 400을 반환합니다.
+ *       profileImageUrl은 파일을 직접 보내는 것이 아니라, 먼저 POST /uploads/image로 업로드한 뒤 반환받은 URL을 전달합니다.
+ *       null을 보내면 기본 이미지로 대체됩니다.
  *     tags: [User]
  *     security:
  *       - bearerAuth: []
@@ -66,9 +67,9 @@ router.get('/users/me', getMe);
  *           schema:
  *             type: object
  *             properties:
- *               nickname: { type: string, maxLength: 100, description: 변경 시 15일 쿨다운 적용, example: 큰바위 }
+ *               nickname: { type: string, maxLength: 100, description: 중복 가능, 변경 시 15일 쿨다운 적용, example: 큰바위 }
  *               bio: { type: string, nullable: true, example: 매일 한 걸음 }
- *               profileImageUrl: { type: string, nullable: true, description: null이면 기본 이미지, example: null }
+ *               profileImageUrl: { type: string, nullable: true, description: POST /uploads/image로 먼저 업로드 후 받은 URL. null이면 기본 이미지, example: null }
  *     responses:
  *       200:
  *         description: 수정 성공
@@ -79,13 +80,28 @@ router.get('/users/me', getMe);
  *                 - $ref: '#/components/schemas/ApiResponse'
  *                 - type: object
  *                   properties:
- *                     data: { $ref: '#/components/schemas/User' }
+ *                     data:
+ *                       type: object
+ *                       description: 변경된 필드가 반영된 프로필 요약 (전체 프로필은 GET /users/me 참고)
+ *                       properties:
+ *                         id: { type: integer, example: 1 }
+ *                         nickname: { type: string, example: newName }
+ *                         uniqueTag: { type: string, example: '1234' }
+ *                         bio: { type: string, nullable: true, example: 새 소개글 }
+ *                         profileImageUrl: { type: string, nullable: true, example: 'https://supabase.../new.jpg' }
+ *                         lastNicknameChangedAt: { type: string, format: date-time, nullable: true, example: '2026-07-06T00:00:00+09:00' }
  *       400:
  *         description: 닉네임 변경 쿨다운(15일) 중이거나 입력값 오류
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 닉네임은 15일마다 변경할 수 있습니다., error: { code: "COMMON_INVALID_INPUT" } }
+ *             examples:
+ *               cooldown:
+ *                 summary: 닉네임 변경 쿨다운(15일) 중
+ *                 value: { success: false, message: 닉네임은 15일마다 변경할 수 있습니다., error: { code: "USER_NICKNAME_COOLDOWN" } }
+ *               invalidInput:
+ *                 summary: 그 외 입력값 오류
+ *                 value: { success: false, message: 요청 값이 올바르지 않습니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
@@ -180,6 +196,8 @@ router.get('/users/:userId', getUser);
  *                         theme: { type: string, enum: [LIGHT, DARK], example: LIGHT }
  *                         notifyTaskDue: { type: boolean, example: true }
  *                         activityColor: { type: string, nullable: true, example: '#7ED321' }
+ *                         isSocialOnly: { type: boolean, description: true이면 FE에서 비밀번호 변경 항목을 비활성화, example: false }
+ *                         isTempPassword: { type: boolean, description: true이면 FE에서 비밀번호 변경 권장 UI를 노출, example: false }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
@@ -218,7 +236,12 @@ router.get('/users/me/settings', getSettings);
  *                 - $ref: '#/components/schemas/ApiResponse'
  *                 - type: object
  *                   properties:
- *                     data: { $ref: '#/components/schemas/User' }
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         theme: { type: string, enum: [LIGHT, DARK], example: DARK }
+ *                         notifyTaskDue: { type: boolean, example: false }
+ *                         activityColor: { type: string, nullable: true, example: '#FF5722' }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:
@@ -235,6 +258,8 @@ router.patch('/users/me/settings', updateSettings);
  *     summary: 비밀번호 변경 (PLB-042)
  *     description: >
  *       현재 비밀번호 확인 후 새 비밀번호로 변경합니다. 소셜 전용 계정은 자체 비밀번호가 없어 변경할 수 없습니다.
+ *       성공 시 기존 세션은 전부 로그아웃 처리되며, 신규 accessToken/refreshToken을 재발급합니다.
+ *       임시 비밀번호 상태였다면 isTempPassword가 false로 복귀합니다.
  *     tags: [User]
  *     security:
  *       - bearerAuth: []
@@ -250,17 +275,33 @@ router.patch('/users/me/settings', updateSettings);
  *               newPassword: { type: string, format: password, minLength: 8, example: 'newPebble1234!' }
  *     responses:
  *       200:
- *         description: 변경 성공
+ *         description: 변경 성공. 기존 세션은 모두 무효화되고 신규 토큰이 발급됩니다.
  *         content:
  *           application/json:
- *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: true, message: 비밀번호가 변경되었습니다., data: null }
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data: { $ref: '#/components/schemas/AuthTokens' }
+ *             example:
+ *               success: true
+ *               message: 비밀번호가 변경되었습니다.
+ *               data:
+ *                 accessToken: 'eyJhbGciOiJIUzI1Ni.access...'
+ *                 refreshToken: 'eyJhbGciOiJIUzI1Ni.refresh...'
  *       400:
  *         description: 현재 비밀번호 불일치, 형식 오류, 또는 소셜 전용 계정
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 현재 비밀번호가 올바르지 않습니다., error: { code: "COMMON_INVALID_INPUT" } }
+ *             examples:
+ *               socialOnly:
+ *                 summary: 소셜 전용 계정
+ *                 value: { success: false, message: 소셜 로그인 계정은 비밀번호를 변경할 수 없습니다., error: { code: "AUTH_SOCIAL_ONLY" } }
+ *               invalidInput:
+ *                 summary: 현재 비밀번호 불일치 또는 형식 오류
+ *                 value: { success: false, message: 현재 비밀번호가 올바르지 않습니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
@@ -270,10 +311,13 @@ router.patch('/users/me/password', changePassword);
 
 /**
  * @swagger
- * /users/me/email/change-request:
+ * /users/me/email/request:
  *   post:
- *     summary: 이메일 변경 인증 링크 발송 (PLB-042)
- *     description: 새 이메일로 인증 링크를 발송합니다. 인증 완료 전까지는 이메일이 변경되지 않습니다.
+ *     summary: 이메일 변경 요청 (PLB-042)
+ *     description: >
+ *       새 이메일로 인증 링크를 발송합니다. 이 요청 자체는 이메일을 바꾸지 않으며,
+ *       리소스를 직접 수정하는 게 아니라 변경 프로세스를 시작시키는 액션이라 POST를 사용합니다.
+ *       아래 POST /users/me/email/confirm으로 토큰을 검증해야 실제 이메일이 변경됩니다.
  *     tags: [User]
  *     security:
  *       - bearerAuth: []
@@ -285,14 +329,14 @@ router.patch('/users/me/password', changePassword);
  *             type: object
  *             required: [newEmail]
  *             properties:
- *               newEmail: { type: string, format: email, example: new-pebble@umc.com }
+ *               newEmail: { type: string, format: email, example: new@example.com }
  *     responses:
  *       200:
  *         description: 인증 링크 발송
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: true, message: 새 이메일로 인증 링크를 발송했습니다., data: null }
+ *             example: { success: true, message: 인증 링크를 발송했습니다. 이메일을 확인해주세요., data: null }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:
@@ -306,14 +350,16 @@ router.patch('/users/me/password', changePassword);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/users/me/email/change-request', requestEmailChange);
+router.post('/users/me/email/request', requestEmailChange);
 
 /**
  * @swagger
- * /users/me/email/change-confirm:
+ * /users/me/email/confirm:
  *   post:
  *     summary: 이메일 변경 확정 (PLB-042)
- *     description: 인증 링크의 token을 검증해 이메일 변경을 확정합니다. 토큰이 만료/위조되면 실패합니다.
+ *     description: >
+ *       POST /users/me/email/request로 발송된 인증 링크의 token을 검증해 이메일 변경을 확정합니다.
+ *       토큰이 만료되었거나 위조된 경우 400을 반환합니다.
  *     tags: [User]
  *     security:
  *       - bearerAuth: []
@@ -325,7 +371,7 @@ router.post('/users/me/email/change-request', requestEmailChange);
  *             type: object
  *             required: [token]
  *             properties:
- *               token: { type: string, description: 인증 메일 링크의 토큰, example: 'a1b2c3...' }
+ *               token: { type: string, description: 인증 메일 링크에 담긴 토큰, example: 'a1b2c3...' }
  *     responses:
  *       200:
  *         description: 이메일 변경 완료
@@ -336,18 +382,26 @@ router.post('/users/me/email/change-request', requestEmailChange);
  *                 - $ref: '#/components/schemas/ApiResponse'
  *                 - type: object
  *                   properties:
- *                     data: { $ref: '#/components/schemas/User' }
+ *                     data: { $ref: '#/components/schemas/UserProfile' }
+ *             example:
+ *               success: true
+ *               message: 이메일이 변경되었습니다.
+ *               data:
+ *                 id: 1
+ *                 email: new@example.com
+ *                 nickname: pebble
+ *                 uniqueTag: '1234'
  *       400:
- *         description: 토큰 만료/위조
+ *         description: 인증 링크가 만료되었거나 유효하지 않음
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
- *             example: { success: false, message: 인증 링크가 만료되었습니다., error: { code: "COMMON_INVALID_INPUT" } }
+ *             example: { success: false, message: 인증 링크가 만료되었거나 유효하지 않습니다., error: { code: "COMMON_INVALID_INPUT" } }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/users/me/email/change-confirm', confirmEmailChange);
+router.post('/users/me/email/confirm', confirmEmailChange);
 
 export default router;

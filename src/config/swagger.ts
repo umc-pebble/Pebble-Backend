@@ -264,6 +264,39 @@ const options: swaggerJSDoc.Options = {
             },
           },
         },
+        UserProfile: {
+          type: 'object',
+          description:
+            '프로필 조회/편집 응답 전용 스키마. 테마·알림·징검다리 색상 등 설정값은 포함하지 않으며, 해당 값은 GET/PATCH /users/me/settings에서 다룬다.',
+          properties: {
+            id: { type: 'integer', example: 42 },
+            email: { type: 'string', format: 'email', example: 'pebble@umc.com' },
+            nickname: { type: 'string', maxLength: 100, example: '조약돌' },
+            uniqueTag: {
+              type: 'string',
+              maxLength: 10,
+              description: '닉네임#태그 식별자 (친구 검색용)',
+              example: '0417',
+            },
+            profileImageUrl: { type: 'string', maxLength: 500, nullable: true, example: null },
+            bio: { type: 'string', nullable: true, example: '한 걸음씩' },
+            lastNicknameChangedAt: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true,
+              description: '마지막 닉네임 변경 시각 (15일 쿨다운 계산용, PLB-043)',
+              example: null,
+            },
+            nicknameChangableAfter: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true,
+              description: '닉네임 재변경 가능 시각 (lastNicknameChangedAt + 15일, 서버 계산값, FE 표시용)',
+              example: null,
+            },
+            createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+          },
+        },
         User: {
           type: 'object',
           description: '회원 공개 정보. password·refreshToken 등 민감 필드는 응답에서 제외.',
@@ -284,6 +317,13 @@ const options: swaggerJSDoc.Options = {
               format: 'date-time',
               nullable: true,
               description: '마지막 닉네임 변경 시각 (15일 쿨다운 계산용, PLB-043)',
+              example: null,
+            },
+            nicknameChangableAfter: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true,
+              description: '닉네임 재변경 가능 시각 (lastNicknameChangedAt + 15일, 서버 계산값, FE 표시용)',
               example: null,
             },
             activityColor: {
@@ -348,7 +388,6 @@ const options: swaggerJSDoc.Options = {
               enum: [
                 'FOLLOW_REQUEST',
                 'FOLLOW_ACCEPTED',
-                'FOLLOW_REJECTED',
                 'TASK_DUE',
                 'MILESTONE_DUE',
                 'REPORT',

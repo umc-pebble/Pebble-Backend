@@ -6,5 +6,5 @@ import { sendSuccess } from '../utils/response';
 // 라우트/문서 검증용 스텁이며, 공통 응답 포맷 { success, message, data }는 sendSuccess로 반환한다.
 
 export const uploadImage = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '이미지 업로드 (미구현)', 201);
+  sendSuccess(res, null, '이미지 업로드 (미구현)', 200);
 };
