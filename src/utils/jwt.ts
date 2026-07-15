@@ -23,8 +23,14 @@ export const signRefreshToken = (userId: number) =>
   });
 
 // 만료/변조 시 jsonwebtoken이 throw — 호출부(service)에서 AppError로 변환한다.
-export const verifyRefreshToken = (token: string) =>
-  jwt.verify(token, process.env.JWT_REFRESH_SECRET as string) as TokenPayload;
+// payload에 숫자 userId가 없으면 위조/형식오류로 간주해 throw (findById(undefined) 방지).
+export const verifyRefreshToken = (token: string): TokenPayload => {
+  const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET as string);
+  if (typeof decoded !== 'object' || decoded === null || typeof decoded.userId !== 'number') {
+    throw new jwt.JsonWebTokenError('invalid refresh token payload');
+  }
+  return { userId: decoded.userId };
+};
 
 // refresh 토큰은 DB에 원문 대신 sha256 해시로 저장한다 (DB 유출 시 토큰 탈취 방지)
 export const sha256 = (value: string) => crypto.createHash('sha256').update(value).digest('hex');

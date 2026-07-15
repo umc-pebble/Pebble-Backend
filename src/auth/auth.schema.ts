@@ -10,6 +10,7 @@ export const signupSchema = z.object({
     .min(8, '비밀번호는 8자 이상이어야 합니다.'),
   nickname: z
     .string({ required_error: '닉네임을 입력해주세요.' })
+    .trim()
     .min(1, '닉네임을 입력해주세요.')
     .max(100, '닉네임은 100자 이하여야 합니다.'),
   bio: z.string().max(500, '소개글은 500자 이하여야 합니다.').optional(),

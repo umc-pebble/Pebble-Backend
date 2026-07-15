@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
 import { sendSuccess } from '../utils/response';
-import { AppError } from '../utils/app-error';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 import { authService } from './auth.service';
@@ -48,9 +47,6 @@ export const refresh = async (req: Request, res: Response, next: NextFunction) =
 
 export const logout = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (req.userId === undefined) {
-      throw new AppError('COMMON_UNAUTHORIZED', '인증 정보가 없습니다.');
-    }
     await authService.logout(req.userId);
     sendSuccess(res, null, '로그아웃 성공');
   } catch (err) {
