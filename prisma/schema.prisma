@@ -35,7 +35,7 @@ enum SubscriptionStatus {
 enum DateType {
   SINGLE
   RANGE
-  REPEAT
+  MULTIPLE
 }
 
 enum NotificationType {
@@ -161,7 +161,7 @@ model Category {
   color        String   @db.VarChar(20)
   imageUrl     String?  @db.VarChar(500) // NULL이면 기본 이미지
   isHidden     Boolean  @default(false) // 내 화면 숨김 (하위 마일스톤/태스크 연동 숨김)
-  isPublic     Boolean  @default(true) // 팔로워 공개 여부
+  isPublic     Boolean  @default(false) // 팔로워 공개 여부. 기본 비공개 (Category 도메인 구현 기준, 07-14) — ERD 상세 스펙 표는 TRUE로 되어있어 문서 정정 필요
   isCompleted  Boolean  @default(false)
   isShared     Boolean  @default(false)
   displayOrder Int      @default(0)
@@ -182,8 +182,7 @@ model Milestone {
   dateType     DateType
   startDate    DateTime  @db.Date
   endDate      DateTime? @db.Date
-  repeatDays   String?   @db.VarChar(30) // 예: MON,WED,FRI (REPEAT일 때 이 회차가 속한 반복 규칙, 회차 row마다 동일하게 복제 저장)
-  seriesId     Int? // REPEAT 회차들을 묶는 그룹 키. 단일/기간 마일스톤은 NULL (PLB-012, seriesId 방식/B안 - 07-10 확정)
+  seriesId     Int? // MULTIPLE(다중 날짜 선택) 회차들을 묶는 그룹 키. 일반/기간 마일스톤은 NULL (PLB-012, 07-14 확정: 반복요일 방식 폐기, 사용자가 날짜를 직접 여러 개 선택하는 방식으로 변경)
   isCompleted  Boolean   @default(false)
   displayOrder Int       @default(0)
   createdAt    DateTime  @default(now())
@@ -204,8 +203,7 @@ model Task {
   dateType     DateType
   startDate    DateTime  @db.Date
   endDate      DateTime? @db.Date
-  repeatDays   String?   @db.VarChar(30) // 예: MON,WED,FRI (REPEAT일 때 이 회차가 속한 반복 규칙, 회차 row마다 동일하게 복제 저장)
-  seriesId     Int? // REPEAT 회차들을 묶는 그룹 키. 단일/기간 태스크는 NULL (PLB-017, seriesId 방식/B안 - 07-10 확정)
+  seriesId     Int? // MULTIPLE(다중 날짜 선택) 회차들을 묶는 그룹 키. 일반/기간 태스크는 NULL (PLB-017, 07-14 확정: 반복요일 방식 폐기, 사용자가 날짜를 직접 여러 개 선택하는 방식으로 변경)
   taskTime     DateTime? @db.Time // 시:분 입력
   memo         String?   @db.Text
   color        String?   @db.VarChar(20) // 단일 태스크만 사용 (종속 태스크는 카테고리 색상 계열 따름)
