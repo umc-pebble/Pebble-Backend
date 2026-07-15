@@ -17,7 +17,8 @@ import {
 const router = Router();
 
 // 마일스톤 API는 모두 로그인 필요(bearerAuth). authMiddleware가 req.userId를 채운다.
-router.use(authMiddleware);
+// 경로 한정 필수: 공유 마운트(/api/v1) 구조에서 경로 없는 use()는 타 도메인까지 막는다.
+router.use(['/categories', '/milestones'], authMiddleware);
 
 /**
  * @swagger
