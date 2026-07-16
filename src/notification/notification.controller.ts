@@ -9,13 +9,16 @@ import { notificationService } from './notification.service';
 
 const DEFAULT_OFFSET = 0;
 const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
 
 // 음수·NaN 등 잘못된 값은 기본값으로 대체한다(쿼리 파라미터는 필수가 아니므로 400 대신 관대하게 처리).
+// limit은 과도한 조회로 인한 부하를 막기 위해 MAX_LIMIT으로 상한을 둔다.
 function parsePagination(req: AuthRequest) {
   const offsetRaw = Number(req.query.offset);
   const limitRaw = Number(req.query.limit);
   const offset = Number.isInteger(offsetRaw) && offsetRaw >= 0 ? offsetRaw : DEFAULT_OFFSET;
-  const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_LIMIT;
+  const limit =
+    Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, MAX_LIMIT) : DEFAULT_LIMIT;
   return { offset, limit };
 }
 

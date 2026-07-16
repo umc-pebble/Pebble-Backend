@@ -40,8 +40,8 @@ router.use(authMiddleware);
  *       - name: limit
  *         in: query
  *         required: false
- *         schema: { type: integer, default: 20 }
- *         description: 조회 개수
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *         description: 조회 개수 (최대 100)
  *         example: 20
  *     responses:
  *       200:

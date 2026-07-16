@@ -87,6 +87,7 @@ export const userService = {
   },
 
   async updateSettings(userId: number, input: UpdateSettingsBody) {
+    await getUserOrThrow(userId);
     const updated = await userRepository.update(userId, {
       theme: input.theme,
       notifyTaskDue: input.notifyTaskDue,
@@ -123,22 +124,31 @@ export const userService = {
 
   // 인증 링크 발송까지만 처리한다. 실제 email 컬럼 반영은 confirmEmailChange에서 이루어진다(PLB-042).
   async requestEmailChange(userId: number, newEmail: string) {
-    const duplicated = await userRepository.existsByEmailOrPendingEmail(newEmail);
+    const duplicated = await userRepository.existsByEmailOrPendingEmail(userId, newEmail);
     if (duplicated) {
       throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
     }
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + EMAIL_CHANGE_TOKEN_TTL_MS);
-    await userRepository.setPendingEmailChange(userId, newEmail, sha256(token), expiresAt);
+    try {
+      await userRepository.setPendingEmailChange(userId, newEmail, sha256(token), expiresAt);
+    } catch (err) {
+      // 동시 요청이 중복 체크를 모두 통과한 뒤 pendingEmail의 DB unique 제약에서 충돌하는 경우.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
+      }
+      throw err;
+    }
     await sendEmailChangeVerification(newEmail, token);
   },
 
   async confirmEmailChange(userId: number, token: string) {
     const user = await getUserOrThrow(userId);
+    const tokenHash = sha256(token);
     const isValid =
       user.pendingEmail &&
-      user.emailChangeTokenHash === sha256(token) &&
+      user.emailChangeTokenHash === tokenHash &&
       user.emailChangeTokenExpiresAt &&
       user.emailChangeTokenExpiresAt > new Date();
 
@@ -146,12 +156,22 @@ export const userService = {
       throw new AppError('COMMON_INVALID_INPUT', '인증 링크가 만료되었거나 유효하지 않습니다.');
     }
 
-    const updated = await userRepository.confirmEmailChange(userId, user.pendingEmail as string);
+    // pendingEmail·토큰 해시·만료 조건을 where에 포함한 조건부 갱신이므로, 검증 이후 pending 정보가
+    // 바뀌는 경쟁 상황이면 count가 0으로 돌아온다.
+    const result = await userRepository.confirmEmailChange(
+      userId,
+      user.pendingEmail as string,
+      tokenHash,
+    );
+    if (result.count === 0) {
+      throw new AppError('COMMON_INVALID_INPUT', '인증 링크가 만료되었거나 유효하지 않습니다.');
+    }
+
     return {
-      id: updated.id,
-      email: updated.email,
-      nickname: updated.nickname,
-      uniqueTag: updated.uniqueTag,
+      id: user.id,
+      email: user.pendingEmail as string,
+      nickname: user.nickname,
+      uniqueTag: user.uniqueTag,
     };
   },
 };

@@ -13,6 +13,27 @@ export const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
 const ALLOWED_MIME_TYPES = Object.keys(IMAGE_EXTENSION_BY_MIME);
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
+// mimetype은 클라이언트가 임의로 지정할 수 있으므로, 실제 저장 전 파일 시그니처(매직 바이트)로
+// 한 번 더 검증한다. mimetype이 스푸핑돼도 여기서 걸러진다.
+const FILE_SIGNATURE_MATCHERS: Record<string, (buffer: Buffer) => boolean> = {
+  'image/jpeg': (buffer) =>
+    buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
+  'image/png': (buffer) =>
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a,
+  'image/webp': (buffer) =>
+    buffer.length >= 12 &&
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP',
+};
+
 interface UploadRequest extends Request {
   fileTypeRejected?: boolean;
 }
@@ -47,6 +68,9 @@ export const uploadSingleImage = (req: UploadRequest, res: Response, next: NextF
     }
     if (err) return next(err);
     if (req.fileTypeRejected) {
+      return next(new AppError('FILE_TYPE_NOT_ALLOWED', 'JPEG/PNG/WEBP 형식만 업로드할 수 있습니다.'));
+    }
+    if (req.file && !FILE_SIGNATURE_MATCHERS[req.file.mimetype]?.(req.file.buffer)) {
       return next(new AppError('FILE_TYPE_NOT_ALLOWED', 'JPEG/PNG/WEBP 형식만 업로드할 수 있습니다.'));
     }
     next();

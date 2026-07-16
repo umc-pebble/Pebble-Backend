@@ -15,11 +15,12 @@ export const userRepository = {
   },
 
   // 이메일 변경 요청 시 중복 체크용. 이미 확정된 email뿐 아니라 다른 유저가 변경 요청 중(pendingEmail)인
-  // 이메일과도 겹치면 안 되므로 둘 다 확인한다.
-  existsByEmailOrPendingEmail(email: string) {
+  // 이메일과도 겹치면 안 되므로 둘 다 확인한다. 본인의 이전 pendingEmail 재요청(토큰 만료 후 재시도 등)은
+  // 충돌로 보지 않도록 자기 자신은 제외한다.
+  existsByEmailOrPendingEmail(userId: number, email: string) {
     return prisma.user
       .findFirst({
-        where: { OR: [{ email }, { pendingEmail: email }] },
+        where: { OR: [{ email }, { pendingEmail: email, NOT: { id: userId } }] },
         select: { id: true },
       })
       .then((found) => found !== null);
@@ -72,9 +73,17 @@ export const userRepository = {
   },
 
   // 이메일 변경 확정: email을 교체하고 pending* 필드를 모두 파기한다.
-  confirmEmailChange(userId: number, newEmail: string) {
-    return prisma.user.update({
-      where: { id: userId },
+  // pendingEmail·토큰 해시·만료 조건을 where에 포함해 조건부로 갱신함으로써, 서비스의 토큰 검증 이후
+  // 다른 요청이 pending 정보를 교체하는 경쟁 상황에서도 이전 상태 기준으로만 확정되도록 한다.
+  // (count가 0이면 그 사이 pending 정보가 바뀐 것이므로 서비스에서 실패로 처리해야 한다.)
+  confirmEmailChange(userId: number, newEmail: string, tokenHash: string) {
+    return prisma.user.updateMany({
+      where: {
+        id: userId,
+        pendingEmail: newEmail,
+        emailChangeTokenHash: tokenHash,
+        emailChangeTokenExpiresAt: { gt: new Date() },
+      },
       data: {
         email: newEmail,
         pendingEmail: null,
