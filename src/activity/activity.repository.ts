@@ -1,5 +1,10 @@
 import prisma from "../config/database";
 
+type ActivityLogSummary = {
+  date: Date;
+  completedTaskCount: number;
+};
+
 export const activityRepository = {
     //id, nickname, activityColor 가져오기
     findUserById: async (userId: number) => {
@@ -38,7 +43,7 @@ export const activityRepository = {
         userId: number,
         startDate: Date,
         endDate: Date,
-    ) => {
+    ) : Promise<ActivityLogSummary[]> => {
         const logs = await prisma.activityLog.findMany({
             where:{
                 userId,

@@ -1,6 +1,10 @@
 import { AppError } from "../utils/app-error";
 import { activityRepository } from "./activity.repository";
 
+const formatDate = (date: Date): string => {
+  return date.toISOString().slice(0, 10);
+};
+
 export const activityService = {
     getActivityByUserId: async (
         requesterId: number,
@@ -55,6 +59,26 @@ export const activityService = {
             endDate,
         )
 
-        return logs;
+        const logMap = new Map(
+            logs.map((log) => [
+                formatDate(log.date),
+                log.completedTaskCount,
+            ]),
+        );
+
+        //활동기록 없는 날 0으로 생성하기
+        const filledLogs = Array.from({ length: 7 }, (_, index) => {
+            const currentDate = new Date(startDate);
+            currentDate.setDate(startDate.getDate() + index);
+
+            const dateString = formatDate(currentDate);
+            
+            return {
+                date: dateString,
+                completedTaskCount: logMap.get(dateString) ?? 0,
+            };
+        });
+
+        return filledLogs;
     }
 };
