@@ -18,10 +18,9 @@ async function getOwnedNotificationOrThrow(userId: number, notificationId: numbe
 
 export const notificationService = {
   async getNotifications(userId: number, offset: number, limit: number) {
-    const [notifications, total, unreadCount] = await Promise.all([
+    const [notifications, { total, unreadCount }] = await Promise.all([
       notificationRepository.findManyByUserId(userId, offset, limit),
-      notificationRepository.countByUserId(userId),
-      notificationRepository.countUnreadByUserId(userId),
+      notificationRepository.getCountsByUserId(userId),
     ]);
 
     return {

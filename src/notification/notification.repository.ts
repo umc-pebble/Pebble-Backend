@@ -5,12 +5,13 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 
-// 30일 경과(만료) 알림은 목록·카운트에서 제외한다(PLB-038). expiresAt이 없는 알림은 항상 포함.
+// 30일 경과(만료) 알림은 목록·카운트·단건 조회 모두에서 제외한다(PLB-038). expiresAt이 없는 알림은 항상 포함.
+function notExpiredWhere(): Prisma.NotificationWhereInput {
+  return { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] };
+}
+
 function activeWhere(userId: number): Prisma.NotificationWhereInput {
-  return {
-    userId,
-    OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-  };
+  return { userId, ...notExpiredWhere() };
 }
 
 export const notificationRepository = {
@@ -23,16 +24,24 @@ export const notificationRepository = {
     });
   },
 
-  countByUserId(userId: number) {
-    return prisma.notification.count({ where: activeWhere(userId) });
+  // total/unreadCount를 한 번의 groupBy로 함께 구해 count 쿼리 두 번을 한 번으로 줄인다.
+  async getCountsByUserId(userId: number) {
+    const rows = await prisma.notification.groupBy({
+      by: ['isRead'],
+      where: activeWhere(userId),
+      _count: { _all: true },
+    });
+    const total = rows.reduce((sum, row) => sum + row._count._all, 0);
+    const unreadCount = rows.find((row) => !row.isRead)?._count._all ?? 0;
+    return { total, unreadCount };
   },
 
-  countUnreadByUserId(userId: number) {
-    return prisma.notification.count({ where: { ...activeWhere(userId), isRead: false } });
-  },
-
+  // 만료된 알림은 목록에서 빠지는 것과 동일하게 단건 조회(읽음/삭제의 기반)에서도 "존재하지 않음"으로 취급한다.
+  // userId는 넘기지 않는다 — 다른 유저 소유 알림과 만료된 알림을 구분해야 403/404를 올바르게 나눌 수 있다.
   findById(notificationId: number) {
-    return prisma.notification.findUnique({ where: { id: notificationId } });
+    return prisma.notification.findFirst({
+      where: { id: notificationId, ...notExpiredWhere() },
+    });
   },
 
   markRead(notificationId: number) {

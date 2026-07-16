@@ -48,9 +48,11 @@ export const userService = {
   async updateProfile(userId: number, input: UpdateMeBody) {
     const user = await getUserOrThrow(userId);
 
-    const data: Prisma.UserUncheckedUpdateInput = {};
-    if (input.bio !== undefined) data.bio = input.bio;
-    if (input.profileImageUrl !== undefined) data.profileImageUrl = input.profileImageUrl;
+    // bio/profileImageUrl은 undefined면 Prisma가 update SET절에서 알아서 제외하므로 별도 가드가 필요 없다.
+    const data: Prisma.UserUncheckedUpdateInput = {
+      bio: input.bio,
+      profileImageUrl: input.profileImageUrl,
+    };
 
     if (input.nickname !== undefined) {
       const changableAfter = computeNicknameChangableAfter(user.lastNicknameChangedAt);
@@ -121,8 +123,8 @@ export const userService = {
 
   // 인증 링크 발송까지만 처리한다. 실제 email 컬럼 반영은 confirmEmailChange에서 이루어진다(PLB-042).
   async requestEmailChange(userId: number, newEmail: string) {
-    const existing = await userRepository.findByEmail(newEmail);
-    if (existing) {
+    const duplicated = await userRepository.existsByEmailOrPendingEmail(newEmail);
+    if (duplicated) {
       throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
     }
 

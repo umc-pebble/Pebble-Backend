@@ -5,18 +5,13 @@
 import { randomUUID } from 'crypto';
 import supabase, { UPLOAD_BUCKET } from '../config/supabase';
 import { AppError } from '../utils/app-error';
-
-// fileFilter(upload.middleware.ts)에서 이미 검증된 mimetype만 들어오므로,
-// 클라이언트가 보낸 원본 파일명 대신 mimetype 기준으로 확장자를 고정한다.
-const EXTENSION_BY_MIME: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-};
+import { IMAGE_EXTENSION_BY_MIME } from '../middlewares/upload.middleware';
 
 export const uploadService = {
   async uploadImage(file: Express.Multer.File) {
-    const extension = EXTENSION_BY_MIME[file.mimetype];
+    // fileFilter(upload.middleware.ts)에서 이미 검증된 mimetype만 들어오므로,
+    // 클라이언트가 보낸 원본 파일명 대신 mimetype 기준으로 확장자를 고정한다.
+    const extension = IMAGE_EXTENSION_BY_MIME[file.mimetype];
     // 파일명 중복으로 인한 덮어쓰기를 막기 위해 UUID로 고유 파일명을 생성한다.
     const fileName = `${randomUUID()}.${extension}`;
 

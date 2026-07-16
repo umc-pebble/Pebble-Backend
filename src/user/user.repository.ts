@@ -14,6 +14,17 @@ export const userRepository = {
     return prisma.user.findUnique({ where: { email } });
   },
 
+  // 이메일 변경 요청 시 중복 체크용. 이미 확정된 email뿐 아니라 다른 유저가 변경 요청 중(pendingEmail)인
+  // 이메일과도 겹치면 안 되므로 둘 다 확인한다.
+  existsByEmailOrPendingEmail(email: string) {
+    return prisma.user
+      .findFirst({
+        where: { OR: [{ email }, { pendingEmail: email }] },
+        select: { id: true },
+      })
+      .then((found) => found !== null);
+  },
+
   existsByNicknameTag(nickname: string, uniqueTag: string) {
     return prisma.user
       .findUnique({
