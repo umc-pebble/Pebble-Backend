@@ -1,8 +1,14 @@
 import { AppError } from "../utils/app-error";
 import { activityRepository } from "./activity.repository";
 
+// 한국 기준 YYYY-MM-DD 문자열
 const formatDate = (date: Date): string => {
-  return date.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
 };
 
 //level 계산 함수
@@ -47,8 +53,12 @@ export const activityService = {
             }
         }
 
-        //endDate: baseDate 기준, 입력 받지 않으면 당일
-        const endDate = baseDate ? new Date(baseDate) : new Date();
+        const baseDateString = baseDate ?? formatDate(new Date());
+
+        const endDate = new Date(
+            `${baseDateString}T00:00:00+09:00`,
+        );
+        
         if (Number.isNaN(endDate.getTime())) {
             throw new AppError(
                 'COMMON_INVALID_INPUT',
