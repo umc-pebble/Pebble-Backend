@@ -5,6 +5,14 @@ const formatDate = (date: Date): string => {
   return date.toISOString().slice(0, 10);
 };
 
+//level 계산 함수
+const getLevel = (completedTaskCount: number): number => {
+  if (completedTaskCount === 0) return 0;
+  if (completedTaskCount <= 2) return 1;
+  if (completedTaskCount <= 4) return 2;
+  return 3;
+};
+
 export const activityService = {
     getActivityByUserId: async (
         requesterId: number,
@@ -35,7 +43,7 @@ export const activityService = {
                 throw new AppError(
                     'COMMON_FORBIDDEN',
                     '친구의 활동 기록만 조회할 수 있습니다.',
-                )
+                );
             }
         }
 
@@ -57,7 +65,7 @@ export const activityService = {
             targetUserId,
             startDate,
             endDate,
-        )
+        );
 
         const logMap = new Map(
             logs.map((log) => [
@@ -72,13 +80,21 @@ export const activityService = {
             currentDate.setDate(startDate.getDate() + index);
 
             const dateString = formatDate(currentDate);
-            
+            const completedTaskCount = logMap.get(dateString) ?? 0;
+
             return {
                 date: dateString,
-                completedTaskCount: logMap.get(dateString) ?? 0,
+                completedTaskCount,
+                level: getLevel(completedTaskCount),
             };
         });
 
-        return filledLogs;
+        return {
+            userId: targetUser.id,
+            nickname: targetUser.nickname,
+            activityColor: targetUser.activityColor,
+            baseDate: formatDate(endDate),
+            logs: filledLogs,
+        };
     }
 };
