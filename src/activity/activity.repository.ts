@@ -14,4 +14,22 @@ export const activityRepository = {
             }
         });
     },
+
+    //친구 관계 확인
+    existsAcceptedFollow: async (
+        requesterId: number,
+        targetUserId: number,
+    ) : Promise<boolean> => {
+        const follow = await prisma.follow.findFirst({
+            where: {
+                status: 'ACCEPTED',
+                followerId: requesterId,
+                followingId: targetUserId,
+            },
+            select:{
+                id: true,
+            },
+        });
+        return follow !== null;
+    }
 };
