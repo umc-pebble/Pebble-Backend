@@ -1,7 +1,38 @@
-// Activity(징검다리) Service
-// 비즈니스 로직 계층.
-// - level 계산 (PLB-023: 0개=0, 1~2개=1, 3~4개=2, 5개 이상=3)
-// - 친구 조회 권한 판정 (팔로잉 여부, 비공개 여부 — PLB-024)
-// TODO: activityRepository를 사용해 실제 로직 구현.
+import { AppError } from "../utils/app-error";
+import { activityRepository } from "./activity.repository";
 
-export const activityService = {};
+export const activityService = {
+    getActivityByUserId: async (
+        requesterId: number,
+        targetUserId: number,
+        baseDate?: string,
+    ) => {
+        //targetUser 찾기
+        const targetUser = await activityRepository.findUserById(targetUserId);
+
+        if(!targetUser){
+            throw new AppError(
+                'COMMON_NOT_FOUND',
+                '사용자를 찾을 수 없습니다.',
+            );
+        }
+
+        //본인 조회인지 확인
+        const isSelf = requesterId === targetUserId;
+
+        if(!isSelf) {
+            //친구 조회인지 확인
+            const isFriend = await activityRepository.existsAcceptedFollow(
+                requesterId,
+                targetUserId,
+            );
+
+            if(!isFriend) {
+                throw new AppError(
+                    'COMMON_FORBIDDEN',
+                    '친구의 활동 기록만 조회할 수 있습니다.',
+                )
+            }
+        }
+    },
+};
