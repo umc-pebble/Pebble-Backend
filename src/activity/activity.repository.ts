@@ -1,5 +1,17 @@
-// Activity(징검다리) Repository
-// DB 접근 계층. ActivityLog(userId+date UNIQUE, completedTaskCount) 조회를 담당한다.
-// TODO: Prisma 스키마(ActivityLog) 확정 후 실제 쿼리 구현.
+import prisma from "../config/database";
 
-export const activityRepository = {};
+export const activityRepository = {
+    //id, nickname, activityColor 가져오기
+    findUserById: async (userId: number) => {
+        return prisma.user.findUnique({
+            where: {
+                id: userId,
+            },
+            select: {
+                id: true,
+                nickname: true,
+                activityColor: true,
+            }
+        });
+    },
+};
