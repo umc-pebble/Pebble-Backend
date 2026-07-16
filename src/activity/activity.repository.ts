@@ -31,5 +31,31 @@ export const activityRepository = {
             },
         });
         return follow !== null;
+    },
+
+    //7일 logs 조회
+    findActivityLogsByDateRange: async(
+        userId: number,
+        startDate: Date,
+        endDate: Date,
+    ) => {
+        const logs = await prisma.activityLog.findMany({
+            where:{
+                userId,
+                date: {
+                    gte: startDate,
+                    lte: endDate,
+                }
+            },
+            select:{
+                date: true,
+                completedTaskCount: true,
+            },
+            orderBy: {
+                date: 'asc',
+            }
+        });
+
+        return logs;
     }
 };
