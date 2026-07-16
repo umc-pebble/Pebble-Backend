@@ -34,5 +34,27 @@ export const activityService = {
                 )
             }
         }
-    },
+
+        //endDate: baseDate 기준, 입력 받지 않으면 당일
+        const endDate = baseDate ? new Date(baseDate) : new Date();
+        if (Number.isNaN(endDate.getTime())) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                'baseDate 형식이 올바르지 않습니다.',
+            );
+        }
+
+        //startDate: endDate-6
+        const startDate = new Date(endDate);
+        startDate.setDate(startDate.getDate() - 6);
+
+        //logs 불러오기
+        const logs = await activityRepository.findActivityLogsByDateRange(
+            targetUserId,
+            startDate,
+            endDate,
+        )
+
+        return logs;
+    }
 };
