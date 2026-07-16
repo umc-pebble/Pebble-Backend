@@ -28,8 +28,16 @@ export const activityRepository = {
         const follow = await prisma.follow.findFirst({
             where: {
                 status: 'ACCEPTED',
-                followerId: requesterId,
-                followingId: targetUserId,
+                OR: [
+                    {
+                    followerId: requesterId,
+                    followingId: targetUserId,
+                    },
+                    {
+                    followerId: targetUserId,
+                    followingId: requesterId,
+                    },
+                ],
             },
             select:{
                 id: true,
