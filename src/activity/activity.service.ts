@@ -25,6 +25,14 @@ export const activityService = {
         targetUserId: number,
         baseDate?: string,
     ) => {
+
+        if (!Number.isInteger(targetUserId) || targetUserId <= 0) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                '유효하지 않은 사용자 ID입니다.',
+            );
+        }
+
         //targetUser 찾기
         const targetUser = await activityRepository.findUserById(targetUserId);
 
@@ -55,14 +63,21 @@ export const activityService = {
 
         const baseDateString = baseDate ?? formatDate(new Date());
 
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(baseDateString)) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                'baseDate는 YYYY-MM-DD 형식이어야 합니다.',
+            );
+        }
+
         const endDate = new Date(
             `${baseDateString}T00:00:00+09:00`,
         );
         
-        if (Number.isNaN(endDate.getTime())) {
+        if ( Number.isNaN(endDate.getTime()) || formatDate(endDate) !== baseDateString) {
             throw new AppError(
                 'COMMON_INVALID_INPUT',
-                'baseDate 형식이 올바르지 않습니다.',
+                'baseDate는 YYYY-MM-DD 형식이어야 합니다.',
             );
         }
 
