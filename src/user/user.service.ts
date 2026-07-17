@@ -158,11 +158,20 @@ export const userService = {
 
     // pendingEmail·토큰 해시·만료 조건을 where에 포함한 조건부 갱신이므로, 검증 이후 pending 정보가
     // 바뀌는 경쟁 상황이면 count가 0으로 돌아온다.
-    const result = await userRepository.confirmEmailChange(
-      userId,
-      user.pendingEmail as string,
-      tokenHash,
-    );
+    let result;
+    try {
+      result = await userRepository.confirmEmailChange(
+        userId,
+        user.pendingEmail as string,
+        tokenHash,
+      );
+    } catch (err) {
+      // 확정 시점 사이에 pendingEmail이 다른 계정의 email로 선점된 경우 (unique 제약 충돌).
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
+      }
+      throw err;
+    }
     if (result.count === 0) {
       throw new AppError('COMMON_INVALID_INPUT', '인증 링크가 만료되었거나 유효하지 않습니다.');
     }
