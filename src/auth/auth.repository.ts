@@ -19,9 +19,22 @@ export const authRepository = {
     return found !== null;
   },
 
-  createUser: (data: Prisma.UserCreateInput) => prisma.user.create({ data }),
+  // 유저 생성 + refresh 토큰 해시 저장을 한 트랜잭션으로 묶는다 (회원가입 전용) —
+  // 토큰 저장이 실패하면 계정 생성도 함께 취소되어 "가입 실패인데 계정만 남는" 상황을 막는다.
+  // 토큰 서명(jwt)은 service 책임이므로, userId를 받아 해시를 돌려주는 콜백으로 위임받는다.
+  createUserWithRefreshToken: (
+    data: Prisma.UserCreateInput,
+    refreshHashFor: (userId: number) => string,
+  ) =>
+    prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({ data });
+      return tx.user.update({
+        where: { id: created.id },
+        data: { refreshToken: refreshHashFor(created.id) },
+      });
+    }),
 
-  // 로그인·회원가입 최초 발급, 로그아웃 시 null 파기 (무조건 갱신)
+  // 로그인 시 발급 해시 저장, 로그아웃 시 null 파기 (무조건 갱신)
   updateRefreshToken: (userId: number, refreshTokenHash: string | null) =>
     prisma.user.update({ where: { id: userId }, data: { refreshToken: refreshTokenHash } }),
 

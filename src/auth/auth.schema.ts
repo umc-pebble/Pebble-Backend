@@ -13,8 +13,13 @@ export const signupSchema = z.object({
     .trim()
     .min(1, '닉네임을 입력해주세요.')
     .max(100, '닉네임은 100자 이하여야 합니다.'),
-  bio: z.string().max(500, '소개글은 500자 이하여야 합니다.').optional(),
-  profileImageUrl: z.string().url('프로필 이미지 URL 형식이 올바르지 않습니다.').optional(),
+  // Swagger 문서가 nullable로 안내하므로 null도 허용해야 한다 (미전송 undefined / 명시적 null 모두 OK)
+  bio: z.string().max(500, '소개글은 500자 이하여야 합니다.').nullable().optional(),
+  profileImageUrl: z
+    .string()
+    .url('프로필 이미지 URL 형식이 올바르지 않습니다.')
+    .nullable()
+    .optional(),
 });
 export type SignupDto = z.infer<typeof signupSchema>;
 

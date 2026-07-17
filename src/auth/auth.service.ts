@@ -27,7 +27,7 @@ const p2002Target = (err: unknown): string | null =>
     ? String(err.meta?.target ?? '')
     : null;
 
-// 최초 토큰 발급 — refresh는 sha256 해시로 무조건 저장 (로그인·회원가입)
+// 로그인 시 토큰 발급 — refresh는 sha256 해시로 저장 (회원가입은 createUserWithRefreshToken 트랜잭션 사용)
 const issueInitialTokens = async (userId: number) => {
   const accessToken = signAccessToken(userId);
   const refreshToken = signRefreshToken(userId);
@@ -52,15 +52,23 @@ export const authService = {
         continue;
       }
       try {
-        const user = await authRepository.createUser({
-          email: dto.email,
-          password: passwordHash,
-          nickname: dto.nickname,
-          uniqueTag,
-          bio: dto.bio,
-          profileImageUrl: dto.profileImageUrl,
-        });
-        const tokens = await issueInitialTokens(user.id);
+        // 유저 생성과 토큰 해시 저장이 한 트랜잭션 — 둘 다 성공하거나 둘 다 취소된다 (리뷰 반영)
+        const tokens = { accessToken: '', refreshToken: '' };
+        const user = await authRepository.createUserWithRefreshToken(
+          {
+            email: dto.email,
+            password: passwordHash,
+            nickname: dto.nickname,
+            uniqueTag,
+            bio: dto.bio,
+            profileImageUrl: dto.profileImageUrl,
+          },
+          (userId) => {
+            tokens.accessToken = signAccessToken(userId);
+            tokens.refreshToken = signRefreshToken(userId);
+            return sha256(tokens.refreshToken);
+          },
+        );
         return { user: toPublicUser(user), ...tokens };
       } catch (err) {
         const target = p2002Target(err);
