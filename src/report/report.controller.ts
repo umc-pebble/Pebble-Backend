@@ -12,3 +12,7 @@ export const getReports = (_req: Request, res: Response) => {
 export const getReportByMonth = (_req: Request, res: Response) => {
   sendSuccess(res, null, '월별 리포트 조회 (미구현)');
 };
+
+export const downloadReport = (_req: Request, res: Response) => {
+  sendSuccess(res, null, '리포트 다운로드 (미구현)');
+}

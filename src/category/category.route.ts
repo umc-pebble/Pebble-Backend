@@ -18,7 +18,9 @@ import {
 const router = Router();
 
 // 카테고리 API는 모두 로그인 필요(bearerAuth). authMiddleware가 req.userId를 채운다.
-router.use(authMiddleware);
+// 경로 한정 필수: 모든 라우터가 /api/v1에 공유 마운트되므로, 경로 없는 use()는
+// 뒤에 마운트된 다른 도메인(auth 공개 엔드포인트 등)까지 전부 막아버린다.
+router.use('/categories', authMiddleware);
 
 /**
  * @swagger
