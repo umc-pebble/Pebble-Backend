@@ -158,7 +158,7 @@ export const userService = {
 
     // pendingEmail·토큰 해시·만료 조건을 where에 포함한 조건부 갱신이므로, 검증 이후 pending 정보가
     // 바뀌는 경쟁 상황이면 count가 0으로 돌아온다.
-    let result;
+    let result: Awaited<ReturnType<typeof userRepository.confirmEmailChange>>;
     try {
       result = await userRepository.confirmEmailChange(
         userId,
