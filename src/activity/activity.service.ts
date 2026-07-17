@@ -83,7 +83,7 @@ export const activityService = {
 
         //startDate: endDate-6
         const startDate = new Date(endDate);
-        startDate.setDate(startDate.getDate() - 6);
+        startDate.setUTCDate(startDate.getUTCDate() - 6);
 
         //logs 불러오기
         const logs = await activityRepository.findActivityLogsByDateRange(
@@ -102,7 +102,7 @@ export const activityService = {
         //활동기록 없는 날 0으로 생성하기
         const filledLogs = Array.from({ length: 7 }, (_, index) => {
             const currentDate = new Date(startDate);
-            currentDate.setDate(startDate.getDate() + index);
+            currentDate.setUTCDate(startDate.getUTCDate() + index);
 
             const dateString = formatDate(currentDate);
             const completedTaskCount = logMap.get(dateString) ?? 0;
