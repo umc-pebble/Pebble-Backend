@@ -54,7 +54,8 @@ export const notificationService = {
       if (isRecordNotFound(err)) {
         throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
       }
-      throw err;
+      console.error(err);
+      throw new AppError('COMMON_INTERNAL_ERROR', '알림 읽음 처리에 실패했습니다.');
     }
   },
 
@@ -66,7 +67,8 @@ export const notificationService = {
       if (isRecordNotFound(err)) {
         throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
       }
-      throw err;
+      console.error(err);
+      throw new AppError('COMMON_INTERNAL_ERROR', '알림 삭제에 실패했습니다.');
     }
   },
 

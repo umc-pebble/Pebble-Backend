@@ -18,10 +18,16 @@ export const uploadService = {
     // 파일명 중복으로 인한 덮어쓰기를 막기 위해 UUID로 고유 파일명을 생성한다.
     const fileName = `${randomUUID()}.${extension}`;
 
-    const { error } = await supabase.storage.from(UPLOAD_BUCKET).upload(fileName, file.buffer, {
-      contentType: file.mimetype,
-      upsert: false,
-    });
+    let error: { message: string } | null;
+    try {
+      ({ error } = await supabase.storage.from(UPLOAD_BUCKET).upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false,
+      }));
+    } catch (err) {
+      console.error(err);
+      throw new AppError('COMMON_INTERNAL_ERROR', '이미지 업로드에 실패했습니다.');
+    }
 
     if (error) {
       throw new AppError('COMMON_INTERNAL_ERROR', '이미지 업로드에 실패했습니다.');
