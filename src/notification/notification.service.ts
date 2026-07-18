@@ -3,6 +3,7 @@
 
 import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/app-error';
+import { logger } from '../utils/logger';
 import { notificationRepository } from './notification.repository';
 
 // getOwnedNotificationOrThrow 통과 후에도 update/delete 사이에 다른 요청이 먼저 처리할 수 있으므로,
@@ -54,7 +55,7 @@ export const notificationService = {
       if (isRecordNotFound(err)) {
         throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
       }
-      console.error(err);
+      logger.error(err);
       throw new AppError('COMMON_INTERNAL_ERROR', '알림 읽음 처리에 실패했습니다.');
     }
   },
@@ -67,7 +68,7 @@ export const notificationService = {
       if (isRecordNotFound(err)) {
         throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
       }
-      console.error(err);
+      logger.error(err);
       throw new AppError('COMMON_INTERNAL_ERROR', '알림 삭제에 실패했습니다.');
     }
   },

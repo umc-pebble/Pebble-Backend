@@ -5,6 +5,7 @@
 import { randomUUID } from 'crypto';
 import supabase, { UPLOAD_BUCKET } from '../config/supabase';
 import { AppError } from '../utils/app-error';
+import { logger } from '../utils/logger';
 import { IMAGE_EXTENSION_BY_MIME } from '../middlewares/upload.middleware';
 
 export const uploadService = {
@@ -18,18 +19,18 @@ export const uploadService = {
     // 파일명 중복으로 인한 덮어쓰기를 막기 위해 UUID로 고유 파일명을 생성한다.
     const fileName = `${randomUUID()}.${extension}`;
 
-    let error: { message: string } | null;
     try {
-      ({ error } = await supabase.storage.from(UPLOAD_BUCKET).upload(fileName, file.buffer, {
+      const { error } = await supabase.storage.from(UPLOAD_BUCKET).upload(fileName, file.buffer, {
         contentType: file.mimetype,
         upsert: false,
-      }));
+      });
+      if (error) {
+        logger.error(error);
+        throw new AppError('COMMON_INTERNAL_ERROR', '이미지 업로드에 실패했습니다.');
+      }
     } catch (err) {
-      console.error(err);
-      throw new AppError('COMMON_INTERNAL_ERROR', '이미지 업로드에 실패했습니다.');
-    }
-
-    if (error) {
+      if (err instanceof AppError) throw err;
+      logger.error(err);
       throw new AppError('COMMON_INTERNAL_ERROR', '이미지 업로드에 실패했습니다.');
     }
 
