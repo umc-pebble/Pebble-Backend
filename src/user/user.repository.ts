@@ -72,6 +72,24 @@ export const userRepository = {
     });
   },
 
+  // 인증 메일 발송 실패 시 롤백용: 방금 써둔 pending* 예약을 파기해 다른 유저가 같은
+  // 이메일을 요청할 수 있게 한다. confirmEmailChange와 동일하게 그사이 값이 바뀌었다면
+  // (예: 재요청으로 새 토큰 발급) where가 매칭되지 않아 조용히 무시된다 — 의도된 동작이다.
+  clearPendingEmailChange(userId: number, pendingEmail: string, tokenHash: string) {
+    return prisma.user.updateMany({
+      where: {
+        id: userId,
+        pendingEmail,
+        emailChangeTokenHash: tokenHash,
+      },
+      data: {
+        pendingEmail: null,
+        emailChangeTokenHash: null,
+        emailChangeTokenExpiresAt: null,
+      },
+    });
+  },
+
   // 이메일 변경 확정: email을 교체하고 pending* 필드를 모두 파기한다.
   // pendingEmail·토큰 해시·만료 조건을 where에 포함해 조건부로 갱신함으로써, 서비스의 토큰 검증 이후
   // 다른 요청이 pending 정보를 교체하는 경쟁 상황에서도 이전 상태 기준으로만 확정되도록 한다.

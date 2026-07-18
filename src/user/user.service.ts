@@ -130,9 +130,10 @@ export const userService = {
     }
 
     const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = sha256(token);
     const expiresAt = new Date(Date.now() + EMAIL_CHANGE_TOKEN_TTL_MS);
     try {
-      await userRepository.setPendingEmailChange(userId, newEmail, sha256(token), expiresAt);
+      await userRepository.setPendingEmailChange(userId, newEmail, tokenHash, expiresAt);
     } catch (err) {
       // 동시 요청이 중복 체크를 모두 통과한 뒤 pendingEmail의 DB unique 제약에서 충돌하는 경우.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -144,6 +145,9 @@ export const userService = {
     try {
       await sendEmailChangeVerification(newEmail, token);
     } catch {
+      // 발송 실패 시 방금 건 pending 예약을 되돌린다 — 안 그러면 실제로 메일을 못 받은 이메일이
+      // TTL 동안 "사용 중"으로 남아 다른 유저의 동일 이메일 요청까지 막게 된다.
+      await userRepository.clearPendingEmailChange(userId, newEmail, tokenHash);
       throw new AppError('COMMON_INTERNAL_ERROR', '인증 메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
   },
