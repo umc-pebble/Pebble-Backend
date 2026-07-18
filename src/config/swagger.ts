@@ -377,15 +377,15 @@ const options: swaggerJSDoc.Options = {
         },
         Report: {
           type: 'object',
-          description: '월간 리포트. 매월 1일 전월 집계 GIF 생성·발송, 발송 후 1주일 활성(PLB-027~029).',
+          description: '월간 리포트. 매월 1일 전월 집계 이미지 생성·발송, 발송 후 1주일 활성(PLB-027~029).',
           properties: {
             id: { type: 'integer', example: 4 },
             userId: { type: 'integer', example: 42 },
             month: { type: 'string', maxLength: 7, description: 'YYYY-MM', example: '2026-06' },
-            gifUrl: {
+            reportImageUrl: {
               type: 'string',
               maxLength: 500,
-              example: 'https://storage.pebble.app/reports/42-2026-06.gif',
+              example: 'https://~~/reports/42-2026-06.png',
             },
             expiresAt: {
               type: 'string',
