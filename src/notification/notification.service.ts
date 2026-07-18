@@ -1,8 +1,15 @@
 // Notification Service
 // 비즈니스 로직 계층. 목록/읽음/삭제(선택 필요 알림 보존) 규칙 담당.
 
+import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/app-error';
 import { notificationRepository } from './notification.repository';
+
+// getOwnedNotificationOrThrow 통과 후에도 update/delete 사이에 다른 요청이 먼저 처리할 수 있으므로,
+// 그 경쟁 상황에서 발생하는 P2025(대상 없음)는 COMMON_NOT_FOUND로 변환한다.
+function isRecordNotFound(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025';
+}
 
 // 소유 알림 조회 + 소유권 검증. 없으면 404, 본인 소유가 아니면 403.
 async function getOwnedNotificationOrThrow(userId: number, notificationId: number) {
@@ -40,13 +47,27 @@ export const notificationService = {
 
   async readNotification(userId: number, notificationId: number) {
     await getOwnedNotificationOrThrow(userId, notificationId);
-    const updated = await notificationRepository.markRead(notificationId);
-    return { id: updated.id, isRead: updated.isRead };
+    try {
+      const updated = await notificationRepository.markRead(userId, notificationId);
+      return { id: updated.id, isRead: updated.isRead };
+    } catch (err) {
+      if (isRecordNotFound(err)) {
+        throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
+      }
+      throw err;
+    }
   },
 
   async deleteNotification(userId: number, notificationId: number) {
     await getOwnedNotificationOrThrow(userId, notificationId);
-    await notificationRepository.delete(notificationId);
+    try {
+      await notificationRepository.delete(userId, notificationId);
+    } catch (err) {
+      if (isRecordNotFound(err)) {
+        throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
+      }
+      throw err;
+    }
   },
 
   async deleteAllNotifications(userId: number) {

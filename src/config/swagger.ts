@@ -287,7 +287,7 @@ const options: swaggerJSDoc.Options = {
               description: '마지막 닉네임 변경 시각 (15일 쿨다운 계산용, PLB-043)',
               example: null,
             },
-            nicknameChangableAfter: {
+            nicknameChangeableAfter: {
               type: 'string',
               format: 'date-time',
               nullable: true,
