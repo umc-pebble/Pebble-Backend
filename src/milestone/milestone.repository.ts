@@ -83,13 +83,90 @@ export const milestoneRepository = {
     );
   },
 
+  // 다중(MULTIPLE) 생성: 날짜마다 회차 row를 만들고 같은 seriesId로 묶는다(PLB-012).
+  // seriesId는 별도 시퀀스 없이 "첫 회차의 id"를 재사용한다.
+  // 전체를 한 트랜잭션으로 묶어 일부 회차만 생성되는 상태를 방지한다.
+  createMultiple(input: { categoryId: number; name: string; dates: Date[] }) {
+    const sorted = [...input.dates].sort((a, b) => a.getTime() - b.getTime());
+    return withDeadlockRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const first = await insertAtDateOrder(tx, {
+          categoryId: input.categoryId,
+          name: input.name,
+          dateType: 'MULTIPLE',
+          startDate: sorted[0],
+          endDate: null,
+          seriesId: null,
+        });
+        const seriesId = first.id;
+        const created = [
+          await tx.milestone.update({
+            where: { id: first.id },
+            data: { seriesId },
+          }),
+        ];
+        for (const date of sorted.slice(1)) {
+          created.push(
+            await insertAtDateOrder(tx, {
+              categoryId: input.categoryId,
+              name: input.name,
+              dateType: 'MULTIPLE',
+              startDate: date,
+              endDate: null,
+              seriesId,
+            }),
+          );
+        }
+        return created;
+      }),
+    );
+  },
+
   update(milestoneId: number, data: Prisma.MilestoneUncheckedUpdateInput) {
     return prisma.milestone.update({ where: { id: milestoneId }, data });
+  },
+
+  // 수정 + 시리즈 전파(editScope=ALL, PLB-013): 지정 회차는 전달된 필드 전부를,
+  // 같은 seriesId의 "fromDate 이후 + 미완료" 회차에는 이름만 반영한다(완료된 과거 회차 보존).
+  updateWithSeriesName(
+    milestoneId: number,
+    data: Prisma.MilestoneUncheckedUpdateInput,
+    series: { seriesId: number; fromDate: Date; name: string },
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.milestone.update({
+        where: { id: milestoneId },
+        data,
+      });
+      await tx.milestone.updateMany({
+        where: {
+          seriesId: series.seriesId,
+          id: { not: milestoneId },
+          startDate: { gte: series.fromDate },
+          isCompleted: false,
+        },
+        data: { name: series.name },
+      });
+      return updated;
+    });
   },
 
   // 삭제. 하위 task는 스키마 onDelete: Cascade로 함께 삭제된다.
   delete(milestoneId: number) {
     return prisma.milestone.delete({ where: { id: milestoneId } });
+  },
+
+  // 시리즈 삭제(deleteScope=ALL, PLB-014): 지정 회차 + 같은 seriesId의
+  // "fromDate 이후 + 미완료" 회차를 일괄 삭제한다(완료된 과거 회차 보존).
+  deleteWithSeries(milestoneId: number, seriesId: number, fromDate: Date) {
+    return prisma.milestone.deleteMany({
+      where: {
+        OR: [
+          { id: milestoneId },
+          { seriesId, startDate: { gte: fromDate }, isCompleted: false },
+        ],
+      },
+    });
   },
 
   // 순서 일괄 변경(한 트랜잭션). orderedIds 순서대로 displayOrder 0,1,2...

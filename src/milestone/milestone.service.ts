@@ -1,7 +1,6 @@
 // Milestone Service
-// 비즈니스 로직 계층. 소유권(2-hop: milestone→category→userId)·날짜 규칙을 담당한다.
-// 현재는 SINGLE/RANGE만 지원한다. MULTIPLE(dates→회차, seriesId, editScope/deleteScope)는
-// 스키마는 확정됨(REPEAT→MULTIPLE, repeatDays 삭제) — seriesId 채번 방식 확정 후 구현한다.
+// 비즈니스 로직 계층. 소유권(2-hop: milestone→category→userId)·날짜 규칙·scope 규칙을 담당한다.
+// MULTIPLE(다중 날짜)는 선택한 날짜마다 실제 row(회차)로 저장되며 같은 seriesId를 공유한다.
 
 import { AppError } from '../utils/app-error';
 import { milestoneRepository } from './milestone.repository';
@@ -9,9 +8,10 @@ import { categoryService } from '../category/category.service';
 
 interface CreateMilestoneInput {
   name: string;
-  dateType: 'SINGLE' | 'RANGE';
-  startDate: string; // YYYY-MM-DD
-  endDate?: string | null;
+  dateType: 'SINGLE' | 'RANGE' | 'MULTIPLE';
+  startDate?: string; // YYYY-MM-DD (SINGLE/RANGE)
+  endDate?: string | null; // RANGE 전용
+  dates?: string[] | null; // MULTIPLE 전용
 }
 
 interface UpdateMilestoneInput {
@@ -20,6 +20,14 @@ interface UpdateMilestoneInput {
   endDate?: string | null;
   isCompleted?: boolean;
   editScope?: 'THIS_ONLY' | 'ALL';
+}
+
+// "오늘"의 한국(KST) 날짜를 UTC 자정 Date로 만든다.
+// DB의 @db.Date 값은 Prisma에서 UTC 자정 Date로 오가므로, 같은 기준으로 맞춰야
+// 서버 타임존과 무관하게 "오늘 이후 회차" 비교(PLB-013·014)가 정확하다.
+function kstToday(): Date {
+  const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  return new Date(`${ymd}T00:00:00.000Z`);
 }
 
 // 마일스톤 단건 소유권 검증(2-hop). 없으면 404, 상위 카테고리가 남의 것이면 403.
@@ -41,7 +49,8 @@ export const milestoneService = {
     return milestoneRepository.findManyByCategoryId(categoryId);
   },
 
-  // 생성(SINGLE/RANGE). 날짜 조합 검증은 controller(zod)에서 1차 처리된 값을 받는다.
+  // 생성. 날짜 조합 검증(dateType별 필수/금지 필드)은 controller(zod)에서 1차 처리된 값을 받는다.
+  // displayOrder는 repository가 startDate 기준 위치로 채번한다(PLB-016 D-Day 오름차순).
   async createMilestone(
     userId: number,
     categoryId: number,
@@ -49,13 +58,21 @@ export const milestoneService = {
   ) {
     await categoryService.getCategory(userId, categoryId);
 
-    // displayOrder(맨 뒤 순번)는 repository가 트랜잭션 안에서 원자적으로 채번한다.
+    // MULTIPLE: dates의 날짜마다 회차 row 일괄 생성, 같은 seriesId 부여 (PLB-012)
+    if (input.dateType === 'MULTIPLE') {
+      const milestones = await milestoneRepository.createMultiple({
+        categoryId,
+        name: input.name,
+        dates: (input.dates ?? []).map((d) => new Date(d)),
+      });
+      return { milestones };
+    }
+
     const milestone = await milestoneRepository.create({
       categoryId,
       name: input.name,
       dateType: input.dateType,
-      startDate: new Date(input.startDate),
-      // endDate는 RANGE 전용. SINGLE에서는 null.
+      startDate: new Date(input.startDate!), // zod가 SINGLE/RANGE에서 필수 보장
       endDate:
         input.dateType === 'RANGE' && input.endDate
           ? new Date(input.endDate)
@@ -63,11 +80,16 @@ export const milestoneService = {
       seriesId: null, // MULTIPLE 전용. SINGLE/RANGE는 항상 null
     });
 
-    // 응답은 배열로 반환한다(MULTIPLE 확장 시 회차 여러 개가 되므로 형태 통일). SINGLE/RANGE는 1건.
+    // 응답은 배열로 통일한다(MULTIPLE는 회차 여러 개). SINGLE/RANGE는 1건.
     return { milestones: [milestone] };
   },
 
-  // 수정(SINGLE/RANGE). 이름·날짜·완료 토글. editScope는 상위(controller)에서 이미 거른다.
+  // 수정 (PLB-013).
+  // - editScope는 "MULTIPLE의 이름 수정"에만 쓰인다(모달 필수 택1, 기본값 없음).
+  //   날짜(startDate)·완료(isCompleted)는 scope 없이 항상 해당 회차 1건에만 적용된다
+  //   (날짜 수정은 모달이 뜨지 않음, 완료는 회차별 독립 기록).
+  // - editScope=ALL은 같은 seriesId 중 "오늘 이후 + 미완료" 회차에 이름을 전파한다
+  //   (완료된 과거 회차는 보존).
   async updateMilestone(
     userId: number,
     milestoneId: number,
@@ -75,9 +97,20 @@ export const milestoneService = {
   ) {
     const existing = await getOwnedMilestoneOrThrow(userId, milestoneId);
 
-    // editScope는 MULTIPLE 전용 도메인 규칙. 현재 SINGLE/RANGE만 존재하므로 지정 시 400.
-    // (MULTIPLE 구현 시 existing.dateType === 'MULTIPLE'면 허용하도록 완화)
-    if (input.editScope !== undefined) {
+    if (existing.dateType === 'MULTIPLE') {
+      if (input.name !== undefined && input.editScope === undefined) {
+        throw new AppError(
+          'COMMON_INVALID_INPUT',
+          '다중 마일스톤 이름 수정에는 editScope(THIS_ONLY 또는 ALL)를 지정해야 합니다.',
+        );
+      }
+      if (input.name === undefined && input.editScope !== undefined) {
+        throw new AppError(
+          'COMMON_INVALID_INPUT',
+          'editScope는 이름을 변경할 때만 지정할 수 있습니다.',
+        );
+      }
+    } else if (input.editScope !== undefined) {
       throw new AppError(
         'COMMON_INVALID_INPUT',
         '다중 마일스톤이 아니면 editScope를 지정할 수 없습니다.',
@@ -113,7 +146,7 @@ export const milestoneService = {
       throw new AppError('COMMON_INVALID_INPUT', '종료일은 시작일 이후여야 합니다.');
     }
 
-    return milestoneRepository.update(milestoneId, {
+    const data = {
       name: input.name,
       isCompleted: input.isCompleted,
       startDate: input.startDate ? new Date(input.startDate) : undefined,
@@ -123,15 +156,46 @@ export const milestoneService = {
             ? new Date(input.endDate)
             : null
           : undefined,
-    });
+    };
+
+    // ALL: 지정 회차는 전체 필드, 나머지 미래 미완료 회차에는 이름만 전파(한 트랜잭션).
+    if (input.editScope === 'ALL' && existing.seriesId !== null) {
+      return milestoneRepository.updateWithSeriesName(milestoneId, data, {
+        seriesId: existing.seriesId,
+        fromDate: kstToday(),
+        name: input.name!, // 위 규칙상 ALL이면 name이 반드시 존재
+      });
+    }
+
+    return milestoneRepository.update(milestoneId, data);
   },
 
-  // 삭제(하위 task는 CASCADE).
+  // 삭제 (PLB-014, 하위 task는 CASCADE).
+  // - MULTIPLE는 deleteScope 필수 택1(기본값 없음): THIS_ONLY=해당 회차 1건,
+  //   ALL=해당 회차 + 같은 seriesId의 "오늘 이후 + 미완료" 회차 일괄(완료된 과거 회차 보존).
+  // - SINGLE/RANGE에는 deleteScope를 지정할 수 없다.
   async deleteMilestone(userId: number, milestoneId: number, deleteScope?: string) {
-    await getOwnedMilestoneOrThrow(userId, milestoneId);
+    const existing = await getOwnedMilestoneOrThrow(userId, milestoneId);
 
-    // deleteScope는 MULTIPLE 전용 도메인 규칙. 현재 SINGLE/RANGE만 존재하므로 지정 시 400.
-    // (MULTIPLE 구현 시 dateType 판정으로 완화)
+    if (existing.dateType === 'MULTIPLE') {
+      if (deleteScope !== 'THIS_ONLY' && deleteScope !== 'ALL') {
+        throw new AppError(
+          'COMMON_INVALID_INPUT',
+          '다중 마일스톤 삭제에는 deleteScope(THIS_ONLY 또는 ALL)를 지정해야 합니다.',
+        );
+      }
+      if (deleteScope === 'ALL' && existing.seriesId !== null) {
+        await milestoneRepository.deleteWithSeries(
+          milestoneId,
+          existing.seriesId,
+          kstToday(),
+        );
+        return;
+      }
+      await milestoneRepository.delete(milestoneId);
+      return;
+    }
+
     if (deleteScope !== undefined) {
       throw new AppError(
         'COMMON_INVALID_INPUT',
