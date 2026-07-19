@@ -40,7 +40,9 @@ interface UploadRequest extends Request {
 
 const multerUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_FILE_SIZE },
+  // 이 엔드포인트는 파일 1개만 받으므로 텍스트 필드는 허용하지 않고(fields: 0),
+  // 전체 part 수도 파일 1개로 제한한다(parts: 1) — 불필요한 multipart 필드가 req.body에 쌓이는 것을 막는다.
+  limits: { fileSize: MAX_FILE_SIZE, fields: 0, parts: 1 },
   fileFilter: (req: UploadRequest, file, cb) => {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       // cb(error)로 즉시 거부하면 busboy가 남은 요청 스트림을 비우지 않고 파싱을 중단한다.
