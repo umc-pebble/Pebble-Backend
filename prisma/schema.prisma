@@ -72,7 +72,7 @@ model User {
   profileImageUrl       String?   @db.VarChar(500) // NULL이면 기본 이미지 (PLB-004)
   bio                   String?   @db.Text
   lastNicknameChangedAt DateTime? // 15일 쿨다운 계산 기준 (PLB-003)
-  activityColor         String    @default("#FFFFFF") @db.VarChar(20) // 징검다리 기본 색상 (흰색), PLB-026 팔레트 내에서 변경 가능
+  activityColor         String    @default("#A3A3A3") @db.VarChar(20) // 징검다리 기본 색상 (조약돌), PLB-026 팔레트 내에서 변경 가능
   notifyTaskDue         Boolean   @default(true)
   refreshToken          String?   @db.VarChar(500) // 해시로 저장, 로그아웃 시 파기
   theme                 Theme     @default(LIGHT)

@@ -198,7 +198,7 @@ router.get('/users/:userId', getUser);
  *                       properties:
  *                         theme: { type: string, enum: [LIGHT, DARK], example: LIGHT }
  *                         notifyTaskDue: { type: boolean, example: true }
- *                         activityColor: { type: string, example: '#7ED321' }
+ *                         activityColor: { type: string, enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'], example: '#82A0FF' }
  *                         isSocialOnly: { type: boolean, description: true이면 FE에서 비밀번호 변경 항목을 비활성화, example: false }
  *                         isTempPassword: { type: boolean, description: true이면 FE에서 비밀번호 변경 권장 UI를 노출, example: false }
  *       401:
@@ -215,7 +215,7 @@ router.get('/users/me/settings', getSettings);
  *     summary: 설정 수정 (PLB-042·026)
  *     description: >
  *       앱 테마(LIGHT/DARK), 당일·마감 알림 on/off, 징검다리 색상(activityColor)을 수정합니다.
- *       전달된 필드만 부분 수정됩니다. 징검다리 색상은 팔레트 내 값이어야 합니다.
+ *       전달된 필드만 부분 수정됩니다. 징검다리 색상은 PEBBLE 팔레트 6종(조약돌·시냇물·새싹·햇살·노을·꽃) 중 하나여야 합니다.
  *     tags: [User]
  *     security:
  *       - bearerAuth: []
@@ -228,7 +228,7 @@ router.get('/users/me/settings', getSettings);
  *             properties:
  *               theme: { type: string, enum: [LIGHT, DARK], example: DARK }
  *               notifyTaskDue: { type: boolean, example: false }
- *               activityColor: { type: string, maxLength: 20, description: 팔레트 내 색상, example: '#4A90D9' }
+ *               activityColor: { type: string, enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'], description: 팔레트 내 색상, example: '#82A0FF' }
  *     responses:
  *       200:
  *         description: 수정 성공
@@ -244,7 +244,7 @@ router.get('/users/me/settings', getSettings);
  *                       properties:
  *                         theme: { type: string, enum: [LIGHT, DARK], example: DARK }
  *                         notifyTaskDue: { type: boolean, example: false }
- *                         activityColor: { type: string, example: '#FF5722' }
+ *                         activityColor: { type: string, enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'], example: '#FFB67A' }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:

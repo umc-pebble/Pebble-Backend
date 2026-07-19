@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `User` MODIFY `activityColor` VARCHAR(20) NOT NULL DEFAULT '#A3A3A3';
