@@ -24,6 +24,25 @@ async function getOwnedNotificationOrThrow(userId: number, notificationId: numbe
   return notification;
 }
 
+// 소유권 확인 후 mutation을 실행하고, 경합으로 인한 P2025는 404로, 그 외 실패는 500으로 통일한다.
+async function runOwnedMutation<T>(
+  userId: number,
+  notificationId: number,
+  operation: () => Promise<T>,
+  failureMessage: string,
+): Promise<T> {
+  await getOwnedNotificationOrThrow(userId, notificationId);
+  try {
+    return await operation();
+  } catch (err) {
+    if (isRecordNotFound(err)) {
+      throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
+    }
+    logger.error(err);
+    throw new AppError('COMMON_INTERNAL_ERROR', failureMessage);
+  }
+}
+
 export const notificationService = {
   async getNotifications(userId: number, offset: number, limit: number) {
     const [notifications, { total, unreadCount }] = await Promise.all([
@@ -47,30 +66,22 @@ export const notificationService = {
   },
 
   async readNotification(userId: number, notificationId: number) {
-    await getOwnedNotificationOrThrow(userId, notificationId);
-    try {
-      const updated = await notificationRepository.markRead(userId, notificationId);
-      return { id: updated.id, isRead: updated.isRead };
-    } catch (err) {
-      if (isRecordNotFound(err)) {
-        throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
-      }
-      logger.error(err);
-      throw new AppError('COMMON_INTERNAL_ERROR', '알림 읽음 처리에 실패했습니다.');
-    }
+    const updated = await runOwnedMutation(
+      userId,
+      notificationId,
+      () => notificationRepository.markRead(userId, notificationId),
+      '알림 읽음 처리에 실패했습니다.',
+    );
+    return { id: updated.id, isRead: updated.isRead };
   },
 
   async deleteNotification(userId: number, notificationId: number) {
-    await getOwnedNotificationOrThrow(userId, notificationId);
-    try {
-      await notificationRepository.delete(userId, notificationId);
-    } catch (err) {
-      if (isRecordNotFound(err)) {
-        throw new AppError('COMMON_NOT_FOUND', '존재하지 않는 알림입니다.');
-      }
-      logger.error(err);
-      throw new AppError('COMMON_INTERNAL_ERROR', '알림 삭제에 실패했습니다.');
-    }
+    await runOwnedMutation(
+      userId,
+      notificationId,
+      () => notificationRepository.delete(userId, notificationId),
+      '알림 삭제에 실패했습니다.',
+    );
   },
 
   async deleteAllNotifications(userId: number) {

@@ -9,7 +9,8 @@ export const updateMeSchema = z.object({
   nickname: z.string().max(100).optional(),
   bio: z.string().nullable().optional(),
   // 실제 파일이 아니라 POST /uploads/image로 먼저 업로드한 뒤 받은 URL을 전달한다.
-  profileImageUrl: z.string().max(500).nullable().optional(),
+  // auth.schema.ts와 동일하게 .url()로 제한 — 업로드 API가 돌려주는 URL만 받도록 한다.
+  profileImageUrl: z.string().url('프로필 이미지 URL 형식이 올바르지 않습니다.').max(500).nullable().optional(),
 });
 
 // TODO(PLB-026): 명세상 실제 규칙은 "PEBBLE이 제공하는 컬러 팔레트 내에서만 선택"이지만,

@@ -12,6 +12,9 @@ const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port,
   secure: port === 465,
+  // secure: false는 STARTTLS를 시도만 할 뿐 서버가 지원 안 하면 평문으로 진행될 수 있다.
+  // 465(암시적 TLS) 외 포트는 STARTTLS를 강제해 자격증명·토큰이 평문으로 새지 않게 한다.
+  requireTLS: port !== 465,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,

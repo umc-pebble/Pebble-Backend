@@ -40,6 +40,21 @@ export const userRepository = {
     return prisma.user.update({ where: { id: userId }, data });
   },
 
+  // updateProfile 전용. 닉네임을 바꾸는 경우 cooldownBoundary를 넘겨 쿨다운 조건을 where에 실은
+  // 원자적 업데이트로 만든다 — 두 요청이 동시에 쿨다운 체크를 통과해도 하나만 반영되게 막는다
+  // (count===0이면 그사이 쿨다운이 걸렸거나, 계정이 삭제된 경우).
+  updateProfile(userId: number, data: Prisma.UserUncheckedUpdateInput, cooldownBoundary?: Date) {
+    return prisma.user.updateMany({
+      where: cooldownBoundary
+        ? {
+            id: userId,
+            OR: [{ lastNicknameChangedAt: null }, { lastNicknameChangedAt: { lte: cooldownBoundary } }],
+          }
+        : { id: userId },
+      data,
+    });
+  },
+
   delete(userId: number) {
     return prisma.user.delete({ where: { id: userId } });
   },

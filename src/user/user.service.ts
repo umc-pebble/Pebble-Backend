@@ -90,9 +90,14 @@ export const userService = {
       }
     }
 
-    let updated;
+    // 닉네임을 바꿀 때만 쿨다운 조건을 where에 실어 원자적으로 체크한다. 동시 요청 두 개가
+    // 위의 changeableAfter 검증을 둘 다 통과해도, 실제 반영 시점엔 하나만 성공하게 된다.
+    const cooldownBoundary =
+      data.nickname !== undefined ? new Date(Date.now() - NICKNAME_COOLDOWN_MS) : undefined;
+
+    let result;
     try {
-      updated = await userRepository.update(userId, data);
+      result = await userRepository.updateProfile(userId, data, cooldownBoundary);
     } catch (err) {
       // 재발급/확인 시점 사이에 다른 요청이 동일한 (nickname, uniqueTag)를 선점한 경합 상황.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -101,6 +106,15 @@ export const userService = {
       if (err instanceof AppError) throw err;
       throw new AppError('COMMON_INTERNAL_ERROR', '닉네임 변경 중 오류가 발생했습니다.');
     }
+    if (result.count === 0) {
+      // cooldownBoundary가 있었는데 count===0이면 그사이 쿨다운이 다시 걸린 경합 상황.
+      // cooldownBoundary가 없는데도 0이면(닉네임 미변경) 그사이 계정이 삭제된 경우다.
+      if (cooldownBoundary) {
+        throw new AppError('USER_NICKNAME_COOLDOWN', '닉네임은 15일마다 변경할 수 있습니다.');
+      }
+      throw new AppError('COMMON_UNAUTHORIZED', '유효하지 않은 사용자입니다.');
+    }
+    const updated = await getUserOrThrow(userId);
     return {
       id: updated.id,
       nickname: updated.nickname,
@@ -161,6 +175,7 @@ export const userService = {
 
   // 인증 링크 발송까지만 처리한다. 실제 email 컬럼 반영은 confirmEmailChange에서 이루어진다(PLB-042).
   async requestEmailChange(userId: number, newEmail: string) {
+    await getUserOrThrow(userId);
     const duplicated = await userRepository.existsByEmailOrPendingEmail(userId, newEmail);
     if (duplicated) {
       throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
