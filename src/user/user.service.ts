@@ -98,7 +98,8 @@ export const userService = {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new AppError('COMMON_INTERNAL_ERROR', '닉네임 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
-      throw err;
+      if (err instanceof AppError) throw err;
+      throw new AppError('COMMON_INTERNAL_ERROR', '닉네임 변경 중 오류가 발생했습니다.');
     }
     return {
       id: updated.id,
