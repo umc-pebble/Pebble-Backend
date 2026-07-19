@@ -44,15 +44,16 @@ export const notificationRepository = {
     });
   },
 
-  markRead(notificationId: number) {
+  // userId를 조건에 포함해 소유권 검증과 변경을 원자적으로 처리한다.
+  markRead(userId: number, notificationId: number) {
     return prisma.notification.update({
-      where: { id: notificationId },
+      where: { id: notificationId, userId },
       data: { isRead: true },
     });
   },
 
-  delete(notificationId: number) {
-    return prisma.notification.delete({ where: { id: notificationId } });
+  delete(userId: number, notificationId: number) {
+    return prisma.notification.delete({ where: { id: notificationId, userId } });
   },
 
   // 전체 삭제. FOLLOW_REQUEST는 수락/거절 선택이 필요해 삭제 대상에서 제외한다(PLB-030).

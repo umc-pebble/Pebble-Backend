@@ -16,7 +16,7 @@ const PASSWORD_SALT_ROUNDS = 10;
 const UNIQUE_TAG_MAX_ATTEMPTS = 20;
 
 // 닉네임 재변경 가능 시각 (lastNicknameChangedAt + 15일). 변경 이력이 없으면 즉시 변경 가능(null).
-function computeNicknameChangableAfter(lastNicknameChangedAt: Date | null): Date | null {
+function computeNicknameChangeableAfter(lastNicknameChangedAt: Date | null): Date | null {
   if (!lastNicknameChangedAt) return null;
   return new Date(lastNicknameChangedAt.getTime() + NICKNAME_COOLDOWN_MS);
 }
@@ -46,7 +46,7 @@ export const userService = {
       profileImageUrl: user.profileImageUrl,
       bio: user.bio,
       lastNicknameChangedAt: user.lastNicknameChangedAt,
-      nicknameChangableAfter: computeNicknameChangableAfter(user.lastNicknameChangedAt),
+      nicknameChangeableAfter: computeNicknameChangeableAfter(user.lastNicknameChangedAt),
       createdAt: user.createdAt,
     };
   },
@@ -61,9 +61,9 @@ export const userService = {
       profileImageUrl: input.profileImageUrl,
     };
 
-    if (input.nickname !== undefined) {
-      const changableAfter = computeNicknameChangableAfter(user.lastNicknameChangedAt);
-      if (changableAfter && changableAfter > new Date()) {
+    if (input.nickname !== undefined && input.nickname !== user.nickname) {
+      const changeableAfter = computeNicknameChangeableAfter(user.lastNicknameChangedAt);
+      if (changeableAfter && changeableAfter > new Date()) {
         throw new AppError('USER_NICKNAME_COOLDOWN', '닉네임은 15일마다 변경할 수 있습니다.');
       }
       data.nickname = input.nickname;
@@ -166,9 +166,10 @@ export const userService = {
     }
 
     const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = sha256(token);
     const expiresAt = new Date(Date.now() + EMAIL_CHANGE_TOKEN_TTL_MS);
     try {
-      await userRepository.setPendingEmailChange(userId, newEmail, sha256(token), expiresAt);
+      await userRepository.setPendingEmailChange(userId, newEmail, tokenHash, expiresAt);
     } catch (err) {
       // 동시 요청이 중복 체크를 모두 통과한 뒤 pendingEmail의 DB unique 제약에서 충돌하는 경우.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -176,7 +177,20 @@ export const userService = {
       }
       throw err;
     }
-    await sendEmailChangeVerification(newEmail, token);
+
+    try {
+      await sendEmailChangeVerification(newEmail, token);
+    } catch {
+      // 발송 실패 시 방금 건 pending 예약을 되돌린다 — 안 그러면 실제로 메일을 못 받은 이메일이
+      // TTL 동안 "사용 중"으로 남아 다른 유저의 동일 이메일 요청까지 막게 된다.
+      // 롤백 자체가 실패하더라도(예: DB 일시 장애) 원시 에러를 흘리지 않고 약속된 에러로 통일한다.
+      try {
+        await userRepository.clearPendingEmailChange(userId, newEmail, tokenHash);
+      } catch {
+        // 롤백 실패는 아래에서 공통 에러로 던지므로 별도 처리 없이 무시한다.
+      }
+      throw new AppError('COMMON_INTERNAL_ERROR', '인증 메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    }
   },
 
   async confirmEmailChange(userId: number, token: string) {
