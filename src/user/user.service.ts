@@ -71,11 +71,11 @@ export const userService = {
 
       // 닉네임 중복은 설계상 허용되며 uniqueTag로만 구분한다(PR #27 리뷰 스레드, FE/기획 확인 완료).
       // 그래서 겹치면 변경을 막는 대신, 디스코드식으로 안 쓰이는 uniqueTag를 새로 찾아 재발급한다.
-      if (await userRepository.existsByNicknameTag(input.nickname, user.uniqueTag)) {
+      if (await userRepository.existsByNicknameTag(input.nickname, user.uniqueTag, userId)) {
         let reissuedTag: string | null = null;
         for (let attempt = 0; attempt < UNIQUE_TAG_MAX_ATTEMPTS; attempt += 1) {
           const candidate = generateUniqueTag();
-          if (!(await userRepository.existsByNicknameTag(input.nickname, candidate))) {
+          if (!(await userRepository.existsByNicknameTag(input.nickname, candidate, userId))) {
             reissuedTag = candidate;
             break;
           }

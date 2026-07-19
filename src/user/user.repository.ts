@@ -26,10 +26,11 @@ export const userRepository = {
       .then((found) => found !== null);
   },
 
-  existsByNicknameTag(nickname: string, uniqueTag: string) {
+  // 본인의 현재 (nickname, uniqueTag) 조합은 충돌로 보지 않도록 자기 자신은 제외한다.
+  existsByNicknameTag(nickname: string, uniqueTag: string, excludeUserId: number) {
     return prisma.user
-      .findUnique({
-        where: { nickname_uniqueTag: { nickname, uniqueTag } },
+      .findFirst({
+        where: { nickname, uniqueTag, NOT: { id: excludeUserId } },
         select: { id: true },
       })
       .then((found) => found !== null);
