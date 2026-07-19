@@ -1,4 +1,11 @@
 import { Router } from 'express';
+import { authMiddleware } from '../middlewares/auth.middleware';
+import { validateBody } from '../middlewares/validate.middleware';
+import {
+  shareCategorySchema,
+  inviteMemberSchema,
+  respondInviteSchema,
+} from './shared.schema';
 import {
   shareCategory,
   inviteMember,
@@ -10,6 +17,10 @@ import {
 } from './shared.controller';
 
 const router = Router();
+
+// SharedCategory API는 모두 로그인 필요(bearerAuth). authMiddleware가 req.userId를 채운다.
+// 경로 한정 필수: category.route.ts와 동일한 이유로 '/categories'로 한정한다.
+router.use('/categories', authMiddleware);
 
 /**
  * @swagger
@@ -127,7 +138,7 @@ const router = Router();
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/categories/:categoryId/share', shareCategory);
+router.post('/categories/:categoryId/share', validateBody(shareCategorySchema), shareCategory);
 
 /**
  * @swagger
@@ -212,7 +223,7 @@ router.post('/categories/:categoryId/share', shareCategory);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/categories/:categoryId/members', inviteMember);
+router.post('/categories/:categoryId/members', validateBody(inviteMemberSchema), inviteMember);
 
 /**
  * @swagger
@@ -315,7 +326,11 @@ router.get('/categories/:categoryId/members', getMembers);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/categories/:categoryId/members/me', respondInvite);
+router.patch(
+  '/categories/:categoryId/members/me',
+  validateBody(respondInviteSchema),
+  respondInvite,
+);
 
 /**
  * @swagger
