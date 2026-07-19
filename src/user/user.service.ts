@@ -13,11 +13,18 @@ import { UpdateMeBody, UpdateSettingsBody, ChangePasswordBody } from './user.sch
 const NICKNAME_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000; // 15일 (PLB-003·043)
 const EMAIL_CHANGE_TOKEN_TTL_MS = 60 * 60 * 1000; // 1시간
 const PASSWORD_SALT_ROUNDS = 10;
+const UNIQUE_TAG_MAX_ATTEMPTS = 20;
 
 // 닉네임 재변경 가능 시각 (lastNicknameChangedAt + 15일). 변경 이력이 없으면 즉시 변경 가능(null).
 function computeNicknameChangableAfter(lastNicknameChangedAt: Date | null): Date | null {
   if (!lastNicknameChangedAt) return null;
   return new Date(lastNicknameChangedAt.getTime() + NICKNAME_COOLDOWN_MS);
+}
+
+// 고유태그 0000~9999 랜덤 4자리. auth.service.ts의 회원가입 태그 생성과 동일한 형식이지만,
+// 도메인 분리를 위해 auth 코드를 가져다 쓰지 않고 이 파일 안에 독립적으로 둔다.
+function generateUniqueTag(): string {
+  return String(Math.floor(Math.random() * 10000)).padStart(4, '0');
 }
 
 async function getUserOrThrow(userId: number) {
@@ -61,9 +68,38 @@ export const userService = {
       }
       data.nickname = input.nickname;
       data.lastNicknameChangedAt = new Date();
+
+      // 닉네임 중복은 설계상 허용되며 uniqueTag로만 구분한다(PR #27 리뷰 스레드, FE/기획 확인 완료).
+      // 그래서 겹치면 변경을 막는 대신, 디스코드식으로 안 쓰이는 uniqueTag를 새로 찾아 재발급한다.
+      if (await userRepository.existsByNicknameTag(input.nickname, user.uniqueTag)) {
+        let reissuedTag: string | null = null;
+        for (let attempt = 0; attempt < UNIQUE_TAG_MAX_ATTEMPTS; attempt += 1) {
+          const candidate = generateUniqueTag();
+          if (!(await userRepository.existsByNicknameTag(input.nickname, candidate))) {
+            reissuedTag = candidate;
+            break;
+          }
+        }
+        if (!reissuedTag) {
+          throw new AppError(
+            'COMMON_INTERNAL_ERROR',
+            '닉네임 태그 재발급에 실패했습니다. 잠시 후 다시 시도해주세요.',
+          );
+        }
+        data.uniqueTag = reissuedTag;
+      }
     }
 
-    const updated = await userRepository.update(userId, data);
+    let updated;
+    try {
+      updated = await userRepository.update(userId, data);
+    } catch (err) {
+      // 재발급/확인 시점 사이에 다른 요청이 동일한 (nickname, uniqueTag)를 선점한 경합 상황.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new AppError('COMMON_INTERNAL_ERROR', '닉네임 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
+      throw err;
+    }
     return {
       id: updated.id,
       nickname: updated.nickname,
