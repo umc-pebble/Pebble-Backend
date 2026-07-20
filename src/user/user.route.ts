@@ -198,7 +198,7 @@ router.get('/users/:userId', getUser);
  *                       properties:
  *                         theme: { type: string, enum: [LIGHT, DARK], example: LIGHT }
  *                         notifyTaskDue: { type: boolean, example: true }
- *                         activityColor: { type: string, example: '#7ED321' }
+ *                         activityColor: { type: string, enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'], example: '#82A0FF' }
  *                         isSocialOnly: { type: boolean, description: true이면 FE에서 비밀번호 변경 항목을 비활성화, example: false }
  *                         isTempPassword: { type: boolean, description: true이면 FE에서 비밀번호 변경 권장 UI를 노출, example: false }
  *       401:
@@ -215,7 +215,7 @@ router.get('/users/me/settings', getSettings);
  *     summary: 설정 수정 (PLB-042·026)
  *     description: >
  *       앱 테마(LIGHT/DARK), 당일·마감 알림 on/off, 징검다리 색상(activityColor)을 수정합니다.
- *       전달된 필드만 부분 수정됩니다. 징검다리 색상은 팔레트 내 값이어야 합니다.
+ *       전달된 필드만 부분 수정됩니다. 징검다리 색상은 PEBBLE 팔레트 6종(조약돌·시냇물·새싹·햇살·노을·꽃) 중 하나여야 합니다.
  *     tags: [User]
  *     security:
  *       - bearerAuth: []
@@ -228,7 +228,7 @@ router.get('/users/me/settings', getSettings);
  *             properties:
  *               theme: { type: string, enum: [LIGHT, DARK], example: DARK }
  *               notifyTaskDue: { type: boolean, example: false }
- *               activityColor: { type: string, maxLength: 20, description: 팔레트 내 색상, example: '#4A90D9' }
+ *               activityColor: { type: string, enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'], description: 팔레트 내 색상, example: '#82A0FF' }
  *     responses:
  *       200:
  *         description: 수정 성공
@@ -244,7 +244,7 @@ router.get('/users/me/settings', getSettings);
  *                       properties:
  *                         theme: { type: string, enum: [LIGHT, DARK], example: DARK }
  *                         notifyTaskDue: { type: boolean, example: false }
- *                         activityColor: { type: string, example: '#FF5722' }
+ *                         activityColor: { type: string, enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'], example: '#FFB67A' }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:
@@ -350,6 +350,18 @@ router.patch('/users/me/password', validateBody(changePasswordSchema), changePas
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
  *             example: { success: false, message: 이미 사용 중인 이메일입니다., error: { code: "AUTH_EMAIL_DUPLICATED" } }
+ *       429:
+ *         description: 요청 빈도 초과 (1분 쿨다운 또는 시간당 5회 상한)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             examples:
+ *               cooldown:
+ *                 summary: 쿨다운 미경과
+ *                 value: { success: false, message: 인증 메일은 1분에 한 번만 요청할 수 있습니다., error: { code: "USER_EMAIL_CHANGE_RATE_LIMITED" } }
+ *               hourlyLimit:
+ *                 summary: 시간당 상한 초과
+ *                 value: { success: false, message: 이메일 변경 요청이 너무 많습니다. 1시간 후 다시 시도해주세요., error: { code: "USER_EMAIL_CHANGE_RATE_LIMITED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */

@@ -28,6 +28,9 @@ reviews:
         - 응답은 res.json()으로 직접 조립하면 안 되고 sendSuccess(res, data, message, status) 유틸을
           사용해야 한다.
         - 에러는 컨트롤러가 아니라 service에서 throw new AppError('코드키', '메시지') 형태로 던져야 한다.
+          단, 경로/쿼리 파라미터 검증(예: parseId)이나 그에 준하는 단순 존재 여부 체크(예: 업로드 파일
+          누락)는 컨트롤러에서 직접 AppError를 던져도 되는 승인된 예외다 (이슈 #40, milestone/upload
+          컨트롤러 담당자 확인 완료) — 이 경우는 지적하지 말 것.
 
     - path: "src/**/*.service.ts"
       instructions: >

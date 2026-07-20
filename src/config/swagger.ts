@@ -287,7 +287,7 @@ const options: swaggerJSDoc.Options = {
               description: '마지막 닉네임 변경 시각 (15일 쿨다운 계산용, PLB-043)',
               example: null,
             },
-            nicknameChangableAfter: {
+            nicknameChangeableAfter: {
               type: 'string',
               format: 'date-time',
               nullable: true,
@@ -311,9 +311,9 @@ const options: swaggerJSDoc.Options = {
               properties: {
                 activityColor: {
                   type: 'string',
-                  maxLength: 20,
-                  description: '징검다리 색상 (팔레트 내 선택, PLB-026)',
-                  example: '#7ED321',
+                  enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'],
+                  description: '징검다리 색상 (PEBBLE 팔레트 6종 중 선택, PLB-026)',
+                  example: '#82A0FF',
                 },
                 notifyTaskDue: { type: 'boolean', description: '당일/마감 알림 on/off', example: true },
                 theme: { type: 'string', enum: ['LIGHT', 'DARK'], example: 'LIGHT' },

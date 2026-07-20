@@ -64,24 +64,27 @@ enum SharedCategoryStatus {
 // ─────────────────────────────────────────────
 
 model User {
-  id                        Int       @id @default(autoincrement())
-  email                     String    @unique @db.VarChar(255)
-  password                  String?   @db.VarChar(255) // bcrypt 해시. 소셜 전용 계정은 NULL (PLB-035)
-  nickname                  String    @db.VarChar(100) // 중복 허용 - uniqueTag와 조합해서만 유일
-  uniqueTag                 String    @db.VarChar(10) // 닉네임#태그의 태그값 (실사용 4자리, 컬럼은 여유있게 VARCHAR(10))
-  profileImageUrl           String?   @db.VarChar(500) // NULL이면 기본 이미지 (PLB-004)
-  bio                       String?   @db.Text
-  lastNicknameChangedAt     DateTime? // 15일 쿨다운 계산 기준 (PLB-003)
-  activityColor             String    @default("#FFFFFF") @db.VarChar(20) // 징검다리 기본 색상 (흰색), PLB-026 팔레트 내에서 변경 가능
-  notifyTaskDue             Boolean   @default(true)
-  refreshToken              String?   @db.VarChar(500) // 해시로 저장, 로그아웃 시 파기
-  theme                     Theme     @default(LIGHT)
-  isTempPassword            Boolean   @default(false) // TRUE면 새 비밀번호 설정 강제
-  pendingEmail              String?   @unique @db.VarChar(255) // 이메일 변경 요청 중인 새 이메일. 확정 전까지 email은 그대로 유지 (PLB-042)
-  emailChangeTokenHash      String?   @db.VarChar(255) // 이메일 변경 확정 토큰의 sha256 해시 (refreshToken과 동일하게 원문 미저장)
+  id                    Int       @id @default(autoincrement())
+  email                 String    @unique @db.VarChar(255)
+  password              String?   @db.VarChar(255) // bcrypt 해시. 소셜 전용 계정은 NULL (PLB-035)
+  nickname              String    @db.VarChar(100) // 중복 허용 - uniqueTag와 조합해서만 유일
+  uniqueTag             String    @db.VarChar(10) // 닉네임#태그의 태그값 (실사용 4자리, 컬럼은 여유있게 VARCHAR(10))
+  profileImageUrl       String?   @db.VarChar(500) // NULL이면 기본 이미지 (PLB-004)
+  bio                   String?   @db.Text
+  lastNicknameChangedAt DateTime? // 15일 쿨다운 계산 기준 (PLB-003)
+  activityColor         String    @default("#A3A3A3") @db.VarChar(20) // 징검다리 기본 색상 (조약돌), PLB-026 팔레트 내에서 변경 가능
+  notifyTaskDue         Boolean   @default(true)
+  refreshToken          String?   @db.VarChar(500) // 해시로 저장, 로그아웃 시 파기
+  theme                 Theme     @default(LIGHT)
+  isTempPassword        Boolean   @default(false) // TRUE면 새 비밀번호 설정 강제
+  pendingEmail          String?   @unique @db.VarChar(255) // 이메일 변경 요청 중인 새 이메일. 확정 전까지 email은 그대로 유지 (PLB-042)
+  emailChangeTokenHash  String?   @db.VarChar(255) // 이메일 변경 확정 토큰의 sha256 해시 (refreshToken과 동일하게 원문 미저장)
   emailChangeTokenExpiresAt DateTime? // 이메일 변경 토큰 만료 시각
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
+  emailChangeLastRequestedAt DateTime? // 마지막 이메일 변경 요청 시각 (1분 쿨다운 계산 기준)
+  emailChangeRequestWindowStart DateTime? // 시간당 요청 상한 계산용 현재 윈도우 시작 시각
+  emailChangeRequestCount    Int       @default(0) // emailChangeRequestWindowStart 이후 누적 요청 횟수 (시간당 5회 상한)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   socialAccounts        SocialAccount[]
   reports               Report[]
