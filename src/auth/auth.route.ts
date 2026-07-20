@@ -4,7 +4,7 @@ import { validateBody } from '../middlewares/validate.middleware';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 import { signup, login, socialLogin, refresh, logout, issueTempPassword } from './auth.controller';
-import { signupSchema, loginSchema, refreshSchema } from './auth.schema';
+import { signupSchema, loginSchema, refreshSchema, tempPasswordSchema } from './auth.schema';
 
 const router = Router();
 
@@ -308,6 +308,6 @@ router.post('/auth/logout', authMiddleware, logout);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/password/temp', issueTempPassword);
+router.post('/auth/password/temp', validateBody(tempPasswordSchema), issueTempPassword);
 
 export default router;

@@ -39,3 +39,11 @@ export const refreshSchema = z.object({
     .min(1, 'refreshToken이 필요합니다.'),
 });
 export type RefreshDto = z.infer<typeof refreshSchema>;
+
+// 임시 비밀번호 발급 (PLB-035)
+export const tempPasswordSchema = z.object({
+  email: z
+    .string({ required_error: '이메일을 입력해주세요.' })
+    .email('이메일 형식이 올바르지 않습니다.'),
+});
+export type TempPasswordDto = z.infer<typeof tempPasswordSchema>;
