@@ -64,24 +64,24 @@ enum SharedCategoryStatus {
 // ─────────────────────────────────────────────
 
 model User {
-  id                    Int       @id @default(autoincrement())
-  email                 String    @unique @db.VarChar(255)
-  password              String?   @db.VarChar(255) // bcrypt 해시. 소셜 전용 계정은 NULL (PLB-035)
-  nickname              String    @db.VarChar(100) // 중복 허용 - uniqueTag와 조합해서만 유일
-  uniqueTag             String    @db.VarChar(10) // 닉네임#태그의 태그값 (실사용 4자리, 컬럼은 여유있게 VARCHAR(10))
-  profileImageUrl       String?   @db.VarChar(500) // NULL이면 기본 이미지 (PLB-004)
-  bio                   String?   @db.Text
-  lastNicknameChangedAt DateTime? // 15일 쿨다운 계산 기준 (PLB-003)
-  activityColor         String    @default("#FFFFFF") @db.VarChar(20) // 징검다리 기본 색상 (흰색), PLB-026 팔레트 내에서 변경 가능
-  notifyTaskDue         Boolean   @default(true)
-  refreshToken          String?   @db.VarChar(500) // 해시로 저장, 로그아웃 시 파기
-  theme                 Theme     @default(LIGHT)
-  isTempPassword        Boolean   @default(false) // TRUE면 새 비밀번호 설정 강제
-  pendingEmail          String?   @unique @db.VarChar(255) // 이메일 변경 요청 중인 새 이메일. 확정 전까지 email은 그대로 유지 (PLB-042)
-  emailChangeTokenHash  String?   @db.VarChar(255) // 이메일 변경 확정 토큰의 sha256 해시 (refreshToken과 동일하게 원문 미저장)
+  id                        Int       @id @default(autoincrement())
+  email                     String    @unique @db.VarChar(255)
+  password                  String?   @db.VarChar(255) // bcrypt 해시. 소셜 전용 계정은 NULL (PLB-035)
+  nickname                  String    @db.VarChar(100) // 중복 허용 - uniqueTag와 조합해서만 유일
+  uniqueTag                 String    @db.VarChar(10) // 닉네임#태그의 태그값 (실사용 4자리, 컬럼은 여유있게 VARCHAR(10))
+  profileImageUrl           String?   @db.VarChar(500) // NULL이면 기본 이미지 (PLB-004)
+  bio                       String?   @db.Text
+  lastNicknameChangedAt     DateTime? // 15일 쿨다운 계산 기준 (PLB-003)
+  activityColor             String    @default("#FFFFFF") @db.VarChar(20) // 징검다리 기본 색상 (흰색), PLB-026 팔레트 내에서 변경 가능
+  notifyTaskDue             Boolean   @default(true)
+  refreshToken              String?   @db.VarChar(500) // 해시로 저장, 로그아웃 시 파기
+  theme                     Theme     @default(LIGHT)
+  isTempPassword            Boolean   @default(false) // TRUE면 새 비밀번호 설정 강제
+  pendingEmail              String?   @unique @db.VarChar(255) // 이메일 변경 요청 중인 새 이메일. 확정 전까지 email은 그대로 유지 (PLB-042)
+  emailChangeTokenHash      String?   @db.VarChar(255) // 이메일 변경 확정 토큰의 sha256 해시 (refreshToken과 동일하게 원문 미저장)
   emailChangeTokenExpiresAt DateTime? // 이메일 변경 토큰 만료 시각
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   socialAccounts        SocialAccount[]
   reports               Report[]
@@ -206,12 +206,9 @@ model Task {
   milestoneId  Int? // 카테고리 직속 태스크는 NULL, 마일스톤 하위 태스크는 NOT NULL
   name         String    @db.VarChar(100)
   dateType     DateType
-  startDate    DateTime  @db.Date
+  startDate    DateTime? @db.Date // MULTIPLE이면 NULL
   endDate      DateTime? @db.Date
-  seriesId     Int? // MULTIPLE(다중 날짜 선택) 회차들을 묶는 그룹 키. 일반/기간 태스크는 NULL (PLB-017, 07-14 확정: 반복요일 방식 폐기, 사용자가 날짜를 직접 여러 개 선택하는 방식으로 변경)
-  taskTime     DateTime? @db.Time // 시:분 입력
-  memo         String?   @db.Text
-  color        String?   @db.VarChar(20) // 단일 태스크만 사용 (종속 태스크는 카테고리 색상 계열 따름)
+  color        String?   @db.VarChar(20) // 독립 태스크만 사용
   isCompleted  Boolean   @default(false)
   completedAt  DateTime? // KST 일별 집계 기준, 완료 해제 시 NULL
   displayOrder Int       @default(0)
@@ -221,11 +218,38 @@ model Task {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   category  Category?  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  taskDates TaskDate[]
 
   @@index([userId, startDate])
   @@index([categoryId, startDate])
   @@index([milestoneId, startDate])
-  @@index([seriesId])
+}
+
+model TaskDate {
+  id          Int       @id @default(autoincrement())
+  taskId      Int
+  date        DateTime  @db.Date
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  exception TaskException?
+
+  @@unique([taskId, date])
+  @@index([taskId, date])
+}
+
+model TaskException {
+  id         Int      @id @default(autoincrement())
+  taskDateId Int      @unique
+  name       String?  @db.VarChar(100)
+  color      String?  @db.VarChar(20)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  taskDate TaskDate @relation(fields: [taskDateId], references: [id], onDelete: Cascade)
 }
 
 // UK: userId + date (PLB-022, PLB-023 징검다리 집계용 일별 스냅샷)
