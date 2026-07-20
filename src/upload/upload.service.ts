@@ -9,10 +9,7 @@ import { logger } from '../utils/logger';
 import { IMAGE_EXTENSION_BY_MIME } from '../middlewares/upload.middleware';
 
 export const uploadService = {
-  async uploadImage(file?: Express.Multer.File) {
-    if (!file) {
-      throw new AppError('COMMON_INVALID_INPUT', '업로드할 파일이 없습니다.');
-    }
+  async uploadImage(file: Express.Multer.File) {
     // fileFilter(upload.middleware.ts)에서 이미 검증된 mimetype만 들어오므로,
     // 클라이언트가 보낸 원본 파일명 대신 mimetype 기준으로 확장자를 고정한다.
     const extension = IMAGE_EXTENSION_BY_MIME[file.mimetype];

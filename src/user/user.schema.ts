@@ -9,7 +9,9 @@ export const updateMeSchema = z.object({
   nickname: z.string().max(100).optional(),
   bio: z.string().nullable().optional(),
   // 실제 파일이 아니라 POST /uploads/image로 먼저 업로드한 뒤 받은 URL을 전달한다.
-  profileImageUrl: z.string().max(500).nullable().optional(),
+  // auth.schema.ts와 동일하게 형식(.url())만 검증하며, 업로드 API가 준 URL인지(origin)는
+  // 제한하지 않는다 — 스토리지 도메인이 바뀔 수 있고 명세에도 없는 제약이라 의도적으로 안 건다.
+  profileImageUrl: z.string().url('프로필 이미지 URL 형식이 올바르지 않습니다.').max(500).nullable().optional(),
 });
 
 // PLB-026 확정 팔레트 (색상군당 대표색 1개, 총 6개): 조약돌·시냇물·새싹·햇살·노을·꽃
