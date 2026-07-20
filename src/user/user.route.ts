@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authMiddleware } from '../middlewares/auth.middleware';
 import { validateBody } from '../middlewares/validate.middleware';
 import {
   getMe,
@@ -20,6 +21,9 @@ import {
 } from './user.schema';
 
 const router = Router();
+
+// User API는 모두 로그인 필요(bearerAuth). authMiddleware가 req.userId를 채운다.
+router.use(authMiddleware);
 
 /**
  * @swagger
@@ -194,7 +198,7 @@ router.get('/users/:userId', getUser);
  *                       properties:
  *                         theme: { type: string, enum: [LIGHT, DARK], example: LIGHT }
  *                         notifyTaskDue: { type: boolean, example: true }
- *                         activityColor: { type: string, nullable: true, example: '#7ED321' }
+ *                         activityColor: { type: string, example: '#7ED321' }
  *                         isSocialOnly: { type: boolean, description: true이면 FE에서 비밀번호 변경 항목을 비활성화, example: false }
  *                         isTempPassword: { type: boolean, description: true이면 FE에서 비밀번호 변경 권장 UI를 노출, example: false }
  *       401:
@@ -240,7 +244,7 @@ router.get('/users/me/settings', getSettings);
  *                       properties:
  *                         theme: { type: string, enum: [LIGHT, DARK], example: DARK }
  *                         notifyTaskDue: { type: boolean, example: false }
- *                         activityColor: { type: string, nullable: true, example: '#FF5722' }
+ *                         activityColor: { type: string, example: '#FF5722' }
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:

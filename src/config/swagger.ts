@@ -312,7 +312,6 @@ const options: swaggerJSDoc.Options = {
                 activityColor: {
                   type: 'string',
                   maxLength: 20,
-                  nullable: true,
                   description: '징검다리 색상 (팔레트 내 선택, PLB-026)',
                   example: '#7ED321',
                 },
