@@ -383,6 +383,7 @@ const options: swaggerJSDoc.Options = {
             '인앱 알림. relatedId는 type별로 가리키는 대상이 달라 FK가 아님. 최대 30일 보관 후 자동 삭제(PLB-038).',
           properties: {
             id: { type: 'integer', example: 88 },
+            userId: { type: 'integer', example: 42 },
             type: {
               type: 'string',
               enum: [
