@@ -1,5 +1,44 @@
-// Task Repository
-// DB 접근 계층. Prisma 쿼리만 담당한다.
-// TODO: Prisma 스키마(Task / TaskException) 확정 후 실제 쿼리 구현.
+import { DateType } from "@prisma/client";
+import prisma from "../config/database";
 
-export const taskRepository = {};
+export interface CreateTaskData {
+  userId: number;
+  categoryId?: number | null;
+  milestoneId?: number | null;
+  name: string;
+  dateType: DateType;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  color?: string | null;
+  dates?: Date[];
+}
+
+export const taskRepository = {
+    createTask: async (data: CreateTaskData) => {
+        return prisma.task.create({
+            data: {
+                userId: data.userId,
+                categoryId: data.categoryId ?? null,
+                milestoneId: data.milestoneId ?? null,
+                name: data.name,
+                dateType: data.dateType,
+                startDate: data.startDate ?? null,
+                endDate: data.endDate ?? null,
+                color: data.color ?? null,
+
+                taskDates: data.dateType===DateType.MULTIPLE && data.dates ? {
+                    create: data.dates.map((date)=>({
+                        date,
+                    })),
+                } : undefined,
+            },
+            include: {
+                taskDates: {
+                    orderBy: {
+                        date: 'asc',
+                    },
+                },
+            },
+        });
+    }
+};
