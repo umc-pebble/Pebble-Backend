@@ -14,13 +14,19 @@ export const updateMeSchema = z.object({
   profileImageUrl: z.string().url('프로필 이미지 URL 형식이 올바르지 않습니다.').max(500).nullable().optional(),
 });
 
-// TODO(PLB-026): 명세상 실제 규칙은 "PEBBLE이 제공하는 컬러 팔레트 내에서만 선택"이지만,
-// 아직 FE에서 확정 팔레트(hex 값 목록)를 받지 못해 임시로 hex 형식 여부만 검증한다.
-// 팔레트가 확정되면 이 정규식 검증을 z.enum([...])/allowlist 검증으로 교체해야 한다.
-const colorField = z
-  .string()
-  .max(20)
-  .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, '색상은 hex 코드 형식이어야 합니다.');
+// PLB-026 확정 팔레트 (색상군당 대표색 1개, 총 6개): 조약돌·시냇물·새싹·햇살·노을·꽃
+export const ACTIVITY_COLOR_PALETTE = [
+  '#A3A3A3',
+  '#82A0FF',
+  '#ABE692',
+  '#FFE48B',
+  '#FFB67A',
+  '#FFB4B4',
+] as const;
+
+const colorField = z.enum(ACTIVITY_COLOR_PALETTE, {
+  message: `색상은 다음 팔레트 중 하나여야 합니다: ${ACTIVITY_COLOR_PALETTE.join(', ')}`,
+});
 
 export const updateSettingsSchema = z.object({
   theme: z.enum(['LIGHT', 'DARK']).optional(),
