@@ -87,6 +87,8 @@ export const taskRepository = {
             select: {
                 id: true,
                 dateType: true,
+                isCompleted: true,
+                completedAt: true,
             },
         });
     },
@@ -109,8 +111,10 @@ export const taskRepository = {
             },
             select: {
                 id: true,
+                taskId: true,
                 date: true,
                 isCompleted: true,
+                completedAt: true,
             },
         });
     },
@@ -152,6 +156,48 @@ export const taskRepository = {
                     gte: today,
                 },
                 isCompleted: false,
+            },
+        });
+    },
+
+    updateTaskCompletion: async (
+        taskId: number,
+        isCompleted: boolean,
+    ) => {
+        return prisma.task.update({
+            where: {
+                id: taskId,
+            },
+            data: {
+                isCompleted,
+                completedAt: isCompleted ? new Date() : null,
+            },
+            select: {
+                id: true,
+                isCompleted: true,
+                completedAt: true,
+            },
+        });
+    },
+
+    updateTaskDateCompletion: async (
+        taskDateId: number,
+        isCompleted: boolean,
+    ) => {
+        return prisma.taskDate.update({
+            where: {
+                id: taskDateId,
+            },
+            data: {
+                isCompleted,
+                completedAt: isCompleted ? new Date() : null,
+            },
+            select: {
+                id: true,
+                taskId: true,
+                date: true,
+                isCompleted: true,
+                completedAt: true,
             },
         });
     },
