@@ -14,6 +14,41 @@ export interface CreateTaskData {
 }
 
 export const taskRepository = {
+    findCategoryByIdAndUserId: async (
+        categoryId: number,
+        userId: number,
+    ) => {
+        return prisma.category.findFirst({
+            where: {
+                id: categoryId,
+                userId,
+            },
+            select: {
+                id: true,
+            },
+        });
+    },
+
+    findMilestoneByIdAndCategoryIdAndUserId: async (
+        milestoneId: number,
+        categoryId: number,
+        userId: number,
+    ) => {
+        return prisma.milestone.findFirst({
+            where: {
+                id: milestoneId,
+                categoryId,
+                category: {
+                userId,
+                },
+            },
+            select: {
+                id: true,
+                categoryId: true,
+            },
+        });
+    },
+    
     createTask: async (data: CreateTaskData) => {
         return prisma.task.create({
             data: {
@@ -41,4 +76,6 @@ export const taskRepository = {
             },
         });
     }
+
+
 };
