@@ -350,6 +350,18 @@ router.patch('/users/me/password', validateBody(changePasswordSchema), changePas
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
  *             example: { success: false, message: 이미 사용 중인 이메일입니다., error: { code: "AUTH_EMAIL_DUPLICATED" } }
+ *       429:
+ *         description: 요청 빈도 초과 (1분 쿨다운 또는 시간당 5회 상한)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             examples:
+ *               cooldown:
+ *                 summary: 쿨다운 미경과
+ *                 value: { success: false, message: 인증 메일은 1분에 한 번만 요청할 수 있습니다., error: { code: "USER_EMAIL_CHANGE_RATE_LIMITED" } }
+ *               hourlyLimit:
+ *                 summary: 시간당 상한 초과
+ *                 value: { success: false, message: 이메일 변경 요청이 너무 많습니다. 1시간 후 다시 시도해주세요., error: { code: "USER_EMAIL_CHANGE_RATE_LIMITED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */

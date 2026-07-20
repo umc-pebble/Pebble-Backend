@@ -12,6 +12,9 @@ import { UpdateMeBody, UpdateSettingsBody, ChangePasswordBody } from './user.sch
 
 const NICKNAME_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000; // 15일 (PLB-003·043)
 const EMAIL_CHANGE_TOKEN_TTL_MS = 60 * 60 * 1000; // 1시간
+const EMAIL_CHANGE_COOLDOWN_MS = 60 * 1000; // 재전송 쿨다운 1분
+const EMAIL_CHANGE_WINDOW_MS = 60 * 60 * 1000; // 상한 계산 윈도우 1시간
+const EMAIL_CHANGE_MAX_PER_WINDOW = 5; // 윈도우당 최대 요청 수 (메일 폭탄 방지)
 const PASSWORD_SALT_ROUNDS = 10;
 const UNIQUE_TAG_MAX_ATTEMPTS = 20;
 
@@ -160,7 +163,28 @@ export const userService = {
   },
 
   // 인증 링크 발송까지만 처리한다. 실제 email 컬럼 반영은 confirmEmailChange에서 이루어진다(PLB-042).
+  // 실제 메일이 나가는 액션이라 남용 시 타인 메일함으로 인증 메일이 반복 발송될 수 있어
+  // 1분 쿨다운 + 시간당 5회 상한을 둔다(재전송 UX 리뷰 반영).
   async requestEmailChange(userId: number, newEmail: string) {
+    const user = await getUserOrThrow(userId);
+
+    const now = new Date();
+    if (
+      user.emailChangeLastRequestedAt &&
+      now.getTime() - user.emailChangeLastRequestedAt.getTime() < EMAIL_CHANGE_COOLDOWN_MS
+    ) {
+      throw new AppError('USER_EMAIL_CHANGE_RATE_LIMITED', '인증 메일은 1분에 한 번만 요청할 수 있습니다.');
+    }
+    const windowExpired =
+      !user.emailChangeRequestWindowStart ||
+      now.getTime() - user.emailChangeRequestWindowStart.getTime() >= EMAIL_CHANGE_WINDOW_MS;
+    if (!windowExpired && user.emailChangeRequestCount >= EMAIL_CHANGE_MAX_PER_WINDOW) {
+      throw new AppError(
+        'USER_EMAIL_CHANGE_RATE_LIMITED',
+        '이메일 변경 요청이 너무 많습니다. 1시간 후 다시 시도해주세요.',
+      );
+    }
+
     const duplicated = await userRepository.existsByEmailOrPendingEmail(userId, newEmail);
     if (duplicated) {
       throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
@@ -169,8 +193,18 @@ export const userService = {
     const token = crypto.randomBytes(32).toString('hex');
     const tokenHash = sha256(token);
     const expiresAt = new Date(Date.now() + EMAIL_CHANGE_TOKEN_TTL_MS);
+    const rateLimit = {
+      now,
+      cooldownBoundary: new Date(now.getTime() - EMAIL_CHANGE_COOLDOWN_MS),
+      windowExpired,
+      currentWindowStart: user.emailChangeRequestWindowStart,
+      windowBoundary: new Date(now.getTime() - EMAIL_CHANGE_WINDOW_MS),
+      maxRequestsPerWindow: EMAIL_CHANGE_MAX_PER_WINDOW,
+    };
+
+    let result;
     try {
-      await userRepository.setPendingEmailChange(userId, newEmail, tokenHash, expiresAt);
+      result = await userRepository.setPendingEmailChange(userId, newEmail, tokenHash, expiresAt, rateLimit);
     } catch (err) {
       // 동시 요청이 중복 체크를 모두 통과한 뒤 pendingEmail의 DB unique 제약에서 충돌하는 경우.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -178,15 +212,24 @@ export const userService = {
       }
       throw err;
     }
+    if (result.count === 0) {
+      // 위 사전 검증과 실제 반영 사이에 동시 요청이 쿨다운/상한을 먼저 채운 경합 상황.
+      throw new AppError('USER_EMAIL_CHANGE_RATE_LIMITED', '요청이 너무 잦습니다. 잠시 후 다시 시도해주세요.');
+    }
 
     try {
       await sendEmailChangeVerification(newEmail, token);
     } catch {
-      // 발송 실패 시 방금 건 pending 예약을 되돌린다 — 안 그러면 실제로 메일을 못 받은 이메일이
-      // TTL 동안 "사용 중"으로 남아 다른 유저의 동일 이메일 요청까지 막게 된다.
+      // 발송 실패 시 방금 건 pending 예약과 rate limit 반영분을 되돌린다 — 안 그러면 실제로 메일을
+      // 못 받은 이메일이 TTL 동안 "사용 중"으로 남아 다른 유저의 동일 이메일 요청까지 막고,
+      // 실패한 시도가 본인 쿨다운/상한까지 갉아먹게 된다.
       // 롤백 자체가 실패하더라도(예: DB 일시 장애) 원시 에러를 흘리지 않고 약속된 에러로 통일한다.
       try {
-        await userRepository.clearPendingEmailChange(userId, newEmail, tokenHash);
+        await userRepository.clearPendingEmailChange(userId, newEmail, tokenHash, {
+          lastRequestedAt: user.emailChangeLastRequestedAt,
+          windowStart: user.emailChangeRequestWindowStart,
+          count: user.emailChangeRequestCount,
+        });
       } catch {
         // 롤백 실패는 아래에서 공통 에러로 던지므로 별도 처리 없이 무시한다.
       }
