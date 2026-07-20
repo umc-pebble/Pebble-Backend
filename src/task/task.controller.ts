@@ -11,12 +11,12 @@ export const getTasks = async (
     try {
         const userId = req.userId!;
         const baseDate =req.query.baseDate !== undefined? String(req.query.baseDate) : undefined;
-        const result = await taskService.getIndependentTasks( userId,baseDate);
+        const result = await taskService.getTasks( userId,baseDate);
 
         sendSuccess(
             res,
             result,
-            '독립 태스크 조회 성공',
+            '월별 태스크 조회 성공',
             200,
         );
     } catch (error) {

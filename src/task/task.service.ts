@@ -297,7 +297,7 @@ export const taskService = {
         };
     },
 
-    getIndependentTasks: async (
+    getTasks: async (
         userId: number,
         baseDate?: string,
     ) => {
@@ -311,30 +311,36 @@ export const taskService = {
         );
 
         const tasks =
-            await taskRepository.findIndependentTasksByMonth(
+            await taskRepository.findTasksByMonth(
                 userId,
                 monthStart,
                 nextMonthStart,
             );
 
         return {
-            tasks: tasks.map((task) => ({
-                id: task.id,
-                userId: task.userId,
-                categoryId: task.categoryId,
-                milestoneId: task.milestoneId,
-                name: task.name,
-                dateType: task.dateType,
-                startDate: toDateString(task.startDate),
-                endDate: toDateString(task.endDate),
-                color: task.color,
-                isCompleted: task.isCompleted,
-                completedAt: task.completedAt,
-                displayOrder: task.displayOrder,
+            tasks: tasks.map((task) => {
+                const effectiveColor =
+                    task.categoryId === null
+                        ? task.color
+                        : task.category?.color ?? null;
 
-                ...(task.dateType === DateType.MULTIPLE ? {
-                        taskDates: task.taskDates.map(
-                            (taskDate) => ({
+                return {
+                    id: task.id,
+                    userId: task.userId,
+                    categoryId: task.categoryId,
+                    milestoneId: task.milestoneId,
+                    name: task.name,
+                    dateType: task.dateType,
+                    startDate: toDateString(task.startDate),
+                    endDate: toDateString(task.endDate),
+                    color: effectiveColor,
+                    isCompleted: task.isCompleted,
+                    completedAt: task.completedAt,
+                    displayOrder: task.displayOrder,
+
+                    ...(task.dateType === DateType.MULTIPLE ? {
+                            taskDates: task.taskDates.map(
+                                (taskDate) => ({
                                 taskDateId: taskDate.id,
                                 date: toDateString(
                                     taskDate.date,
@@ -344,11 +350,12 @@ export const taskService = {
                                 completedAt:
                                     taskDate.completedAt,
                                 name: task.name,
-                                color: task.color,
+                                color: effectiveColor,
                             }),
                         ),
                     } : {}),
-            })),
+                };
+            }),
         };
     },
 };

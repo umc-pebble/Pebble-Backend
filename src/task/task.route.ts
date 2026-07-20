@@ -22,127 +22,18 @@ const router = Router();
 
 /**
  * @swagger
- * /categories/{categoryId}/tasks:
- *   get:
- *     summary: 카테고리 하위 태스크 목록 조회 (PLB-020·021)
- *     description: >
- *       특정 카테고리에 속한 하위 태스크 목록을 조회합니다.
- *       카테고리 직속 태스크와 마일스톤 하위 태스크를 모두 반환합니다.
- *       milestoneId가 null이면 카테고리 직속 태스크이고,
- *       값이 있으면 해당 마일스톤의 하위 태스크입니다.
- *       기본 정렬은 D-Day가 가까운 순(오름차순)입니다.
- *       마일스톤 하위 태스크는 사용자가 순서를 직접 변경한 경우
- *       해당 마일스톤 내에서 저장된 displayOrder 순서대로 조회합니다.
- *       카테고리가 숨김 처리된 경우 캘린더에 노출되지 않습니다.
- *     tags: [Task]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: categoryId
- *         in: path
- *         required: true
- *         schema:
- *           type: integer
- *         description: 조회할 카테고리 ID
- *         example: 3
- *       - name: baseDate
- *         in: query
- *         required: false
- *         schema:
- *           type: string
- *           format: date
- *         description: 조회 기준 날짜. 미입력 시 오늘 기준
- *         example: '2026-07-10'
- *     responses:
- *       200:
- *         description: 조회 성공
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     data:
- *                       type: object
- *                       properties:
- *                         tasks:
- *                           type: array
- *                           items:
- *                             $ref: '#/components/schemas/Task'
- *             example:
- *               success: true
- *               message: 카테고리 하위 태스크 조회 성공
- *               data:
- *                 tasks:
- *                   - id: 12
- *                     userId: 1
- *                     categoryId: 3
- *                     milestoneId: null
- *                     name: 카테고리 자료 조사
- *                     dateType: SINGLE
- *                     startDate: '2026-07-01'
- *                     endDate: null
- *                     color: null
- *                     isCompleted: false
- *                     completedAt: null
- *                     displayOrder: 1
- *                   - id: 13
- *                     userId: 1
- *                     categoryId: 3
- *                     milestoneId: 10
- *                     name: 기획서 작성
- *                     dateType: RANGE
- *                     startDate: '2026-07-10'
- *                     endDate: '2026-07-20'
- *                     color: null
- *                     isCompleted: false
- *                     completedAt: null
- *                     displayOrder: 2
- *                   - id: 30
- *                     userId: 1
- *                     categoryId: 3
- *                     milestoneId: 10
- *                     name: 자료 조사
- *                     dateType: MULTIPLE
- *                     startDate: null
- *                     endDate: null
- *                     color: null
- *                     displayOrder: 3
- *                     taskDates:
- *                       - taskDateId: 101
- *                         date: '2026-07-10'
- *                         isCompleted: true
- *                         completedAt: '2026-07-10T09:10:00+09:00'
- *                         name: 자료 조사
- *                         color: null
- *                       - taskDateId: 102
- *                         date: '2026-07-14'
- *                         isCompleted: false
- *                         completedAt: null
- *                         name: 자료 조사
- *                         color: null
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- *       500:
- *         $ref: '#/components/responses/InternalServerError'
- */
-router.get('/categories/:categoryId/tasks', getTasks);
-
-/**
- * @swagger
  * /tasks:
  *   get:
- *     summary: 독립 태스크 목록 조회 (PLB-020·021)
+ *     summary: 월별 태스크 목록 조회 (PLB-020·021)
  *     description: >
- *       독립 태스크 목록을 조회합니다.
- *       독립 태스크는 categoryId와 milestoneId가 모두 null인 태스크이며,
- *       독립 태스크는 캘린더 사이드바 상단에 표시됩니다.
- *       독립 태스크도 날짜 유형으로 일반(SINGLE), 기간(RANGE), 다중(MULTIPLE)을 가질 수 있습니다.
+ *       기준 날짜가 포함된 월의 태스크 목록을 조회합니다.
+ *       독립 태스크와 숨김 처리되지 않은 카테고리의 하위 태스크를 모두 반환합니다.
+ *       categoryId와 milestoneId가 모두 null이면 독립 태스크입니다.
+ *       categoryId만 존재하면 카테고리 직속 태스크입니다.
+ *       categoryId와 milestoneId가 모두 존재하면 마일스톤 하위 태스크입니다.
+ *       SINGLE은 시작일이 조회 월에 포함된 경우 조회합니다.
+ *       RANGE는 조회 월과 기간이 하루라도 겹치는 경우 조회합니다.
+ *       MULTIPLE은 조회 월에 해당하는 TaskDate 회차만 반환합니다.
  *     tags: [Task]
  *     security:
  *       - bearerAuth: []
@@ -153,7 +44,10 @@ router.get('/categories/:categoryId/tasks', getTasks);
  *         schema:
  *           type: string
  *           format: date
- *         description: 조회 기준 날짜. 미입력 시 오늘 기준
+ *         description: >
+ *           조회할 월을 결정하는 기준 날짜입니다.
+ *           해당 날짜가 포함된 월의 태스크를 조회하며,
+ *           미입력 시 KST 기준 오늘이 포함된 월을 조회합니다.
  *         example: '2026-07-10'
  *     responses:
  *       200:
@@ -174,7 +68,7 @@ router.get('/categories/:categoryId/tasks', getTasks);
  *                             $ref: '#/components/schemas/Task'
  *             example:
  *               success: true
- *               message: 독립 태스크 조회 성공
+ *               message: 월별 태스크 조회 성공
  *               data:
  *                 tasks:
  *                   - id: 21
@@ -210,6 +104,8 @@ router.get('/categories/:categoryId/tasks', getTasks);
  *                     startDate: null
  *                     endDate: null
  *                     color: '#86EFAC'
+ *                     isCompleted: false
+ *                     completedAt: null
  *                     displayOrder: 3
  *                     taskDates:
  *                       - taskDateId: 201
@@ -224,6 +120,131 @@ router.get('/categories/:categoryId/tasks', getTasks);
  *                         completedAt: '2026-07-14T09:10:00+09:00'
  *                         name: 운동하기
  *                         color: '#86EFAC'
+ *
+ *                   - id: 24
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: null
+ *                     name: 카테고리 자료 조사
+ *                     dateType: SINGLE
+ *                     startDate: '2026-07-11'
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *
+ *                   - id: 25
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: null
+ *                     name: 카테고리 일정 정리
+ *                     dateType: RANGE
+ *                     startDate: '2026-06-28'
+ *                     endDate: '2026-07-05'
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *
+ *                   - id: 26
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: null
+ *                     name: 카테고리 회의 준비
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 3
+ *                     taskDates:
+ *                       - taskDateId: 203
+ *                         date: '2026-07-08'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 카테고리 회의 준비
+ *                         color: '#67E8F9'
+ *                       - taskDateId: 204
+ *                         date: '2026-07-22'
+ *                         isCompleted: true
+ *                         completedAt: '2026-07-22T18:30:00+09:00'
+ *                         name: 카테고리 회의 준비
+ *                         color: '#67E8F9'
+ *
+ *                   - id: 27
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: 10
+ *                     name: 기획서 작성
+ *                     dateType: SINGLE
+ *                     startDate: '2026-07-12'
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *
+ *                   - id: 28
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: 10
+ *                     name: 화면 설계
+ *                     dateType: RANGE
+ *                     startDate: '2026-07-15'
+ *                     endDate: '2026-07-25'
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *
+ *                   - id: 29
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: 10
+ *                     name: 기능 테스트
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 3
+ *                     taskDates:
+ *                       - taskDateId: 205
+ *                         date: '2026-07-18'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 기능 테스트
+ *                         color: '#67E8F9'
+ *                       - taskDateId: 206
+ *                         date: '2026-07-27'
+ *                         isCompleted: true
+ *                         completedAt: '2026-07-27T16:00:00+09:00'
+ *                         name: 기능 테스트
+ *                         color: '#67E8F9'
+ *       400:
+ *         description: baseDate 입력값 오류
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *             examples:
+ *               invalidFormat:
+ *                 summary: 날짜 형식 오류
+ *                 value:
+ *                   success: false
+ *                   message: baseDate는 YYYY-MM-DD 형식이어야 합니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *               invalidDate:
+ *                 summary: 존재하지 않는 날짜
+ *                 value:
+ *                   success: false
+ *                   message: 유효하지 않은 baseDate입니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:

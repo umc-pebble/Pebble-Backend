@@ -25,6 +25,7 @@ export const taskRepository = {
             },
             select: {
                 id: true,
+                isHidden: true,
             },
         });
     },
@@ -202,7 +203,8 @@ export const taskRepository = {
         });
     },
 
-    findIndependentTasksByMonth: async (
+    // 월별 전체 태스크 조회
+    findTasksByMonth: async (
         userId: number,
         monthStart: Date,
         nextMonthStart: Date,
@@ -210,41 +212,61 @@ export const taskRepository = {
         return prisma.task.findMany({
             where: {
                 userId,
-                categoryId: null,
-                milestoneId: null,
 
-                OR: [
-                    // SINGLE: 시작일이 조회 월에 포함
+                AND: [
                     {
-                        dateType: DateType.SINGLE,
-                        startDate: {
-                            gte: monthStart,
-                            lt: nextMonthStart,
-                        },
+                        OR: [
+                            // 독립 태스크
+                            {
+                                categoryId: null,
+                                milestoneId: null,
+                            },
+                            // 숨김이 아닌 카테고리의 하위 태스크
+                            {
+                                category: {
+                                    is: {
+                                        isHidden: false,
+                                    },
+                                },
+                            },
+                        ],
                     },
 
-                    // RANGE: 조회 월과 기간이 하루라도 겹침
                     {
-                        dateType: DateType.RANGE,
-                        startDate: {
-                            lt: nextMonthStart,
-                        },
-                        endDate: {
-                            gte: monthStart,
-                        },
-                    },
-
-                    // MULTIPLE: 조회 월에 해당하는 회차가 하나 이상 존재
-                    {
-                        dateType: DateType.MULTIPLE,
-                        taskDates: {
-                            some: {
-                                date: {
+                        OR: [
+                            // SINGLE: 시작일이 조회 월에 포함
+                            {
+                                dateType: DateType.SINGLE,
+                                startDate: {
                                     gte: monthStart,
                                     lt: nextMonthStart,
                                 },
                             },
-                        },
+                            
+                            // RANGE: 조회 월과 기간이 하루라도 겹침
+                            {
+                                dateType: DateType.RANGE,
+                                startDate: {
+                                    lt: nextMonthStart,
+                                },
+                                endDate: {
+                                    gte: monthStart,
+                                },
+                            },
+
+                            // MULTIPLE: 조회 월에 해당하는 회차가 하나 이상 존재
+                            {
+                                dateType: DateType.MULTIPLE,
+                                taskDates: {
+                                    some: {
+                                        date: {
+                                            gte: monthStart,
+                                            lt: nextMonthStart,
+                                        },
+                                    },
+                                },
+                            },
+                        ],
                     },
                 ],
             },
@@ -262,6 +284,12 @@ export const taskRepository = {
                 isCompleted: true,
                 completedAt: true,
                 displayOrder: true,
+
+                category: {
+                    select: {
+                        color: true,
+                    },
+                },
 
                 taskDates: {
                     where: {
