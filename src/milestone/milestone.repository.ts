@@ -16,7 +16,13 @@ interface CreateRowInput {
   seriesId: number | null;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // FOR UPDATE 잠금 경합에서 갭 락 교착(deadlock)이 가능해 짧은 재시도를 둔다.
+// 즉시 재시도하면 충돌했던 트랜잭션끼리 같은 시점에 다시 부딪히므로,
+// 재시도 전에 지수 백오프(20·40ms)에 랜덤 지터(0~25ms)를 더해 재경합을 줄인다.
 async function withDeadlockRetry<T>(fn: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -26,6 +32,7 @@ async function withDeadlockRetry<T>(fn: () => Promise<T>): Promise<T> {
       const isDeadlock =
         (e as { code?: string }).code === 'P2034' || /deadlock/i.test(message);
       if (!isDeadlock || attempt >= 3) throw e;
+      await sleep(20 * 2 ** (attempt - 1) + Math.floor(Math.random() * 25));
     }
   }
 }
