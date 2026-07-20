@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE `task` ADD COLUMN `categoryId` INTEGER NULL;
+ALTER TABLE `Task` ADD COLUMN `categoryId` INTEGER NULL;
 
 -- CreateIndex
 CREATE INDEX `Task_categoryId_startDate_idx` ON `Task`(`categoryId`, `startDate`);
