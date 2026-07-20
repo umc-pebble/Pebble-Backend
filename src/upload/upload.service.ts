@@ -8,6 +8,10 @@ import { AppError } from '../utils/app-error';
 import { logger } from '../utils/logger';
 import { IMAGE_EXTENSION_BY_MIME } from '../middlewares/upload.middleware';
 
+// getPublicUrl이 반환하는 형식과 동일하다: `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`.
+// 이 prefix로 시작하지 않는 URL은 우리 버킷 소유가 아니므로(예: PLB-004 기본 이미지 등) 삭제 대상에서 제외한다.
+const PUBLIC_URL_PREFIX = `${process.env.SUPABASE_URL}/storage/v1/object/public/${UPLOAD_BUCKET}/`;
+
 export const uploadService = {
   async uploadImage(file: Express.Multer.File) {
     // fileFilter(upload.middleware.ts)에서 이미 검증된 mimetype만 들어오므로,
@@ -33,5 +37,21 @@ export const uploadService = {
 
     const { data } = supabase.storage.from(UPLOAD_BUCKET).getPublicUrl(fileName);
     return { imageUrl: data.publicUrl };
+  },
+
+  // 프로필 이미지 등이 교체/제거될 때 이전 파일을 정리한다. 호출부(user.service.ts 등)의
+  // 응답 자체를 실패시키지 않도록 베스트 에포트로 동작하며, 실패해도 에러를 던지지 않고 로그만 남긴다.
+  async deleteImage(imageUrl: string | null | undefined) {
+    if (!imageUrl || !imageUrl.startsWith(PUBLIC_URL_PREFIX)) return;
+    const path = imageUrl.slice(PUBLIC_URL_PREFIX.length);
+
+    try {
+      const { error } = await supabase.storage.from(UPLOAD_BUCKET).remove([path]);
+      if (error) {
+        logger.error(error);
+      }
+    } catch (err) {
+      logger.error(err);
+    }
   },
 };

@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/app-error';
 import { signAccessToken, signRefreshToken, sha256 } from '../utils/jwt';
 import { sendEmailChangeVerification } from '../utils/mailer';
+import { uploadService } from '../upload/upload.service';
 import { userRepository } from './user.repository';
 import { UpdateMeBody, UpdateSettingsBody, ChangePasswordBody } from './user.schema';
 
@@ -117,6 +118,17 @@ export const userService = {
       }
       throw new AppError('COMMON_UNAUTHORIZED', '유효하지 않은 사용자입니다.');
     }
+
+    // profileImageUrl이 실제로 교체/제거된 경우에만, DB 반영이 끝난 뒤 변경 전 파일을 정리한다.
+    // 이전 값이 null이면 PLB-004 기본 이미지라 Storage에 지울 파일이 없다.
+    if (
+      input.profileImageUrl !== undefined &&
+      input.profileImageUrl !== user.profileImageUrl &&
+      user.profileImageUrl
+    ) {
+      await uploadService.deleteImage(user.profileImageUrl);
+    }
+
     const updated = await getUserOrThrow(userId);
     return {
       id: updated.id,
