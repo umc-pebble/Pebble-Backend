@@ -231,7 +231,7 @@ router.get('/categories/:categoryId/tasks', getTasks);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/tasks', getTasks);
+router.get('/tasks', authMiddleware, getTasks);
 
 /**
  * @swagger

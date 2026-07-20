@@ -3,8 +3,25 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import { sendSuccess } from '../utils/response';
 import { taskService } from './task.service';
 
-export const getTasks = (_req: Request, res: Response) => {
-  sendSuccess(res, { tasks: [] }, '종속 태스크 목록 조회 (미구현)');
+export const getTasks = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const userId = req.userId!;
+        const baseDate =req.query.baseDate !== undefined? String(req.query.baseDate) : undefined;
+        const result = await taskService.getIndependentTasks( userId,baseDate);
+
+        sendSuccess(
+            res,
+            result,
+            '독립 태스크 조회 성공',
+            200,
+        );
+    } catch (error) {
+        next(error);
+    }
 };
 
 export const createTask = async (

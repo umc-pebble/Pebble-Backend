@@ -8,6 +8,46 @@ const toDate = (value: string): Date => {
     return new Date(Date.UTC(year, month - 1, day));
 };
 
+const toDateString = (date: Date | null): string | null => {
+    return date ? date.toISOString().slice(0, 10) : null;
+};
+
+const parseBaseDate = (baseDate?: string): string => {
+    const value = baseDate ??
+        new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).format(new Date());
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new AppError(
+            'COMMON_INVALID_INPUT',
+            'baseDate는 YYYY-MM-DD 형식이어야 합니다.',
+        );
+    }
+
+    const [year, month, day] = value.split('-').map(Number);
+    const parsedDate = new Date(
+        Date.UTC(year, month - 1, day),
+    );
+
+    const isValidDate =
+        parsedDate.getUTCFullYear() === year &&
+        parsedDate.getUTCMonth() === month - 1 &&
+        parsedDate.getUTCDate() === day;
+
+    if (!isValidDate) {
+        throw new AppError(
+            'COMMON_INVALID_INPUT',
+            '유효하지 않은 baseDate입니다.',
+        );
+    }
+
+    return value;
+};
+
 export const taskService = {
     createTask: async (userId: number, body: CreateTaskBody) => {
         const {categoryId, milestoneId}=body;
@@ -254,6 +294,61 @@ export const taskService = {
             id: updatedTask.id,
             isCompleted: updatedTask.isCompleted,
             completedAt: updatedTask.completedAt,
+        };
+    },
+
+    getIndependentTasks: async (
+        userId: number,
+        baseDate?: string,
+    ) => {
+        const resolvedBaseDate = parseBaseDate(baseDate);
+        const [year, month] = resolvedBaseDate.split('-').map(Number);
+        const monthStart = new Date(
+            Date.UTC(year, month - 1, 1),
+        );
+        const nextMonthStart = new Date(
+            Date.UTC(year, month, 1),
+        );
+
+        const tasks =
+            await taskRepository.findIndependentTasksByMonth(
+                userId,
+                monthStart,
+                nextMonthStart,
+            );
+
+        return {
+            tasks: tasks.map((task) => ({
+                id: task.id,
+                userId: task.userId,
+                categoryId: task.categoryId,
+                milestoneId: task.milestoneId,
+                name: task.name,
+                dateType: task.dateType,
+                startDate: toDateString(task.startDate),
+                endDate: toDateString(task.endDate),
+                color: task.color,
+                isCompleted: task.isCompleted,
+                completedAt: task.completedAt,
+                displayOrder: task.displayOrder,
+
+                ...(task.dateType === DateType.MULTIPLE ? {
+                        taskDates: task.taskDates.map(
+                            (taskDate) => ({
+                                taskDateId: taskDate.id,
+                                date: toDateString(
+                                    taskDate.date,
+                                ),
+                                isCompleted:
+                                    taskDate.isCompleted,
+                                completedAt:
+                                    taskDate.completedAt,
+                                name: task.name,
+                                color: task.color,
+                            }),
+                        ),
+                    } : {}),
+            })),
         };
     },
 };
