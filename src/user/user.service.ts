@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/app-error';
 import { signAccessToken, signRefreshToken, sha256 } from '../utils/jwt';
 import { sendEmailChangeVerification } from '../utils/mailer';
+import { logger } from '../utils/logger';
 import { uploadService } from '../upload/upload.service';
 import { userRepository } from './user.repository';
 import { UpdateMeBody, UpdateSettingsBody, ChangePasswordBody } from './user.schema';
@@ -236,7 +237,11 @@ export const userService = {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
       }
-      throw err;
+      logger.error(err);
+      throw new AppError(
+        'COMMON_INTERNAL_ERROR',
+        '이메일 변경 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.',
+      );
     }
     if (result.count === 0) {
       // 위 사전 검증과 실제 반영 사이에 동시 요청이 쿨다운/상한을 먼저 채운 경합 상황.
@@ -290,7 +295,11 @@ export const userService = {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
       }
-      throw err;
+      logger.error(err);
+      throw new AppError(
+        'COMMON_INTERNAL_ERROR',
+        '이메일 변경 확정에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      );
     }
     if (result.count === 0) {
       throw new AppError('COMMON_INVALID_INPUT', '인증 링크가 만료되었거나 유효하지 않습니다.');
