@@ -1,5 +1,10 @@
 import { Router } from 'express';
+
+import { validateBody } from '../middlewares/validate.middleware';
+import { authMiddleware } from '../middlewares/auth.middleware';
+
 import { signup, login, socialLogin, refresh, logout, issueTempPassword } from './auth.controller';
+import { signupSchema, loginSchema, refreshSchema } from './auth.schema';
 
 const router = Router();
 
@@ -19,7 +24,6 @@ const router = Router();
  *       이메일·비밀번호로 회원가입합니다. 같은 이메일 중복 가입은 불가하며,
  *       가입 시 닉네임은 필수, 프로필 이미지·Bio는 선택입니다.
  *       닉네임은 중복 허용이나 닉네임#태그(uniqueTag) 조합은 유일하게 발급됩니다.
- *       가입 완료 시 예시 카테고리·마일스톤·태스크가 자동 생성(온보딩)됩니다.
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -63,7 +67,7 @@ const router = Router();
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/signup', signup);
+router.post('/auth/signup', validateBody(signupSchema), signup);
 
 /**
  * @swagger
@@ -120,7 +124,7 @@ router.post('/auth/signup', signup);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/login', login);
+router.post('/auth/login', validateBody(loginSchema), login);
 
 /**
  * @swagger
@@ -241,7 +245,7 @@ router.post('/auth/social/:provider', socialLogin);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/refresh', refresh);
+router.post('/auth/refresh', validateBody(refreshSchema), refresh);
 
 /**
  * @swagger
@@ -264,7 +268,7 @@ router.post('/auth/refresh', refresh);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/auth/logout', logout);
+router.post('/auth/logout', authMiddleware, logout);
 
 /**
  * @swagger

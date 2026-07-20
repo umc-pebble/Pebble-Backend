@@ -264,9 +264,10 @@ const options: swaggerJSDoc.Options = {
             },
           },
         },
-        User: {
+        UserPublicProfile: {
           type: 'object',
-          description: '회원 공개 정보. password·refreshToken 등 민감 필드는 응답에서 제외.',
+          description:
+            '회원 식별·프로필 공통 필드. UserProfile·User 스키마가 공유하는 기반 스키마로, 단독으로는 API 응답에 쓰이지 않는다.',
           properties: {
             id: { type: 'integer', example: 42 },
             email: { type: 'string', format: 'email', example: 'pebble@umc.com' },
@@ -286,22 +287,63 @@ const options: swaggerJSDoc.Options = {
               description: '마지막 닉네임 변경 시각 (15일 쿨다운 계산용, PLB-043)',
               example: null,
             },
-            activityColor: {
+            nicknameChangableAfter: {
               type: 'string',
-              maxLength: 20,
+              format: 'date-time',
               nullable: true,
-              description: '징검다리 색상 (팔레트 내 선택, PLB-026)',
-              example: '#7ED321',
-            },
-            notifyTaskDue: { type: 'boolean', description: '당일/마감 알림 on/off', example: true },
-            theme: { type: 'string', enum: ['LIGHT', 'DARK'], example: 'LIGHT' },
-            isTempPassword: {
-              type: 'boolean',
-              description: '임시 비밀번호 상태 (재설정 직후 true, 변경 유도)',
-              example: false,
+              description: '닉네임 재변경 가능 시각 (lastNicknameChangedAt + 15일, 서버 계산값, FE 표시용)',
+              example: null,
             },
             createdAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
-            updatedAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+          },
+        },
+        UserProfile: {
+          description:
+            '프로필 조회/편집 응답 전용 스키마. 테마·알림·징검다리 색상 등 설정값은 포함하지 않으며, 해당 값은 GET/PATCH /users/me/settings에서 다룬다.',
+          allOf: [{ $ref: '#/components/schemas/UserPublicProfile' }],
+        },
+        User: {
+          description: '회원 공개 정보. password·refreshToken 등 민감 필드는 응답에서 제외.',
+          allOf: [
+            { $ref: '#/components/schemas/UserPublicProfile' },
+            {
+              type: 'object',
+              properties: {
+                activityColor: {
+                  type: 'string',
+                  maxLength: 20,
+                  nullable: true,
+                  description: '징검다리 색상 (팔레트 내 선택, PLB-026)',
+                  example: '#7ED321',
+                },
+                notifyTaskDue: { type: 'boolean', description: '당일/마감 알림 on/off', example: true },
+                theme: { type: 'string', enum: ['LIGHT', 'DARK'], example: 'LIGHT' },
+                isTempPassword: {
+                  type: 'boolean',
+                  description: '임시 비밀번호 상태 (재설정 직후 true, 변경 유도)',
+                  example: false,
+                },
+                updatedAt: { type: 'string', format: 'date-time', example: '2026-07-05T10:30:00+09:00' },
+              },
+            },
+          ],
+        },
+        UserProfileSummary: {
+          type: 'object',
+          description:
+            'PATCH /users/me 등 부분 수정 응답에서 사용하는 프로필 요약. 전체 프로필은 UserProfile(GET /users/me) 참고.',
+          properties: {
+            id: { type: 'integer', example: 1 },
+            nickname: { type: 'string', example: 'newName' },
+            uniqueTag: { type: 'string', example: '1234' },
+            bio: { type: 'string', nullable: true, example: '새 소개글' },
+            profileImageUrl: { type: 'string', nullable: true, example: 'https://supabase.../new.jpg' },
+            lastNicknameChangedAt: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true,
+              example: '2026-07-06T00:00:00+09:00',
+            },
           },
         },
         AuthTokens: {
@@ -348,7 +390,6 @@ const options: swaggerJSDoc.Options = {
               enum: [
                 'FOLLOW_REQUEST',
                 'FOLLOW_ACCEPTED',
-                'FOLLOW_REJECTED',
                 'TASK_DUE',
                 'MILESTONE_DUE',
                 'REPORT',
