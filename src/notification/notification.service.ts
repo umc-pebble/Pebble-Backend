@@ -132,4 +132,10 @@ export const notificationService = {
 
     return notificationRepository.createMany(data);
   },
+
+  // 만료(30일 경과)된 알림 물리 삭제 배치(PLB-038). 조회에서는 이미 notExpiredWhere()로
+  // 걸러지므로 사용자에게 보이는 동작에는 영향이 없고, DB에 쌓이는 만료 행을 정리하는 용도다.
+  async purgeExpiredNotifications() {
+    return notificationRepository.deleteExpired();
+  },
 };

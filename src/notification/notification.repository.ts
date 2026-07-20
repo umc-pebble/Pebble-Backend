@@ -70,4 +70,10 @@ export const notificationRepository = {
     if (data.length === 0) return Promise.resolve({ count: 0 });
     return prisma.notification.createMany({ data, skipDuplicates: true });
   },
+
+  // 만료(expiresAt < now) 알림 물리 삭제 (PLB-038 보관 정책). 조회 쪽은 notExpiredWhere()로
+  // 이미 숨기고 있으므로, 이 배치는 순수하게 DB 용량 정리 목적이다.
+  deleteExpired() {
+    return prisma.notification.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  },
 };

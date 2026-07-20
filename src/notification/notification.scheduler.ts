@@ -16,7 +16,18 @@ async function runDailyDueBatch() {
   }
 }
 
+// 만료(30일 경과) 알림 물리 삭제 배치. 조회는 이미 expiresAt으로 걸러지므로 사용자 관점에서
+// 급할 게 없어, due-batch와는 별도로 하루 한 번(00시 10분 KST)만 조용히 정리한다.
+async function runExpiredPurgeBatch() {
+  try {
+    await notificationService.purgeExpiredNotifications();
+  } catch (err) {
+    logger.error(err);
+  }
+}
+
 export function registerNotificationScheduler() {
   runDailyDueBatch();
   cron.schedule('0 0 * * *', runDailyDueBatch, { timezone: 'Asia/Seoul' });
+  cron.schedule('10 0 * * *', runExpiredPurgeBatch, { timezone: 'Asia/Seoul' });
 }
