@@ -968,7 +968,6 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *                     deleteScope: ALL
  *                     deletedTaskDateIds: [102, 103]
  *                     deletedCount: 2
- *                     preservedCount: 1
  *       400:
  *         description: 삭제 범위 입력값 오류
  *         content:

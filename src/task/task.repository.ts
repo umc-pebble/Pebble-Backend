@@ -75,7 +75,84 @@ export const taskRepository = {
                 },
             },
         });
-    }
+    },
 
+    //userId 기준 task 조회 (dateType 확인 위해)
+    findTaskByIdAndUserId: async (taskId: number, userId: number) => {
+        return prisma.task.findFirst({
+            where: {
+                id: taskId,
+                userId,
+            },
+            select: {
+                id: true,
+                dateType: true,
+            },
+        });
+    },
 
+    // SINGLE/RANGE 태스크 전체 삭제
+    deleteTaskById: async (taskId: number) => {
+        return prisma.task.delete({
+            where: {
+                id: taskId,
+            },
+        });
+    },
+
+    //taskDateId가 taskId에 속해 있는지 조회 (THIS_ONLY시)
+    findTaskDateByIdAndTaskId: async ( taskDateId: number, taskId: number ) => {
+        return prisma.taskDate.findFirst({
+            where: {
+                id: taskDateId,
+                taskId,
+            },
+            select: {
+                id: true,
+                date: true,
+                isCompleted: true,
+            },
+        });
+    },
+
+    //THIS_ONLY 삭제
+    deleteTaskDateById: async (taskDateId: number) => {
+        return prisma.taskDate.delete({
+            where: {
+                id: taskDateId,
+            },
+        });
+    },
+
+    // ALL 삭제 대상 조회
+    findFutureIncompleteTaskDates: async ( taskId: number, today: Date ) => {
+        return prisma.taskDate.findMany({
+            where: {
+                taskId,
+                date: {
+                    gte: today,
+                },
+                isCompleted: false,
+            },
+            select: {
+                id: true,
+            },
+            orderBy: {
+                date: 'asc',
+            },
+        });
+    },
+
+    // 미래 미완료 회차 일괄 삭제
+    deleteFutureIncompleteTaskDates: async ( taskId: number, today: Date ) => {
+        return prisma.taskDate.deleteMany({
+            where: {
+                taskId,
+                date: {
+                    gte: today,
+                },
+                isCompleted: false,
+            },
+        });
+    },
 };
