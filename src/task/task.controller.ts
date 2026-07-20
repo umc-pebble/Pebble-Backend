@@ -29,7 +29,10 @@ export const toggleTaskComplete = (_req: Request, res: Response) => {
   sendSuccess(res, null, '태스크 완료 토글 (미구현)');
 };
 
-export const deleteTask = (_req: Request, res: Response) => {
+export const deleteTask = (
+  req: AuthRequest,
+  res: Response,
+) => {
   sendSuccess(res, null, '태스크 삭제 (미구현)');
 };
 

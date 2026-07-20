@@ -139,4 +139,28 @@ export const createTaskSchema = z
     }
   });
 
+export const deleteTaskQuerySchema = z
+  .object({
+    deleteScope: z.enum(['THIS_ONLY', 'ALL']).optional(),
+    taskDateId: z.coerce.number().int().positive().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.deleteScope === 'THIS_ONLY' && value.taskDateId == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['taskDateId'],
+        message: '이 항목만 삭제하려면 taskDateId가 필요합니다.',
+      });
+    }
+
+    if (value.deleteScope === 'ALL' && value.taskDateId != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['taskDateId'],
+        message: '전체 삭제에는 taskDateId를 지정할 수 없습니다.',
+      });
+    }
+  });
+  
 export type CreateTaskBody = z.infer<typeof createTaskSchema>;
+export type DeleteTaskQuery = z.infer<typeof deleteTaskQuerySchema>;

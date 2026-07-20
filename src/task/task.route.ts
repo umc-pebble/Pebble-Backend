@@ -8,7 +8,7 @@ import {
   reorderTasks,
 } from './task.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { createTaskSchema } from './task.schema';
+import { createTaskSchema, deleteTaskQuerySchema } from './task.schema';
 import { validateBody } from '../middlewares/validate.middleware';
 
 const router = Router();
@@ -1006,6 +1006,6 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.delete('/tasks/:taskId', deleteTask);
+router.delete('/tasks/:taskId', authMiddleware, deleteTask);
 
 export default router;
