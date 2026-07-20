@@ -201,4 +201,95 @@ export const taskRepository = {
             },
         });
     },
+
+    findIndependentTasksByMonth: async (
+        userId: number,
+        monthStart: Date,
+        nextMonthStart: Date,
+    ) => {
+        return prisma.task.findMany({
+            where: {
+                userId,
+                categoryId: null,
+                milestoneId: null,
+
+                OR: [
+                    // SINGLE: 시작일이 조회 월에 포함
+                    {
+                        dateType: DateType.SINGLE,
+                        startDate: {
+                            gte: monthStart,
+                            lt: nextMonthStart,
+                        },
+                    },
+
+                    // RANGE: 조회 월과 기간이 하루라도 겹침
+                    {
+                        dateType: DateType.RANGE,
+                        startDate: {
+                            lt: nextMonthStart,
+                        },
+                        endDate: {
+                            gte: monthStart,
+                        },
+                    },
+
+                    // MULTIPLE: 조회 월에 해당하는 회차가 하나 이상 존재
+                    {
+                        dateType: DateType.MULTIPLE,
+                        taskDates: {
+                            some: {
+                                date: {
+                                    gte: monthStart,
+                                    lt: nextMonthStart,
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+
+            select: {
+                id: true,
+                userId: true,
+                categoryId: true,
+                milestoneId: true,
+                name: true,
+                dateType: true,
+                startDate: true,
+                endDate: true,
+                color: true,
+                isCompleted: true,
+                completedAt: true,
+                displayOrder: true,
+
+                taskDates: {
+                    where: {
+                        date: {
+                            gte: monthStart,
+                            lt: nextMonthStart,
+                        },
+                    },
+                    select: {
+                        id: true,
+                        date: true,
+                        isCompleted: true,
+                        completedAt: true,
+                    },
+                    orderBy: {
+                        date: 'asc',
+                    },
+                },
+            },
+
+            orderBy: [
+                {
+                    displayOrder: 'asc',
+                },
+                {
+                    id: 'asc',
+                },
+            ],
+        });
+    },
 };
