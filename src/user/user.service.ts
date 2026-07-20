@@ -133,7 +133,7 @@ export const userService = {
       input.profileImageUrl !== user.profileImageUrl &&
       user.profileImageUrl
     ) {
-      await uploadService.deleteImage(user.profileImageUrl);
+      await uploadService.deleteImage(user.profileImageUrl, userId);
     }
 
     const updated = await getUserOrThrow(userId);

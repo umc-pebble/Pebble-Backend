@@ -42,9 +42,12 @@ export const uploadService = {
 
   // 프로필 이미지 등이 교체/제거될 때 이전 파일을 정리한다. 호출부(user.service.ts 등)의
   // 응답 자체를 실패시키지 않도록 베스트 에포트로 동작하며, 실패해도 에러를 던지지 않고 로그만 남긴다.
-  async deleteImage(imageUrl: string | null | undefined) {
+  // userId를 받아 assertOwnedImage와 동일한 기준(경로 접두사)으로 다시 한 번 소유권을 확인한다 —
+  // 호출부가 검증을 빠뜨리더라도 이 함수 자체가 "같은 버킷"이라는 이유만으로 남의 파일을 지우지 않도록 이중 방어한다.
+  async deleteImage(imageUrl: string | null | undefined, userId: number) {
     if (!imageUrl || !imageUrl.startsWith(PUBLIC_URL_PREFIX)) return;
     const path = imageUrl.slice(PUBLIC_URL_PREFIX.length);
+    if (!path.startsWith(`${userId}/`)) return;
 
     try {
       const { error } = await supabase.storage.from(UPLOAD_BUCKET).remove([path]);
