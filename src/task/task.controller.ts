@@ -1,16 +1,24 @@
-import { Request, Response } from 'express';
+import { NextFunction, Response } from 'express';
+import { AuthRequest } from '../middlewares/auth.middleware';
 import { sendSuccess } from '../utils/response';
-
-// Task Controller
-// req/res 처리만 담당. 실제 로직은 추후 taskService로 위임 예정.
-// 라우트/문서 검증용 스텁이며, 공통 응답 포맷 { success, message, data }는 sendSuccess로 반환한다.
+import { taskService } from './task.service';
 
 export const getTasks = (_req: Request, res: Response) => {
   sendSuccess(res, { tasks: [] }, '종속 태스크 목록 조회 (미구현)');
 };
 
-export const createTask = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '태스크 생성 (미구현)', 201);
+export const createTask = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = req.userId!;
+    const result = await taskService.createTask(userId, req.body);
+    sendSuccess(res, result, '태스크 생성 성공', 201);
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const updateTask = (_req: Request, res: Response) => {
