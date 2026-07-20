@@ -2,13 +2,39 @@ import { AppError } from "../utils/app-error";
 import { activityRepository } from "./activity.repository";
 
 // 한국 기준 YYYY-MM-DD 문자열
-const formatDate = (date: Date): string => {
+const formatDateKST = (date: Date): string => {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Seoul',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).format(date);
+};
+
+// UTC 자정 Date를 YYYY-MM-DD로 변환
+const formatDate = (date: Date): string => {
+  return date.toISOString().slice(0, 10);
+};
+
+const parseDate = (value: string): Date => {
+  const [year, month, day] = value.split('-').map(Number);
+
+  const date = new Date(
+    Date.UTC(year, month - 1, day),
+  );
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new AppError(
+      'COMMON_INVALID_INPUT',
+      'baseDate는 YYYY-MM-DD 형식이어야 합니다.',
+    );
+  }
+
+  return date;
 };
 
 //level 계산 함수
@@ -61,7 +87,7 @@ export const activityService = {
             }
         }
 
-        const baseDateString = baseDate ?? formatDate(new Date());
+        const baseDateString = baseDate ?? formatDateKST(new Date());
 
         if (!/^\d{4}-\d{2}-\d{2}$/.test(baseDateString)) {
             throw new AppError(
@@ -70,16 +96,7 @@ export const activityService = {
             );
         }
 
-        const endDate = new Date(
-            `${baseDateString}T00:00:00+09:00`,
-        );
-        
-        if ( Number.isNaN(endDate.getTime()) || formatDate(endDate) !== baseDateString) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                'baseDate는 YYYY-MM-DD 형식이어야 합니다.',
-            );
-        }
+        const endDate = parseDate(baseDateString);
 
         //startDate: endDate-6
         const startDate = new Date(endDate);
