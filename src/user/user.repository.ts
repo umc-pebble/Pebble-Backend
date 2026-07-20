@@ -57,18 +57,79 @@ export const userRepository = {
   },
 
   // 이메일 변경 요청: 확정 전까지 email 컬럼은 그대로 두고 pending* 필드에만 기록한다.
+  // 쿨다운(1분)·시간당 상한 조건을 where에 실어 원자적으로 체크한다 — 사전 검증(서비스)을 동시 요청
+  // 두 개가 모두 통과해도, 실제 반영 시점엔 조건을 다시 만족하는 하나만 성공한다(count===0이면 경합 패배).
   setPendingEmailChange(
     userId: number,
     pendingEmail: string,
     tokenHash: string,
     expiresAt: Date,
+    rateLimit: {
+      now: Date;
+      cooldownBoundary: Date;
+      windowExpired: boolean;
+      currentWindowStart: Date | null;
+      windowBoundary: Date;
+      maxRequestsPerWindow: number;
+    },
   ) {
-    return prisma.user.update({
-      where: { id: userId },
+    return prisma.user.updateMany({
+      where: {
+        id: userId,
+        AND: [
+          {
+            OR: [
+              { emailChangeLastRequestedAt: null },
+              { emailChangeLastRequestedAt: { lte: rateLimit.cooldownBoundary } },
+            ],
+          },
+          rateLimit.windowExpired
+            ? {
+                OR: [
+                  { emailChangeRequestWindowStart: null },
+                  { emailChangeRequestWindowStart: { lte: rateLimit.windowBoundary } },
+                ],
+              }
+            : {
+                emailChangeRequestWindowStart: rateLimit.currentWindowStart,
+                emailChangeRequestCount: { lt: rateLimit.maxRequestsPerWindow },
+              },
+        ],
+      },
       data: {
         pendingEmail,
         emailChangeTokenHash: tokenHash,
         emailChangeTokenExpiresAt: expiresAt,
+        emailChangeLastRequestedAt: rateLimit.now,
+        emailChangeRequestWindowStart: rateLimit.windowExpired ? rateLimit.now : rateLimit.currentWindowStart,
+        emailChangeRequestCount: rateLimit.windowExpired ? 1 : { increment: 1 },
+      },
+    });
+  },
+
+  // 인증 메일 발송 실패 시 롤백용: 방금 써둔 pending* 예약과 rate limit 반영분을 되돌려
+  // 다른 유저가 같은 이메일을 요청할 수 있게 하고, 실패한 시도가 본인의 쿨다운/상한을
+  // 갉아먹지 않게 한다. confirmEmailChange와 동일하게 그사이 값이 바뀌었다면
+  // (예: 재요청으로 새 토큰 발급) where가 매칭되지 않아 조용히 무시된다 — 의도된 동작이다.
+  clearPendingEmailChange(
+    userId: number,
+    pendingEmail: string,
+    tokenHash: string,
+    previousRateLimit: { lastRequestedAt: Date | null; windowStart: Date | null; count: number },
+  ) {
+    return prisma.user.updateMany({
+      where: {
+        id: userId,
+        pendingEmail,
+        emailChangeTokenHash: tokenHash,
+      },
+      data: {
+        pendingEmail: null,
+        emailChangeTokenHash: null,
+        emailChangeTokenExpiresAt: null,
+        emailChangeLastRequestedAt: previousRateLimit.lastRequestedAt,
+        emailChangeRequestWindowStart: previousRateLimit.windowStart,
+        emailChangeRequestCount: previousRateLimit.count,
       },
     });
   },

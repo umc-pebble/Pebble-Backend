@@ -80,6 +80,9 @@ model User {
   pendingEmail          String?   @unique @db.VarChar(255) // 이메일 변경 요청 중인 새 이메일. 확정 전까지 email은 그대로 유지 (PLB-042)
   emailChangeTokenHash  String?   @db.VarChar(255) // 이메일 변경 확정 토큰의 sha256 해시 (refreshToken과 동일하게 원문 미저장)
   emailChangeTokenExpiresAt DateTime? // 이메일 변경 토큰 만료 시각
+  emailChangeLastRequestedAt DateTime? // 마지막 이메일 변경 요청 시각 (1분 쿨다운 계산 기준)
+  emailChangeRequestWindowStart DateTime? // 시간당 요청 상한 계산용 현재 윈도우 시작 시각
+  emailChangeRequestCount    Int       @default(0) // emailChangeRequestWindowStart 이후 누적 요청 횟수 (시간당 5회 상한)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
