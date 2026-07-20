@@ -170,6 +170,7 @@ model Category {
 
   user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   milestones Milestone[]
+  tasks      Task[]
   members    SharedCategoryMember[]
 
   @@index([userId])
@@ -198,7 +199,8 @@ model Milestone {
 model Task {
   id           Int       @id @default(autoincrement())
   userId       Int
-  milestoneId  Int? // 종속 태스크=NOT NULL, 단일 태스크=NULL
+  categoryId   Int? // NULL이면 독립 태스크, 값이 있으면 카테고리 소속 하위 태스크
+  milestoneId  Int? // 카테고리 직속 태스크는 NULL, 마일스톤 하위 태스크는 NOT NULL
   name         String    @db.VarChar(100)
   dateType     DateType
   startDate    DateTime  @db.Date
@@ -214,9 +216,11 @@ model Task {
   updatedAt    DateTime  @updatedAt
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  Category?  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
 
   @@index([userId, startDate])
+  @@index([categoryId, startDate])
   @@index([milestoneId, startDate])
   @@index([seriesId])
 }
