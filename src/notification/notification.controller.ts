@@ -49,3 +49,18 @@ export const deleteAllNotifications = async (
     next(err);
   }
 };
+
+// QA/개발 편의용 수동 트리거. 실제 서비스에서는 notification.scheduler.ts의 cron(매일 00:00 KST)이
+// 알아서 호출하므로 이 엔드포인트를 쓸 필요가 없다 — Swagger 문서에도 의도적으로 올리지 않는다.
+export const triggerDailyDueBatch = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const result = await notificationService.generateDailyDueNotifications();
+    sendSuccess(res, result, '당일 마감 알림 배치 실행 완료 (QA용)');
+  } catch (err) {
+    next(err);
+  }
+};

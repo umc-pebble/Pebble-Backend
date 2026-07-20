@@ -138,40 +138,8 @@ router.patch('/users/me', validateBody(updateMeSchema), updateMe);
  */
 router.delete('/users/me', deleteMe);
 
-/**
- * @swagger
- * /users/{userId}:
- *   get:
- *     summary: 타인 프로필 조회
- *     description: 다른 회원의 공개 프로필을 조회합니다(팔로우 화면 등에서 사용).
- *     tags: [User]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: userId
- *         in: path
- *         required: true
- *         schema: { type: integer }
- *         description: 조회 대상 사용자 id
- *         example: 7
- *     responses:
- *       200:
- *         description: 조회 성공
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     data: { $ref: '#/components/schemas/User' }
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- *       500:
- *         $ref: '#/components/responses/InternalServerError'
- */
+// 타인 프로필 조회: 불필요한 것으로 판명되어 Swagger 문서에서 제외했다. 라우트 자체는
+// 하위 호환을 위해 스텁으로 남겨둔다("미구현" 응답).
 router.get('/users/:userId', getUser);
 
 /**
