@@ -25,8 +25,35 @@ export const updateTask = (_req: Request, res: Response) => {
   sendSuccess(res, null, '태스크 수정 (미구현)');
 };
 
-export const toggleTaskComplete = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '태스크 완료 토글 (미구현)');
+export const toggleTaskComplete = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = req.userId!;
+    const taskId = Number(req.params.taskId);
+
+    const taskDateId =
+      req.query.taskDateId !== undefined
+        ? Number(req.query.taskDateId)
+        : undefined;
+
+    const result = await taskService.toggleTaskComplete(
+      userId,
+      taskId,
+      taskDateId,
+    );
+
+    sendSuccess(
+      res,
+      result,
+      '완료 처리 성공',
+      200,
+    );
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const deleteTask = async (

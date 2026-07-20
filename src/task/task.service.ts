@@ -166,4 +166,94 @@ export const taskService = {
             deletedCount: deletedTaskDateIds.length,
         };
     },
+
+    toggleTaskComplete: async (
+        userId: number,
+        taskId: number,
+        taskDateId?: number,
+    ) => {
+        if (!Number.isInteger(taskId) || taskId <= 0) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                'taskId는 양의 정수여야 합니다.',
+            );
+        }
+
+        if (
+            taskDateId !== undefined &&
+            (!Number.isInteger(taskDateId) || taskDateId <= 0)
+        ) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                'taskDateId는 양의 정수여야 합니다.',
+            );
+        }
+
+        const task = await taskRepository.findTaskByIdAndUserId(
+            taskId,
+            userId,
+        );
+
+        if (!task) {
+            throw new AppError(
+                'COMMON_NOT_FOUND',
+                '태스크를 찾을 수 없습니다.',
+            );
+        }
+
+        // MULTIPLE
+        if (task.dateType === DateType.MULTIPLE) {
+            if (taskDateId == null) {
+                throw new AppError(
+                    'COMMON_INVALID_INPUT',
+                    '다중 태스크는 taskDateId가 필요합니다.',
+                );
+            }
+
+            const taskDate = await taskRepository.findTaskDateByIdAndTaskId(
+                taskDateId,
+                taskId,
+            );
+
+            if (!taskDate) {
+                throw new AppError(
+                    'COMMON_NOT_FOUND',
+                    '태스크를 찾을 수 없습니다.',
+                );
+            }
+
+            const updatedTaskDate = await taskRepository.updateTaskDateCompletion(
+                taskDateId,
+                !taskDate.isCompleted,
+            );
+
+            return {
+                taskId: updatedTaskDate.taskId,
+                taskDateId: updatedTaskDate.id,
+                date: updatedTaskDate.date.toISOString().slice(0, 10),
+                isCompleted: updatedTaskDate.isCompleted,
+                completedAt: updatedTaskDate.completedAt,
+            };
+        }
+
+        // SINGLE / RANGE
+        if (taskDateId !== undefined) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                '다중 태스크가 아닌 경우 taskDateId를 사용할 수 없습니다.',
+            );
+        }
+
+        const updatedTask =
+            await taskRepository.updateTaskCompletion(
+                taskId,
+                !task.isCompleted,
+            );
+
+        return {
+            id: updatedTask.id,
+            isCompleted: updatedTask.isCompleted,
+            completedAt: updatedTask.completedAt,
+        };
+    },
 };
