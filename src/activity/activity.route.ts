@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getActivityByUserId } from './activity.controller';
+import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -69,36 +70,29 @@ const router = Router();
  *                           type: array
  *                           items:
  *                             $ref: '#/components/schemas/GrassDay'
- *             example:
- *               success: true
- *               message: 요청 성공
- *               data:
- *                 userId: 1
- *                 nickname: 페블이
- *                 activityColor: '#22C55E'
- *                 baseDate: 2026-06-11
- *                 logs:
- *                   - date: 2026-06-05
- *                     completedTaskCount: 0
- *                     level: 0
- *                   - date: 2026-06-06
- *                     completedTaskCount: 2
- *                     level: 1
- *                   - date: 2026-06-07
- *                     completedTaskCount: 4
- *                     level: 2
- *                   - date: 2026-06-08
- *                     completedTaskCount: 5
- *                     level: 3
- *                   - date: 2026-06-09
- *                     completedTaskCount: 0
- *                     level: 0
- *                   - date: 2026-06-10
- *                     completedTaskCount: 0
- *                     level: 0
- *                   - date: 2026-06-11
- *                     completedTaskCount: 0
- *                     level: 0
+ *
+ *       400:
+ *         description: 잘못된 요청 값
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               invalidUserId:
+ *                 summary: 잘못된 사용자 ID
+ *                 value:
+ *                   success: false
+ *                   message: 유효하지 않은 사용자 ID입니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *               invalidBaseDate:
+ *                 summary: 잘못된 기준 날짜
+ *                 value:
+ *                   success: false
+ *                   message: baseDate는 YYYY-MM-DD 형식이어야 합니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -106,7 +100,7 @@ const router = Router();
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
+ *               $ref: '#/components/schemas/ErrorResponse'
  *             example:
  *               success: false
  *               message: 징검다리를 조회할 권한이 없습니다.
@@ -117,7 +111,7 @@ const router = Router();
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
+ *               $ref: '#/components/schemas/ErrorResponse'
  *             example:
  *               success: false
  *               message: 유저를 찾을 수 없습니다.
@@ -126,6 +120,6 @@ const router = Router();
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/activity-logs/users/:userId', getActivityByUserId);
+router.get('/activity-logs/users/:userId', authMiddleware, getActivityByUserId);
 
 export default router;
