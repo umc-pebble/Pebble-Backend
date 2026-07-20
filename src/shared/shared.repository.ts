@@ -11,8 +11,30 @@ export const sharedRepository = {
     return prisma.category.findUnique({ where: { id: categoryId } });
   },
 
-  setCategoryShared(categoryId: number, isShared: boolean) {
-    return prisma.category.update({ where: { id: categoryId }, data: { isShared } });
+  // 전환(isShared=true) + 오너 등록 + 초대 대상 등록을 하나의 트랜잭션으로 묶는다.
+  // 중간에 실패하면 전부 롤백되어 "카테고리는 공유로 바뀌었는데 멤버가 없는" 상태를 막는다.
+  // (auth.repository의 createUserWithRefreshToken과 동일한 패턴)
+  shareCategoryTransaction(categoryId: number, ownerId: number, inviteeUserIds: number[]) {
+    return prisma.$transaction(async (tx) => {
+      await tx.category.update({ where: { id: categoryId }, data: { isShared: true } });
+      await tx.sharedCategoryMember.create({
+        data: { categoryId, userId: ownerId, role: 'OWNER', status: 'ACCEPTED' },
+      });
+      if (inviteeUserIds.length > 0) {
+        await tx.sharedCategoryMember.createMany({
+          data: inviteeUserIds.map((userId) => ({
+            categoryId,
+            userId,
+            role: 'MEMBER' as const,
+            status: 'PENDING' as const,
+          })),
+        });
+      }
+      return tx.sharedCategoryMember.findMany({
+        where: { categoryId },
+        orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+      });
+    });
   },
 
   deleteCategory(categoryId: number) {
@@ -39,17 +61,6 @@ export const sharedRepository = {
     status: SharedCategoryStatus,
   ) {
     return prisma.sharedCategoryMember.create({ data: { categoryId, userId, role, status } });
-  },
-
-  createMembersMany(
-    entries: {
-      categoryId: number;
-      userId: number;
-      role: SharedCategoryRole;
-      status: SharedCategoryStatus;
-    }[],
-  ) {
-    return prisma.sharedCategoryMember.createMany({ data: entries });
   },
 
   updateMemberStatus(categoryId: number, userId: number, status: SharedCategoryStatus) {

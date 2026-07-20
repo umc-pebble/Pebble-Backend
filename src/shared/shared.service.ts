@@ -71,28 +71,34 @@ export const sharedService = {
       );
     }
 
+    // 같은 요청 안에서 같은 대상이 nickname/email로 중복 지정된 경우, resolve된 userId
+    // 기준으로 조용히 한 번만 처리한다 (안 그러면 아래 트랜잭션의 유니크 제약에서 터짐).
     const targets = [];
+    const seenUserIds = new Set<number>();
     for (const invite of invites) {
       const user = await resolveInviteTarget(invite);
+      if (seenUserIds.has(user.id)) {
+        continue;
+      }
+      seenUserIds.add(user.id);
       await assertInvitable(userId, categoryId, user.id);
       targets.push(user);
     }
 
-    await sharedRepository.setCategoryShared(categoryId, true);
-    await sharedRepository.createMember(categoryId, userId, 'OWNER', 'ACCEPTED');
-    await sharedRepository.createMembersMany(
-      targets.map((t) => ({
-        categoryId,
-        userId: t.id,
-        role: 'MEMBER' as const,
-        status: 'PENDING' as const,
-      })),
+    // 전환(isShared) + 오너 등록 + 초대 등록을 하나의 트랜잭션으로 묶는다 — 중간에 실패해도
+    // 부분 반영된 상태(예: isShared=true인데 멤버가 없는 상태)가 남지 않는다.
+    const members = await sharedRepository.shareCategoryTransaction(
+      categoryId,
+      userId,
+      targets.map((t) => t.id),
     );
+
+    // 알림은 트랜잭션에 안 묶는다 — 발송 실패가 이미 성공한 카테고리 전환을 되돌릴 이유는 없다.
     await Promise.all(
       targets.map((t) => sharedRepository.createNotification(t.id, 'CATEGORY_INVITE', categoryId)),
     );
 
-    return sharedRepository.findMembers(categoryId);
+    return members;
   },
 
   // 이미 공유 중인 카테고리에 멤버를 한 명 추가 초대한다 (PLB-048). 오너만 가능하다.
