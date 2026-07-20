@@ -110,6 +110,26 @@ export const deleteTask = async (
   }
 };
 
-export const reorderTasks = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '태스크 순서 변경 (미구현)');
+export const reorderTasks = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = req.userId!;
+
+    const result = await taskService.reorderTasks(
+      userId,
+      req.body,
+    );
+
+    sendSuccess(
+      res,
+      result,
+      '순서 변경 성공',
+      200,
+    );
+  } catch (error) {
+    next(error);
+  }
 };

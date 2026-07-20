@@ -242,7 +242,7 @@ export const taskRepository = {
                                     lt: nextMonthStart,
                                 },
                             },
-                            
+
                             // RANGE: 조회 월과 기간이 하루라도 겹침
                             {
                                 dateType: DateType.RANGE,
@@ -320,4 +320,64 @@ export const taskRepository = {
             ],
         });
     },
+
+    // 사용자가 소유한 마일스톤 조회
+    findMilestoneByIdAndUserId: async (
+        milestoneId: number,
+        userId: number,
+    ) => {
+        return prisma.milestone.findFirst({
+            where: {
+                id: milestoneId,
+                category: {
+                    userId,
+                },
+            },
+            select: {
+                id: true,
+            },
+        });
+    },
+
+    // 특정 마일스톤의 전체 태스크 ID 조회
+    findTaskIdsByMilestoneId: async (
+        milestoneId: number,
+        userId: number,
+    ) => {
+        return prisma.task.findMany({
+            where: {
+                milestoneId,
+                userId,
+            },
+            select: {
+                id: true,
+            },
+            orderBy: {
+                displayOrder: 'asc',
+            },
+        });
+    },
+
+    // 마일스톤 하위 태스크 순서 일괄 변경
+    updateTaskDisplayOrders: async (
+        orderedIds: number[],
+    ) => {
+        return prisma.$transaction(
+            orderedIds.map((taskId, index) =>
+                prisma.task.update({
+                    where: {
+                        id: taskId,
+                    },
+                    data: {
+                        displayOrder: index + 1,
+                    },
+                    select: {
+                        id: true,
+                        displayOrder: true,
+                    },
+                }),
+            ),
+        );
+    },
+
 };

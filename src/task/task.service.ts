@@ -1,7 +1,7 @@
 import { DateType } from '@prisma/client';
 import { AppError } from '../utils/app-error';
 import { taskRepository, CreateTaskData } from './task.repository';
-import { CreateTaskBody } from './task.schema';
+import { CreateTaskBody, ReorderTasksBody } from './task.schema';
 
 const toDate = (value: string): Date => {
     const [year, month, day] = value.split('-').map(Number);
@@ -356,6 +356,64 @@ export const taskService = {
                     } : {}),
                 };
             }),
+        };
+    },
+
+    reorderTasks: async (
+        userId: number,
+        body: ReorderTasksBody,
+    ) => {
+        const { milestoneId, orderedIds } = body;
+
+        // 마일스톤이 사용자의 것인지 확인
+        const milestone =
+            await taskRepository.findMilestoneByIdAndUserId( milestoneId, userId );
+
+        if (!milestone) {
+            throw new AppError(
+                'COMMON_NOT_FOUND',
+                '마일스톤을 찾을 수 없습니다.',
+            );
+        }
+
+        // 해당 마일스톤의 실제 전체 태스크 조회
+        const milestoneTasks =
+            await taskRepository.findTaskIdsByMilestoneId(
+                milestoneId,
+                userId,
+            );
+
+        const actualIds = milestoneTasks.map((task) => task.id);
+        const actualIdSet = new Set(actualIds);
+
+        // 다른 마일스톤 태스크가 포함됐는지 확인
+        const containsInvalidTask = orderedIds.some(
+            (taskId) => !actualIdSet.has(taskId),
+        );
+
+        if (containsInvalidTask) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                '다른 마일스톤의 태스크가 포함되어 있습니다.',
+            );
+        }
+
+        // 일부 태스크를 누락했는지 확인
+        if (orderedIds.length !== actualIds.length) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                '해당 마일스톤의 모든 태스크 ID를 전달해야 합니다.',
+            );
+        }
+
+        const updatedTasks =
+            await taskRepository.updateTaskDisplayOrders(
+                orderedIds,
+            );
+
+        return {
+            milestoneId,
+            tasks: updatedTasks,
         };
     },
 };

@@ -162,5 +162,26 @@ export const deleteTaskQuerySchema = z
     }
   });
   
+export const reorderTasksSchema = z.object({
+  milestoneId: z
+    .number()
+    .int('milestoneId는 정수여야 합니다.')
+    .positive('milestoneId는 양의 정수여야 합니다.'),
+
+  orderedIds: z
+    .array(
+      z
+        .number()
+        .int('orderedIds의 값은 정수여야 합니다.')
+        .positive('orderedIds의 값은 양의 정수여야 합니다.'),
+    )
+    .min(1, 'orderedIds에는 하나 이상의 taskId가 필요합니다.')
+    .refine(
+      (ids) => new Set(ids).size === ids.length,
+      'orderedIds에는 중복된 taskId를 지정할 수 없습니다.',
+    ),
+});
+
 export type CreateTaskBody = z.infer<typeof createTaskSchema>;
 export type DeleteTaskQuery = z.infer<typeof deleteTaskQuerySchema>;
+export type ReorderTasksBody = z.infer<typeof reorderTasksSchema>;
