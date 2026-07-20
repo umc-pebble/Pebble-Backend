@@ -4,7 +4,13 @@
 import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/app-error';
 import { logger } from '../utils/logger';
+import { getTodayKST } from '../utils/date';
 import { notificationRepository } from './notification.repository';
+import { milestoneRepository } from '../milestone/milestone.repository';
+import { taskRepository } from '../task/task.repository';
+import { userRepository } from '../user/user.repository';
+
+const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 최대 30일 보관 (PLB-038)
 
 // getOwnedNotificationOrThrow 통과 후에도 update/delete 사이에 다른 요청이 먼저 처리할 수 있으므로,
 // 그 경쟁 상황에서 발생하는 P2025(대상 없음)는 COMMON_NOT_FOUND로 변환한다.
@@ -88,5 +94,40 @@ export const notificationService = {
 
   async deleteAllNotifications(userId: number) {
     await notificationRepository.deleteAllExceptFollowRequest(userId);
+  },
+
+  // 매일 00시(KST) 배치. 당일(SINGLE·MULTIPLE) 마감인 마일스톤·태스크에 대해 MILESTONE_DUE·
+  // TASK_DUE 알림을 일괄 생성한다(PLB-038, 이슈 #56). RANGE는 "기간 중 언제 알릴지" 기준이
+  // PM 확인 대기 중이라 milestoneRepository/taskRepository 쪽 쿼리에서 이미 제외돼 있다.
+  // 완료된 항목은 애초에 저장소 쿼리에서 제외되고, notifyTaskDue를 꺼둔 유저는 여기서 제외한다.
+  async generateDailyDueNotifications() {
+    const today = getTodayKST();
+    const [dueMilestones, dueSingleTasks, dueMultipleTaskDates] = await Promise.all([
+      milestoneRepository.findDueTodayWithOwner(today),
+      taskRepository.findSingleDueToday(today),
+      taskRepository.findMultipleDueToday(today),
+    ]);
+
+    const candidates = [
+      ...dueMilestones.map((m) => ({ userId: m.category.userId, type: 'MILESTONE_DUE' as const, relatedId: m.id })),
+      ...dueSingleTasks.map((t) => ({ userId: t.userId, type: 'TASK_DUE' as const, relatedId: t.id })),
+      ...dueMultipleTaskDates.map((td) => ({
+        userId: td.task.userId,
+        type: 'TASK_DUE' as const,
+        relatedId: td.task.id,
+      })),
+    ];
+    if (candidates.length === 0) return { count: 0 };
+
+    const notifyEnabledIds = await userRepository.findNotifyEnabledIds([
+      ...new Set(candidates.map((c) => c.userId)),
+    ]);
+
+    const expiresAt = new Date(Date.now() + NOTIFICATION_RETENTION_MS);
+    const data: Prisma.NotificationCreateManyInput[] = candidates
+      .filter((c) => notifyEnabledIds.has(c.userId))
+      .map((c) => ({ userId: c.userId, type: c.type, relatedId: c.relatedId, expiresAt }));
+
+    return notificationRepository.createMany(data);
   },
 };

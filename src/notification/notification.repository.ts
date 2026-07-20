@@ -62,4 +62,10 @@ export const notificationRepository = {
       where: { userId, type: { not: 'FOLLOW_REQUEST' } },
     });
   },
+
+  // 일괄 생성 (PLB-038 당일 마감 알림 배치 등에서 사용).
+  createMany(data: Prisma.NotificationCreateManyInput[]) {
+    if (data.length === 0) return Promise.resolve({ count: 0 });
+    return prisma.notification.createMany({ data });
+  },
 };

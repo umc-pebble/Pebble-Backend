@@ -65,4 +65,18 @@ export const milestoneRepository = {
       ),
     );
   },
+
+  // 오늘(KST) 알림 배치용(PLB-038). SINGLE·MULTIPLE은 startDate가 곧 그 회차의 날짜라 동일한
+  // 조건으로 묶인다. RANGE는 "기간 중 언제 알릴지" 기준이 PM 확인 대기 중이라 이 쿼리에서
+  // 제외한다(이슈 #56). 소유자(userId)는 category를 통해서만 알 수 있다(2-hop).
+  findDueTodayWithOwner(today: Date) {
+    return prisma.milestone.findMany({
+      where: {
+        dateType: { in: ['SINGLE', 'MULTIPLE'] },
+        startDate: today,
+        isCompleted: false,
+      },
+      select: { id: true, category: { select: { userId: true } } },
+    });
+  },
 };

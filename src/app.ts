@@ -16,6 +16,7 @@ import userRouter from './user/user.route';
 import uploadRouter from './upload/upload.route';
 import followRouter from './follow/follow.route';
 import notificationRouter from './notification/notification.route';
+import { registerNotificationScheduler } from './notification/notification.scheduler';
 import reportRouter from './report/report.route';
 import subscriptionRouter from './subscription/subscription.route';
 import { ERROR_CODE } from './constants/error-code';
@@ -60,6 +61,8 @@ app.use((_req, res) => {
 });
 
 app.use(errorHandler);
+
+registerNotificationScheduler();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
