@@ -100,6 +100,8 @@ export const notificationService = {
   // TASK_DUE 알림을 일괄 생성한다(PLB-038, 이슈 #56). RANGE는 "기간 중 언제 알릴지" 기준이
   // PM 확인 대기 중이라 milestoneRepository/taskRepository 쪽 쿼리에서 이미 제외돼 있다.
   // 완료된 항목은 애초에 저장소 쿼리에서 제외되고, notifyTaskDue를 꺼둔 유저는 여기서 제외한다.
+  // (userId, type, relatedId, dueDate) 유니크 제약 + skipDuplicates 덕분에 같은 날 여러 번
+  // 호출돼도(서버 재시작 catch-up, QA 수동 트리거 등) 중복 알림이 쌓이지 않는다 — 멱등성 보장.
   async generateDailyDueNotifications() {
     const today = getTodayKST();
     const [dueMilestones, dueSingleTasks, dueMultipleTaskDates] = await Promise.all([
@@ -126,7 +128,7 @@ export const notificationService = {
     const expiresAt = new Date(Date.now() + NOTIFICATION_RETENTION_MS);
     const data: Prisma.NotificationCreateManyInput[] = candidates
       .filter((c) => notifyEnabledIds.has(c.userId))
-      .map((c) => ({ userId: c.userId, type: c.type, relatedId: c.relatedId, expiresAt }));
+      .map((c) => ({ userId: c.userId, type: c.type, relatedId: c.relatedId, dueDate: today, expiresAt }));
 
     return notificationRepository.createMany(data);
   },

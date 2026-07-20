@@ -63,9 +63,11 @@ export const notificationRepository = {
     });
   },
 
-  // 일괄 생성 (PLB-038 당일 마감 알림 배치 등에서 사용).
+  // 일괄 생성 (PLB-038 당일 마감 알림 배치 등에서 사용). skipDuplicates로 (userId, type,
+  // relatedId, dueDate) 유니크 제약과 충돌하는 행은 조용히 건너뛴다 — 배치 재실행(재시작 후
+  // catch-up, cron 중복 실행 등)으로 같은 날짜의 알림이 중복 생성되는 것을 막기 위함이다.
   createMany(data: Prisma.NotificationCreateManyInput[]) {
     if (data.length === 0) return Promise.resolve({ count: 0 });
-    return prisma.notification.createMany({ data });
+    return prisma.notification.createMany({ data, skipDuplicates: true });
   },
 };
