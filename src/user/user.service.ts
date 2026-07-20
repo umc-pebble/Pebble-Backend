@@ -60,6 +60,12 @@ export const userService = {
   async updateProfile(userId: number, input: UpdateMeBody) {
     const user = await getUserOrThrow(userId);
 
+    // 타인의 업로드 URL(같은 버킷)을 profileImageUrl에 넣고 나중에 교체/삭제해 그 파일이
+    // 지워지는 것을 막기 위해, 본인이 업로드한 파일인지 먼저 검증한다.
+    if (input.profileImageUrl) {
+      uploadService.assertOwnedImage(input.profileImageUrl, userId);
+    }
+
     // bio/profileImageUrl은 undefined면 Prisma가 update SET절에서 알아서 제외하므로 별도 가드가 필요 없다.
     const data: Prisma.UserUncheckedUpdateInput = {
       bio: input.bio,

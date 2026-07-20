@@ -13,12 +13,13 @@ import { IMAGE_EXTENSION_BY_MIME } from '../middlewares/upload.middleware';
 const PUBLIC_URL_PREFIX = `${process.env.SUPABASE_URL}/storage/v1/object/public/${UPLOAD_BUCKET}/`;
 
 export const uploadService = {
-  async uploadImage(file: Express.Multer.File) {
+  async uploadImage(file: Express.Multer.File, userId: number) {
     // fileFilter(upload.middleware.ts)에서 이미 검증된 mimetype만 들어오므로,
     // 클라이언트가 보낸 원본 파일명 대신 mimetype 기준으로 확장자를 고정한다.
     const extension = IMAGE_EXTENSION_BY_MIME[file.mimetype];
-    // 파일명 중복으로 인한 덮어쓰기를 막기 위해 UUID로 고유 파일명을 생성한다.
-    const fileName = `${randomUUID()}.${extension}`;
+    // 업로더 본인의 폴더 아래에 저장한다. 파일명 중복으로 인한 덮어쓰기 방지(UUID)뿐 아니라,
+    // 이 경로 자체가 "누가 업로드했는지"의 증빙이 되어 assertOwnedImage의 소유권 검증 기준이 된다.
+    const fileName = `${userId}/${randomUUID()}.${extension}`;
 
     try {
       const { error } = await supabase.storage.from(UPLOAD_BUCKET).upload(fileName, file.buffer, {
@@ -52,6 +53,17 @@ export const uploadService = {
       }
     } catch (err) {
       logger.error(err);
+    }
+  },
+
+  // 클라이언트가 리소스 필드(profileImageUrl 등)에 넣어 보낸 URL이 실제로 이 사용자가
+  // 업로드한 파일인지 검증한다. uploadImage가 파일을 `${userId}/...` 아래에 저장해두므로,
+  // 이 경로 접두사만으로 소유권을 판단할 수 있다 — 별도의 DB 매핑 테이블 없이도, 같은 버킷의
+  // 다른(타인 소유) 오브젝트 URL을 넣고 나중에 교체/삭제해 그 파일이 지워지는 것을 막는다.
+  assertOwnedImage(imageUrl: string, userId: number) {
+    const path = imageUrl.startsWith(PUBLIC_URL_PREFIX) ? imageUrl.slice(PUBLIC_URL_PREFIX.length) : null;
+    if (!path || !path.startsWith(`${userId}/`)) {
+      throw new AppError('COMMON_INVALID_INPUT', '본인이 업로드한 이미지만 사용할 수 있습니다.');
     }
   },
 };
