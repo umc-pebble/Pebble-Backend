@@ -5,7 +5,6 @@ import {
   getMe,
   updateMe,
   deleteMe,
-  getUser,
   getSettings,
   updateSettings,
   changePassword,
@@ -137,10 +136,6 @@ router.patch('/users/me', validateBody(updateMeSchema), updateMe);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.delete('/users/me', deleteMe);
-
-// 타인 프로필 조회: 불필요한 것으로 판명되어 Swagger 문서에서 제외했다. 라우트 자체는
-// 하위 호환을 위해 스텁으로 남겨둔다("미구현" 응답).
-router.get('/users/:userId', getUser);
 
 /**
  * @swagger
