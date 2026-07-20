@@ -1,3 +1,4 @@
+import { DateType } from '@prisma/client';
 import { AppError } from '../utils/app-error';
 import { taskRepository, CreateTaskData } from './task.repository';
 import { CreateTaskBody } from './task.schema';
@@ -55,5 +56,114 @@ export const taskService = {
         const task = await taskRepository.createTask(data);
 
         return task;
+    },
+
+    deleteTask: async (
+        userId: number,
+        taskId: number,
+        deleteScope?: string,
+        taskDateId?: number,
+    ) => {
+        if (!Number.isInteger(taskId) || taskId <= 0) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                'taskId는 양의 정수여야 합니다.',
+            );
+        }
+
+        if (
+        taskDateId !== undefined && (!Number.isInteger(taskDateId) || taskDateId <= 0)) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                'taskDateId는 양의 정수여야 합니다.',
+            );
+        }
+
+        const task = await taskRepository.findTaskByIdAndUserId( taskId, userId );
+
+        if (!task) {
+            throw new AppError(
+            'COMMON_NOT_FOUND',
+            '태스크를 찾을 수 없습니다.',
+            );
+        }
+
+        // SINGLE / RANGE
+        if (task.dateType !== DateType.MULTIPLE) {
+            if (deleteScope !== undefined) {
+                throw new AppError(
+                    'COMMON_INVALID_INPUT',
+                    '다중 태스크가 아닌 경우 deleteScope를 사용할 수 없습니다.',
+                );
+            }
+
+            await taskRepository.deleteTaskById(taskId);
+
+            return {
+                deletedCount: 1,
+            };
+        }
+
+        // MULTIPLE인데 deleteScope 누락 또는 잘못된 값
+        if (deleteScope !== 'THIS_ONLY' && deleteScope !== 'ALL') {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                '다중 태스크 삭제 시 deleteScope가 필요합니다.',
+            );
+        }
+
+        // THIS_ONLY 처리
+        if (deleteScope === 'THIS_ONLY') {
+            if(taskDateId==null) {
+                throw new AppError(
+                    'COMMON_INVALID_INPUT',
+                    '이 항목만 삭제하려면 taskDateId가 필요합니다.',
+                );
+            }
+
+            const taskDate = await taskRepository.findTaskDateByIdAndTaskId(taskDateId, taskId);
+
+            if (!taskDate) {
+                throw new AppError(
+                    'COMMON_NOT_FOUND',
+                    '태스크를 찾을 수 없습니다.',
+                );
+            }
+
+            await taskRepository.deleteTaskDateById(taskDateId);
+
+            return {
+                deleteScope: 'THIS_ONLY',
+                deletedTaskDateIds: [taskDateId],
+                deletedCount: 1,
+            };
+        }
+
+        // ALL 처리
+        if (taskDateId !== undefined) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                '전체 삭제 시 taskDateId를 사용할 수 없습니다.',
+            );
+        }
+
+        const kstTodayString = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).format(new Date());
+
+        const today = toDate(kstTodayString);
+        const taskDates = await taskRepository.findFutureIncompleteTaskDates(taskId, today);
+        const deletedTaskDateIds = taskDates.map((taskDate) => taskDate.id);
+
+        await taskRepository.deleteFutureIncompleteTaskDates(taskId, today);
+
+        return {
+            deleteScope: 'ALL',
+            deletedTaskDateIds,
+            deletedCount: deletedTaskDateIds.length,
+        };
     },
 };
