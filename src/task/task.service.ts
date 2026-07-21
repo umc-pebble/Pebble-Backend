@@ -12,6 +12,18 @@ const toDateString = (date: Date | null): string | null => {
     return date ? date.toISOString().slice(0, 10) : null;
 };
 
+const toKstDate = (date: Date): Date => {
+    const dateString =
+        new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).format(date);
+
+    return toDate(dateString);
+};
+
 const parseBaseDate = (baseDate?: string): string => {
     const value = baseDate ??
         new Intl.DateTimeFormat('en-CA', {
@@ -546,11 +558,17 @@ export const taskService = {
                 );
             }
 
-            await taskRepository.deleteTaskById(taskId);
+            const activityDate =
+                task.isCompleted && task.completedAt
+                    ? toKstDate(task.completedAt)
+                    : null;
 
-            return {
-                deletedCount: 1,
-            };
+            return taskRepository.deleteTaskById(
+                taskId,
+                userId,
+                activityDate,
+                task.isCompleted,
+            );
         }
 
         // MULTIPLE인데 deleteScope 누락 또는 잘못된 값
@@ -579,7 +597,17 @@ export const taskService = {
                 );
             }
 
-            await taskRepository.deleteTaskDateById(taskDateId);
+            const activityDate =
+                taskDate.isCompleted && taskDate.completedAt
+                    ? toKstDate(taskDate.completedAt)
+                    : null;
+
+            await taskRepository.deleteTaskDateById(
+                taskDateId,
+                userId,
+                activityDate,
+                taskDate.isCompleted,
+            );
 
             return {
                 deleteScope: 'THIS_ONLY',
@@ -671,10 +699,28 @@ export const taskService = {
                 );
             }
 
-            const updatedTaskDate = await taskRepository.updateTaskDateCompletion(
-                taskDateId,
-                !taskDate.isCompleted,
-            );
+            const nextIsCompleted = !taskDate.isCompleted;
+
+            const activityDate = nextIsCompleted
+                ? toKstDate(new Date())
+                : taskDate.completedAt
+                    ? toKstDate(taskDate.completedAt)
+                    : null;
+
+            if (!activityDate) {
+                throw new AppError(
+                    'COMMON_INVALID_INPUT',
+                    '완료 기록 날짜를 찾을 수 없습니다.',
+                );
+            }
+
+            const updatedTaskDate =
+                await taskRepository.updateTaskDateCompletion(
+                    taskDateId,
+                    userId,
+                    activityDate,
+                    nextIsCompleted,
+                );
 
             return {
                 taskId: updatedTaskDate.taskId,
@@ -693,10 +739,27 @@ export const taskService = {
             );
         }
 
+        const nextIsCompleted = !task.isCompleted;
+
+        const activityDate = nextIsCompleted
+            ? toKstDate(new Date())
+            : task.completedAt
+                ? toKstDate(task.completedAt)
+                : null;
+
+        if (!activityDate) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                '완료 기록 날짜를 찾을 수 없습니다.',
+            );
+        }
+
         const updatedTask =
             await taskRepository.updateTaskCompletion(
                 taskId,
-                !task.isCompleted,
+                userId,
+                activityDate,
+                nextIsCompleted,
             );
 
         return {

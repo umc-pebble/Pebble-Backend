@@ -101,12 +101,55 @@ export const taskRepository = {
         });
     },
 
-    // SINGLE/RANGE 태스크 전체 삭제
-    deleteTaskById: async (taskId: number) => {
-        return prisma.task.delete({
-            where: {
-                id: taskId,
-            },
+    // SINGLE/RANGE 태스크 전체 삭제 + 완료된 태스크라면 활동기록 감소
+    deleteTaskById: async (
+        taskId: number,
+        userId: number,
+        date: Date | null,
+        wasCompleted: boolean,
+    ) => {
+        return prisma.$transaction(async (tx) => {
+            await tx.task.delete({
+                where: {
+                    id: taskId,
+                },
+            });
+
+            if (wasCompleted && date) {
+                const activityLog =
+                    await tx.activityLog.findUnique({
+                        where: {
+                            userId_date: {
+                                userId,
+                                date,
+                            },
+                        },
+                        select: {
+                            completedTaskCount: true,
+                        },
+                    });
+
+                if (activityLog) {
+                    await tx.activityLog.update({
+                        where: {
+                            userId_date: {
+                                userId,
+                                date,
+                            },
+                        },
+                        data: {
+                            completedTaskCount: Math.max(
+                                0,
+                                activityLog.completedTaskCount - 1,
+                            ),
+                        },
+                    });
+                }
+            }
+
+            return {
+                deletedCount: 1,
+            };
         });
     },
 
@@ -127,12 +170,55 @@ export const taskRepository = {
         });
     },
 
-    //THIS_ONLY 삭제
-    deleteTaskDateById: async (taskDateId: number) => {
-        return prisma.taskDate.delete({
-            where: {
-                id: taskDateId,
-            },
+    // THIS_ONLY 삭제 + 완료된 회차라면 활동기록 감소
+    deleteTaskDateById: async (
+        taskDateId: number,
+        userId: number,
+        date: Date | null,
+        wasCompleted: boolean,
+    ) => {
+        return prisma.$transaction(async (tx) => {
+            await tx.taskDate.delete({
+                where: {
+                    id: taskDateId,
+                },
+            });
+
+            if (wasCompleted && date) {
+                const activityLog =
+                    await tx.activityLog.findUnique({
+                        where: {
+                            userId_date: {
+                                userId,
+                                date,
+                            },
+                        },
+                        select: {
+                            completedTaskCount: true,
+                        },
+                    });
+
+                if (activityLog) {
+                    await tx.activityLog.update({
+                        where: {
+                            userId_date: {
+                                userId,
+                                date,
+                            },
+                        },
+                        data: {
+                            completedTaskCount: Math.max(
+                                0,
+                                activityLog.completedTaskCount - 1,
+                            ),
+                        },
+                    });
+                }
+            }
+
+            return {
+                deletedCount: 1,
+            };
         });
     },
 
@@ -168,23 +254,69 @@ export const taskRepository = {
         });
     },
 
+    // SINGLE/RANGE 완료 토글 + 활동기록 갱신
     updateTaskCompletion: async (
         taskId: number,
+        userId: number,
+        date: Date,
         isCompleted: boolean,
     ) => {
-        return prisma.task.update({
-            where: {
-                id: taskId,
-            },
-            data: {
-                isCompleted,
-                completedAt: isCompleted ? new Date() : null,
-            },
-            select: {
-                id: true,
-                isCompleted: true,
-                completedAt: true,
-            },
+        return prisma.$transaction(async (tx) => {
+            const updatedTask =
+                await tx.task.update({
+                    where: {
+                        id: taskId,
+                    },
+                    data: {
+                        isCompleted,
+                        completedAt: isCompleted
+                            ? new Date()
+                            : null,
+                    },
+                    select: {
+                        id: true,
+                        isCompleted: true,
+                        completedAt: true,
+                    },
+                });
+
+            const activityLog =
+                await tx.activityLog.findUnique({
+                    where: {
+                        userId_date: {
+                            userId,
+                            date,
+                        },
+                    },
+                    select: {
+                        completedTaskCount: true,
+                    },
+                });
+
+            const nextCount = Math.max(
+                0,
+                (activityLog?.completedTaskCount ?? 0)
+                    + (isCompleted ? 1 : -1),
+            );
+
+            await tx.activityLog.upsert({
+                where: {
+                    userId_date: {
+                        userId,
+                        date,
+                    },
+                },
+                create: {
+                    userId,
+                    date,
+                    completedTaskCount: nextCount,
+                },
+                update: {
+                    completedTaskCount: nextCount,
+                },
+            });
+
+            return updatedTask;
         });
     },
 
@@ -219,25 +351,71 @@ export const taskRepository = {
         });
     },
 
+    // MULTIPLE 회차 완료 토글 + 활동기록 갱신
     updateTaskDateCompletion: async (
         taskDateId: number,
+        userId: number,
+        date: Date,
         isCompleted: boolean,
     ) => {
-        return prisma.taskDate.update({
-            where: {
-                id: taskDateId,
-            },
-            data: {
-                isCompleted,
-                completedAt: isCompleted ? new Date() : null,
-            },
-            select: {
-                id: true,
-                taskId: true,
-                date: true,
-                isCompleted: true,
-                completedAt: true,
-            },
+        return prisma.$transaction(async (tx) => {
+            const updatedTaskDate =
+                await tx.taskDate.update({
+                    where: {
+                        id: taskDateId,
+                    },
+                    data: {
+                        isCompleted,
+                        completedAt: isCompleted
+                            ? new Date()
+                            : null,
+                    },
+                    select: {
+                        id: true,
+                        taskId: true,
+                        date: true,
+                        isCompleted: true,
+                        completedAt: true,
+                    },
+                });
+
+            const activityLog =
+                await tx.activityLog.findUnique({
+                    where: {
+                        userId_date: {
+                            userId,
+                            date,
+                        },
+                    },
+                    select: {
+                        completedTaskCount: true,
+                    },
+                });
+
+            const nextCount = Math.max(
+                0,
+                (activityLog?.completedTaskCount ?? 0)
+                    + (isCompleted ? 1 : -1),
+            );
+
+            await tx.activityLog.upsert({
+                where: {
+                    userId_date: {
+                        userId,
+                        date,
+                    },
+                },
+                create: {
+                    userId,
+                    date,
+                    completedTaskCount: nextCount,
+                },
+                update: {
+                    completedTaskCount: nextCount,
+                },
+            });
+
+            return updatedTaskDate;
         });
     },
 
@@ -709,5 +887,4 @@ export const taskRepository = {
 
         return follow !== null;
     },
-
 };
