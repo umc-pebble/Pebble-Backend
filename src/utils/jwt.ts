@@ -32,5 +32,5 @@ export const verifyRefreshToken = (token: string): TokenPayload => {
   return { userId: decoded.userId };
 };
 
-// refresh 토큰은 DB에 원문 대신 sha256 해시로 저장한다 (DB 유출 시 토큰 탈취 방지)
+// refresh 토큰은 DB에 원문 대신 sha256 해시로 저장한다 (DB 유출 시 토큰 탈취 방지). 이메일 변경 토큰도 동일 방식 재사용.
 export const sha256 = (value: string) => crypto.createHash('sha256').update(value).digest('hex');
