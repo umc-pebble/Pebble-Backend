@@ -116,35 +116,20 @@ export const taskRepository = {
             });
 
             if (wasCompleted && date) {
-                const activityLog =
-                    await tx.activityLog.findUnique({
-                        where: {
-                            userId_date: {
-                                userId,
-                                date,
-                            },
+                await tx.activityLog.updateMany({
+                    where: {
+                        userId,
+                        date,
+                        completedTaskCount: {
+                            gt: 0,
                         },
-                        select: {
-                            completedTaskCount: true,
+                    },
+                    data: {
+                        completedTaskCount: {
+                            decrement: 1,
                         },
-                    });
-
-                if (activityLog) {
-                    await tx.activityLog.update({
-                        where: {
-                            userId_date: {
-                                userId,
-                                date,
-                            },
-                        },
-                        data: {
-                            completedTaskCount: Math.max(
-                                0,
-                                activityLog.completedTaskCount - 1,
-                            ),
-                        },
-                    });
-                }
+                    },
+                });
             }
 
             return {
@@ -185,35 +170,20 @@ export const taskRepository = {
             });
 
             if (wasCompleted && date) {
-                const activityLog =
-                    await tx.activityLog.findUnique({
-                        where: {
-                            userId_date: {
-                                userId,
-                                date,
-                            },
+                await tx.activityLog.updateMany({
+                    where: {
+                        userId,
+                        date,
+                        completedTaskCount: {
+                            gt: 0,
                         },
-                        select: {
-                            completedTaskCount: true,
+                    },
+                    data: {
+                        completedTaskCount: {
+                            decrement: 1,
                         },
-                    });
-
-                if (activityLog) {
-                    await tx.activityLog.update({
-                        where: {
-                            userId_date: {
-                                userId,
-                                date,
-                            },
-                        },
-                        data: {
-                            completedTaskCount: Math.max(
-                                0,
-                                activityLog.completedTaskCount - 1,
-                            ),
-                        },
-                    });
-                }
+                    },
+                });
             }
 
             return {
@@ -280,41 +250,41 @@ export const taskRepository = {
                     },
                 });
 
-            const activityLog =
-                await tx.activityLog.findUnique({
+            if (isCompleted) {
+                await tx.activityLog.upsert({
                     where: {
                         userId_date: {
                             userId,
                             date,
                         },
                     },
-                    select: {
-                        completedTaskCount: true,
-                    },
-                });
-
-            const nextCount = Math.max(
-                0,
-                (activityLog?.completedTaskCount ?? 0)
-                    + (isCompleted ? 1 : -1),
-            );
-
-            await tx.activityLog.upsert({
-                where: {
-                    userId_date: {
+                    create: {
                         userId,
                         date,
+                        completedTaskCount: 1,
                     },
-                },
-                create: {
-                    userId,
-                    date,
-                    completedTaskCount: nextCount,
-                },
-                update: {
-                    completedTaskCount: nextCount,
-                },
-            });
+                    update: {
+                        completedTaskCount: {
+                            increment: 1,
+                        },
+                    },
+                });
+            } else {
+                await tx.activityLog.updateMany({
+                    where: {
+                        userId,
+                        date,
+                        completedTaskCount: {
+                            gt: 0,
+                        },
+                    },
+                    data: {
+                        completedTaskCount: {
+                            decrement: 1,
+                        },
+                    },
+                });
+            }
 
             return updatedTask;
         });
@@ -379,41 +349,41 @@ export const taskRepository = {
                     },
                 });
 
-            const activityLog =
-                await tx.activityLog.findUnique({
+            if (isCompleted) {
+                await tx.activityLog.upsert({
                     where: {
                         userId_date: {
                             userId,
                             date,
                         },
                     },
-                    select: {
-                        completedTaskCount: true,
-                    },
-                });
-
-            const nextCount = Math.max(
-                0,
-                (activityLog?.completedTaskCount ?? 0)
-                    + (isCompleted ? 1 : -1),
-            );
-
-            await tx.activityLog.upsert({
-                where: {
-                    userId_date: {
+                    create: {
                         userId,
                         date,
+                        completedTaskCount: 1,
                     },
-                },
-                create: {
-                    userId,
-                    date,
-                    completedTaskCount: nextCount,
-                },
-                update: {
-                    completedTaskCount: nextCount,
-                },
-            });
+                    update: {
+                        completedTaskCount: {
+                            increment: 1,
+                        },
+                    },
+                });
+            } else {
+                await tx.activityLog.updateMany({
+                    where: {
+                        userId,
+                        date,
+                        completedTaskCount: {
+                            gt: 0,
+                        },
+                    },
+                    data: {
+                        completedTaskCount: {
+                            decrement: 1,
+                        },
+                    },
+                });
+            }
 
             return updatedTaskDate;
         });
