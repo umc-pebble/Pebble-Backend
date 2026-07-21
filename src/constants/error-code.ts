@@ -18,6 +18,7 @@ export const ERROR_CODE = {
 
   // User
   USER_NICKNAME_COOLDOWN: { code: 'USER_NICKNAME_COOLDOWN', status: 400 },
+  USER_EMAIL_CHANGE_RATE_LIMITED: { code: 'USER_EMAIL_CHANGE_RATE_LIMITED', status: 429 }, // 이메일 변경 요청 쿨다운(1분)/시간당 상한(5회) 초과
 
   // Category
   CATEGORY_LIMIT_EXCEEDED: { code: 'CATEGORY_LIMIT_EXCEEDED', status: 403 },

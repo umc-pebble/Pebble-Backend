@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { sendSuccess } from '../utils/response';
-import { AppError } from '../utils/app-error';
+import { parseId } from '../utils/params';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { milestoneService } from './milestone.service';
 import {
@@ -13,15 +13,6 @@ import {
 // req/res 처리만 담당한다: JWT userId 추출 → service 호출 → sendSuccess 응답.
 // body 검증은 라우트의 validateBody(milestone.schema) 미들웨어가 이미 마친 상태다.
 // editScope/deleteScope의 허용 여부(도메인 규칙)는 milestoneService가 판정한다.
-
-// 경로 파라미터를 양의 정수로 검증한다. (body가 아니므로 컨트롤러에서 처리)
-function parseId(raw: string, label: string): number {
-  const id = Number(raw);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new AppError('COMMON_INVALID_INPUT', `유효하지 않은 ${label} ID입니다.`);
-  }
-  return id;
-}
 
 export const getMilestones = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { authMiddleware } from '../middlewares/auth.middleware';
 import {
   getNotifications,
   readNotification,
@@ -7,6 +8,9 @@ import {
 } from './notification.controller';
 
 const router = Router();
+
+// Notification API는 모두 로그인 필요(bearerAuth). authMiddleware가 req.userId를 채운다.
+router.use(authMiddleware);
 
 /**
  * @swagger
@@ -36,8 +40,8 @@ const router = Router();
  *       - name: limit
  *         in: query
  *         required: false
- *         schema: { type: integer, default: 20 }
- *         description: 조회 개수
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *         description: 조회 개수 (최대 100)
  *         example: 20
  *     responses:
  *       200:
