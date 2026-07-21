@@ -40,19 +40,18 @@ router.use(authMiddleware);
  *                       properties:
  *                         reports:
  *                           type: array
+ *                           nullable: true
  *                           items: { $ref: '#/components/schemas/Report' }
- *       404:
- *               description: 해당 월 리포트 없음 또는 만료됨
- *               content:
- *                 application/json:
- *                   schema: { $ref: '#/components/schemas/ApiResponse' }
- *                   example: { success: false, message: 리포트를 찾을 수 없습니다., error: { code: "COMMON_NOT_FOUND" } }
  *       401:
  *               description: 유효하지 않은 토큰
  *               content:
  *                 application/json:
  *                   schema: { $ref: '#/components/schemas/ApiResponse' }
- *                   example: { success: false, message: 유효하지 않은 토큰입니다., error: { code: "COMMON_UNAUTHORIZED" } }
+ *                   examples:
+ *                     missingToken:
+ *                       value: { success: false, message: 인증 토큰이 없습니다., error: { code: "COMMON_UNAUTHORIZED" } }
+ *                     invalidOrExpiredToken:
+ *                       value: { success: false, message: 유효하지 않거나 만료된 토큰입니다., error: { code: "AUTH_TOKEN_EXPIRED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */

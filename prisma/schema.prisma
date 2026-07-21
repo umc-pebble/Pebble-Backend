@@ -127,16 +127,17 @@ model Follow {
 }
 
 model Report {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   userId         Int
-  month          String   @db.VarChar(7) // YYYY-MM
-  reportImageUrl String   @db.VarChar(500)
-  expiresAt      DateTime // 발송 후 1주일
-  createdAt      DateTime @default(now())
+  month          String    @db.VarChar(7) // YYYY-MM (집계 대상 월, 전월 기준)
+  statsData      Json?                     // activityLogs, topCategory, busiestDay, sharedCategories 통계
+  reportImageUrl String?   @db.VarChar(500) // 캡처 이미지 업로드 전엔 null
+  expiresAt      DateTime  // 발송 후 1주일
+  createdAt      DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, month])
+  @@unique([userId, month])
 }
 
 model Subscription {
