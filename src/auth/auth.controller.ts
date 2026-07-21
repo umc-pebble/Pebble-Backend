@@ -27,10 +27,17 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
-// 소셜 로그인은 OAuth 클라이언트 키 발급 후 별도 이슈에서 구현 예정
-export const socialLogin = async (_req: Request, res: Response, next: NextFunction) => {
+export const socialLogin = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    sendSuccess(res, null, '소셜 로그인 (미구현)');
+    const result = await authService.socialLogin(req.params.provider, req.body);
+    // 이번 요청으로 계정이 생성됐으면 201, 기존 계정 로그인이면 200 (스웨거 계약)
+    const { isNewUser } = result;
+    sendSuccess(
+      res,
+      result,
+      isNewUser ? '소셜 회원가입 성공' : '소셜 로그인 성공',
+      isNewUser ? 201 : 200,
+    );
   } catch (err) {
     next(err);
   }

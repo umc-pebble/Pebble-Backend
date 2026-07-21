@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, SocialProvider } from '@prisma/client';
 
 import prisma from '../config/database';
 
@@ -44,5 +44,38 @@ export const authRepository = {
     prisma.user.updateMany({
       where: { id: userId, refreshToken: oldHash },
       data: { refreshToken: newHash },
+    }),
+
+  // 소셜 연동 조회 (PLB-002) — provider + providerAccountId 조합이 유일하다.
+  findSocialAccount: (provider: SocialProvider, providerAccountId: string) =>
+    prisma.socialAccount.findUnique({
+      where: { provider_providerAccountId: { provider, providerAccountId } },
+      include: { user: true },
+    }),
+
+  // 기존 계정(자체가입 포함)에 소셜 연동만 추가한다 — 같은 이메일로 계정이 갈라지지 않게.
+  linkSocialAccount: (userId: number, provider: SocialProvider, providerAccountId: string) =>
+    prisma.socialAccount.create({ data: { userId, provider, providerAccountId } }),
+
+  // 소셜 신규 가입 — 유저 생성 + 소셜 연동 + refresh 해시 저장을 한 트랜잭션으로 묶는다.
+  // password는 NULL로 남겨 소셜 전용 계정임을 표시한다 (PLB-035의 AUTH_SOCIAL_ONLY 판정 기준).
+  createSocialUser: (
+    data: Prisma.UserCreateInput,
+    social: { provider: SocialProvider; providerAccountId: string },
+    refreshHashFor: (userId: number) => string,
+  ) =>
+    prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({ data });
+      await tx.socialAccount.create({
+        data: {
+          userId: created.id,
+          provider: social.provider,
+          providerAccountId: social.providerAccountId,
+        },
+      });
+      return tx.user.update({
+        where: { id: created.id },
+        data: { refreshToken: refreshHashFor(created.id) },
+      });
     }),
 };
