@@ -16,6 +16,7 @@ const dateString = z
 
 const nameField = z
   .string()
+  .max(100, '태스크 이름은 100자 이하여야 합니다.')
   .refine(
     (value) => value.trim().length > 0,
     '태스크 이름은 공백만으로 지정할 수 없습니다.',
@@ -138,30 +139,148 @@ export const createTaskSchema = z
       }
     }
   });
-
-export const deleteTaskQuerySchema = z
+  
+export const updateTaskSchema = z
   .object({
-    deleteScope: z.enum(['THIS_ONLY', 'ALL']).optional(),
-    taskDateId: z.coerce.number().int().positive().optional(),
+    name: nameField.optional(),
+
+    startDate: dateString.nullable().optional(),
+    endDate: dateString.nullable().optional(),
+
+    color: z.string().nullable().optional(),
+
+    dates: z.array(dateString).nullable().optional(),
+
+    editScope: z.enum(['THIS_ONLY', 'ALL']).optional(),
+    taskDateId: z.number().int().positive().optional(),
+
+    // 생성 이후 변경할 수 없는 필드
+    dateType: z.any().optional(),
+    categoryId: z.any().optional(),
+    milestoneId: z.any().optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.deleteScope === 'THIS_ONLY' && value.taskDateId == null) {
+    if (value.dateType !== undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['taskDateId'],
-        message: '이 항목만 삭제하려면 taskDateId가 필요합니다.',
+        path: ['dateType'],
+        message: 'dateType은 수정할 수 없습니다.',
       });
     }
 
-    if (value.deleteScope === 'ALL' && value.taskDateId != null) {
+    if (value.categoryId !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['categoryId'],
+        message: '태스크의 소속 카테고리는 수정할 수 없습니다.',
+      });
+    }
+
+    if (value.milestoneId !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['milestoneId'],
+        message: '태스크의 소속 마일스톤은 수정할 수 없습니다.',
+      });
+    }
+
+    const hasEditableField =
+      value.name !== undefined ||
+      value.startDate !== undefined ||
+      value.endDate !== undefined ||
+      value.color !== undefined ||
+      value.dates !== undefined;
+
+    if (!hasEditableField) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [],
+        message: '수정할 값을 하나 이상 입력해야 합니다.',
+      });
+    }
+
+    if (
+      value.dates &&
+      new Set(value.dates).size !== value.dates.length
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dates'],
+        message: 'dates에는 중복된 날짜를 지정할 수 없습니다.',
+      });
+    }
+
+    if (
+      value.dates !== undefined &&
+      (
+        value.name !== undefined ||
+        value.startDate !== undefined ||
+        value.endDate !== undefined ||
+        value.color !== undefined ||
+        value.editScope !== undefined ||
+        value.taskDateId !== undefined
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dates'],
+        message: '다중 날짜 수정은 다른 수정 필드와 함께 요청할 수 없습니다.',
+      });
+    }
+
+    if (
+      (value.name !== undefined || value.color !== undefined) &&
+      value.editScope === undefined
+    ) {
+      return;
+    }
+
+    if (
+      value.editScope !== undefined &&
+      value.name === undefined &&
+      value.color === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['editScope'],
+        message: 'editScope는 이름 또는 색상 수정 시에만 사용할 수 있습니다.',
+      });
+    }
+
+    if (
+      value.editScope === 'THIS_ONLY' &&
+      value.taskDateId == null
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['taskDateId'],
-        message: '전체 삭제에는 taskDateId를 지정할 수 없습니다.',
+        message: '이 항목만 수정하려면 taskDateId가 필요합니다.',
+      });
+    }
+
+    if (
+      value.editScope === 'ALL' &&
+      value.taskDateId !== undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['taskDateId'],
+        message: '전체 수정에는 taskDateId를 지정할 수 없습니다.',
+      });
+    }
+
+    if (
+      value.taskDateId !== undefined &&
+      value.editScope !== 'THIS_ONLY'
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['taskDateId'],
+        message: 'taskDateId는 THIS_ONLY 수정에서만 사용할 수 있습니다.',
       });
     }
   });
-  
+
 export const reorderTasksSchema = z.object({
   milestoneId: z
     .number()
@@ -183,5 +302,5 @@ export const reorderTasksSchema = z.object({
 });
 
 export type CreateTaskBody = z.infer<typeof createTaskSchema>;
-export type DeleteTaskQuery = z.infer<typeof deleteTaskQuerySchema>;
 export type ReorderTasksBody = z.infer<typeof reorderTasksSchema>;
+export type UpdateTaskBody = z.infer<typeof updateTaskSchema>;

@@ -38,8 +38,30 @@ export const createTask = async (
   }
 };
 
-export const updateTask = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '태스크 수정 (미구현)');
+export const updateTask = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = req.userId!;
+    const taskId = Number(req.params.taskId);
+
+    const result = await taskService.updateTask(
+      userId,
+      taskId,
+      req.body,
+    );
+
+    sendSuccess(
+      res,
+      result,
+      '태스크 수정 성공',
+      200,
+    );
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const toggleTaskComplete = async (

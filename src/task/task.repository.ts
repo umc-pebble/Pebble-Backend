@@ -87,7 +87,14 @@ export const taskRepository = {
             },
             select: {
                 id: true,
+                userId: true,
+                categoryId: true,
+                milestoneId: true,
+                name: true,
                 dateType: true,
+                startDate: true,
+                endDate: true,
+                color: true,
                 isCompleted: true,
                 completedAt: true,
             },
@@ -177,6 +184,37 @@ export const taskRepository = {
                 id: true,
                 isCompleted: true,
                 completedAt: true,
+            },
+        });
+    },
+
+    updateTask: async (
+        taskId: number,
+        data: {
+            name?: string;
+            startDate?: Date | null;
+            endDate?: Date | null;
+            color?: string | null;
+        },
+    ) => {
+        return prisma.task.update({
+            where: {
+                id: taskId,
+            },
+            data,
+            select: {
+                id: true,
+                userId: true,
+                categoryId: true,
+                milestoneId: true,
+                name: true,
+                dateType: true,
+                startDate: true,
+                endDate: true,
+                color: true,
+                isCompleted: true,
+                completedAt: true,
+                displayOrder: true,
             },
         });
     },
@@ -303,6 +341,12 @@ export const taskRepository = {
                         date: true,
                         isCompleted: true,
                         completedAt: true,
+                        exception: {
+                            select: {
+                                name: true,
+                                color: true,
+                            },
+                        },
                     },
                     orderBy: {
                         date: 'asc',
@@ -355,6 +399,255 @@ export const taskRepository = {
             orderBy: {
                 displayOrder: 'asc',
             },
+        });
+    },
+
+    findTaskDatesByTaskId: async (
+        taskId: number,
+    ) => {
+        return prisma.taskDate.findMany({
+            where: {
+                taskId,
+            },
+            select: {
+                id: true,
+                taskId: true,
+                date: true,
+                isCompleted: true,
+                completedAt: true,
+                exception: {
+                    select: {
+                        id: true,
+                        name: true,
+                        color: true,
+                    },
+                },
+            },
+            orderBy: {
+                date: 'asc',
+            },
+        });
+    },
+
+    replaceFutureIncompleteTaskDates: async (
+        taskId: number,
+        today: Date,
+        dates: Date[],
+    ) => {
+        return prisma.$transaction(async (tx) => {
+            await tx.taskDate.deleteMany({
+                where: {
+                    taskId,
+                    date: {
+                        gte: today,
+                    },
+                    isCompleted: false,
+                },
+            });
+
+            if (dates.length > 0) {
+                await tx.taskDate.createMany({
+                    data: dates.map((date) => ({
+                        taskId,
+                        date,
+                    })),
+                    skipDuplicates: true,
+                });
+            }
+
+            return tx.taskDate.findMany({
+                where: {
+                    taskId,
+                },
+                select: {
+                    id: true,
+                    taskId: true,
+                    date: true,
+                    isCompleted: true,
+                    completedAt: true,
+                    exception: {
+                        select: {
+                            id: true,
+                            name: true,
+                            color: true,
+                        },
+                    },
+                },
+                orderBy: {
+                    date: 'asc',
+                },
+            });
+        });
+    },
+
+    findTaskExceptionByTaskDateId: async (
+        taskDateId: number,
+    ) => {
+        return prisma.taskException.findUnique({
+            where: {
+                taskDateId,
+            },
+            select: {
+                id: true,
+                taskDateId: true,
+                name: true,
+                color: true,
+            },
+        });
+    },
+
+    upsertTaskException: async (
+        taskDateId: number,
+        data: {
+            name?: string | null;
+            color?: string | null;
+        },
+    ) => {
+        return prisma.taskException.upsert({
+            where: {
+                taskDateId,
+            },
+            update: data,
+            create: {
+                taskDateId,
+                name: data.name,
+                color: data.color,
+            },
+            select: {
+                id: true,
+                taskDateId: true,
+                name: true,
+                color: true,
+            },
+        });
+    },
+
+    updateMultipleTaskAll: async (
+        taskId: number,
+        today: Date,
+        data: {
+            name?: string;
+            color?: string | null;
+        },
+        currentTask: {
+            name: string;
+            color: string | null;
+        },
+    ) => {
+        return prisma.$transaction(async (tx) => {
+            const preservedTaskDates =
+                await tx.taskDate.findMany({
+                    where: {
+                        taskId,
+                        OR: [
+                            {
+                                date: {
+                                    lt: today,
+                                },
+                            },
+                            {
+                                isCompleted: true,
+                            },
+                        ],
+                    },
+                    select: {
+                        id: true,
+                        exception: {
+                            select: {
+                                id: true,
+                                name: true,
+                                color: true,
+                            },
+                        },
+                    },
+                });
+
+            for (const taskDate of preservedTaskDates) {
+                const preservedName =
+                    data.name !== undefined
+                        ? taskDate.exception?.name
+                            ?? currentTask.name
+                        : taskDate.exception?.name;
+
+                const preservedColor =
+                    data.color !== undefined
+                        ? taskDate.exception?.color
+                            ?? currentTask.color
+                        : taskDate.exception?.color;
+
+                await tx.taskException.upsert({
+                    where: {
+                        taskDateId: taskDate.id,
+                    },
+                    update: {
+                        name: preservedName,
+                        color: preservedColor,
+                    },
+                    create: {
+                        taskDateId: taskDate.id,
+                        name: preservedName,
+                        color: preservedColor,
+                    },
+                });
+            }
+
+            if (data.name !== undefined) {
+                await tx.taskException.updateMany({
+                    where: {
+                        taskDate: {
+                            taskId,
+                            date: {
+                                gte: today,
+                            },
+                            isCompleted: false,
+                        },
+                    },
+                    data: {
+                        name: null,
+                    },
+                });
+            }
+
+            if (data.color !== undefined) {
+                await tx.taskException.updateMany({
+                    where: {
+                        taskDate: {
+                            taskId,
+                            date: {
+                                gte: today,
+                            },
+                            isCompleted: false,
+                        },
+                    },
+                    data: {
+                        color: null,
+                    },
+                });
+            }
+
+            return tx.task.update({
+                where: {
+                    id: taskId,
+                },
+                data: {
+                    name: data.name,
+                    color: data.color,
+                },
+                select: {
+                    id: true,
+                    userId: true,
+                    categoryId: true,
+                    milestoneId: true,
+                    name: true,
+                    dateType: true,
+                    startDate: true,
+                    endDate: true,
+                    color: true,
+                    isCompleted: true,
+                    completedAt: true,
+                    displayOrder: true,
+                },
+            });
         });
     },
 

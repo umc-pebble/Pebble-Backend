@@ -8,7 +8,7 @@ import {
   reorderTasks,
 } from './task.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { createTaskSchema, reorderTasksSchema } from './task.schema';
+import { createTaskSchema, reorderTasksSchema, updateTaskSchema } from './task.schema';
 import { validateBody } from '../middlewares/validate.middleware';
 
 const router = Router();
@@ -846,7 +846,7 @@ router.post('/tasks', authMiddleware, validateBody(createTaskSchema), createTask
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/tasks/:taskId', updateTask);
+router.patch('/tasks/:taskId', authMiddleware, validateBody(updateTaskSchema), updateTask);
 
 /**
  * @swagger
