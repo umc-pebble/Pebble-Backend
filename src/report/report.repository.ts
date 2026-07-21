@@ -6,6 +6,9 @@ export const reportRepository = {
   findAvailableByUserId(userId: number, now: Date) {
     return prisma.report.findMany({
       where: { userId, expiresAt: { gt: now } },
+      orderBy: {
+        month: 'desc',
+      }
     });
   },
 };
