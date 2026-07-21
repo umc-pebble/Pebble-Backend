@@ -2,9 +2,22 @@
 // 비즈니스 로직 계층. 공유 전환/멤버 초대/수락·거절/탈퇴/강퇴/삭제 규칙 담당 (PLB-044~048).
 // DB 쿼리는 sharedRepository에 위임하고, 규칙 위반 시 AppError를 던진다.
 
+import { NotificationType } from '@prisma/client';
 import { AppError } from '../utils/app-error';
+import { logger } from '../utils/logger';
 import { sharedRepository } from './shared.repository';
 import { InviteTarget } from './shared.schema';
+
+// 알림 발송 실패가 이미 커밋된 상태 변경(전환/강퇴/삭제 등)을 클라이언트 응답 실패로
+// 보이게 만들면 안 된다 — 실패는 로그만 남기고 삼킨다. Promise.all은 하나라도 reject되면
+// 즉시 전체를 reject시키므로, 알림 발송에 그대로 쓰면 이미 성공한 작업까지 에러 응답이 나간다.
+async function notifySafely(userId: number, type: NotificationType, relatedId: number) {
+  try {
+    await sharedRepository.createNotification(userId, type, relatedId);
+  } catch (err) {
+    logger.error('[shared] 알림 발송 실패', { userId, type, relatedId, err });
+  }
+}
 
 async function getCategoryOrThrow(categoryId: number) {
   const category = await sharedRepository.findCategoryById(categoryId);
@@ -93,9 +106,18 @@ export const sharedService = {
       targets.map((t) => t.id),
     );
 
+    // updateMany가 0 row를 갱신했다는 뜻 — 위의 사전 체크 이후 동시 요청이 먼저 전환을 끝냈다.
+    // 그대로 진행하면 OWNER row 중복 생성으로 처리되지 않은 P2002가 발생하므로 여기서 막는다.
+    if (members === null) {
+      throw new AppError(
+        'COMMON_INVALID_INPUT',
+        '이미 공유 중인 카테고리입니다. 멤버 추가는 다른 API를 사용해주세요.',
+      );
+    }
+
     // 알림은 트랜잭션에 안 묶는다 — 발송 실패가 이미 성공한 카테고리 전환을 되돌릴 이유는 없다.
     await Promise.all(
-      targets.map((t) => sharedRepository.createNotification(t.id, 'CATEGORY_INVITE', categoryId)),
+      targets.map((t) => notifySafely(t.id, 'CATEGORY_INVITE', categoryId)),
     );
 
     return members;
@@ -110,7 +132,7 @@ export const sharedService = {
     await assertInvitable(userId, categoryId, user.id);
 
     const member = await sharedRepository.createMember(categoryId, user.id, 'MEMBER', 'PENDING');
-    await sharedRepository.createNotification(user.id, 'CATEGORY_INVITE', categoryId);
+    await notifySafely(user.id, 'CATEGORY_INVITE', categoryId);
     return member;
   },
 
@@ -179,9 +201,7 @@ export const sharedService = {
     await sharedRepository.deleteCategory(categoryId);
 
     await Promise.all(
-      notifyTargets.map((m) =>
-        sharedRepository.createNotification(m.userId, 'CATEGORY_DELETED', categoryId),
-      ),
+      notifyTargets.map((m) => notifySafely(m.userId, 'CATEGORY_DELETED', categoryId)),
     );
   },
 };
