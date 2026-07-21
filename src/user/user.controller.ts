@@ -37,6 +37,10 @@ export const deleteMe = (_req: Request, res: Response) => {
   sendSuccess(res, null, '회원탈퇴 (미구현)');
 };
 
+export const getUser = (_req: Request, res: Response) => {
+  sendSuccess(res, null, '타인 프로필 조회 (미구현)');
+};
+
 export const getSettings = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const settings = await userService.getSettings(req.userId!);
