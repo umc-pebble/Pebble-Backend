@@ -1,5 +1,36 @@
-import { DateType } from "@prisma/client";
+import { DateType, Prisma } from "@prisma/client";
 import prisma from "../config/database";
+
+const runWithP2002Retry = async <T>(
+    operation: () => Promise<T>,
+    maxRetries = 2,
+): Promise<T> => {
+    for (
+        let attempt = 0;
+        attempt <= maxRetries;
+        attempt += 1
+    ) {
+        try {
+            return await operation();
+        } catch (error) {
+            const isUniqueConstraintError =
+                error instanceof
+                    Prisma.PrismaClientKnownRequestError &&
+                error.code === 'P2002';
+
+            if (
+                !isUniqueConstraintError ||
+                attempt === maxRetries
+            ) {
+                throw error;
+            }
+        }
+    }
+
+    throw new Error(
+        'ActivityLog 갱신 재시도에 실패했습니다.',
+    );
+};
 
 export interface CreateTaskData {
   userId: number;
@@ -231,7 +262,7 @@ export const taskRepository = {
         date: Date,
         isCompleted: boolean,
     ) => {
-        return prisma.$transaction(async (tx) => {
+        return runWithP2002Retry(() => prisma.$transaction(async (tx) => {
             const updatedTask =
                 await tx.task.update({
                     where: {
@@ -287,7 +318,7 @@ export const taskRepository = {
             }
 
             return updatedTask;
-        });
+        }),);
     },
 
     updateTask: async (
@@ -328,7 +359,7 @@ export const taskRepository = {
         date: Date,
         isCompleted: boolean,
     ) => {
-        return prisma.$transaction(async (tx) => {
+        return runWithP2002Retry(() => prisma.$transaction(async (tx) => {
             const updatedTaskDate =
                 await tx.taskDate.update({
                     where: {
@@ -386,7 +417,7 @@ export const taskRepository = {
             }
 
             return updatedTaskDate;
-        });
+        }),);
     },
 
     // 월별 전체 태스크 조회
