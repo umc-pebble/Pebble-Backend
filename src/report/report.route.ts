@@ -37,11 +37,15 @@ router.use(authMiddleware);
  *                   properties:
  *                     data:
  *                       type: object
+ *                       nullable: true
  *                       properties:
- *                         reports:
+ *                         reportMeta: { $ref: '#/components/schemas/Report' }
+ *                         activityLogs: { type: object }
+ *                         topCategory: { type: object, nullable: true }
+ *                         busiestDay: { type: object, nullable: true }
+ *                         sharedCategories:
  *                           type: array
- *                           nullable: true
- *                           items: { $ref: '#/components/schemas/Report' }
+ *                           items: { type: object }
  *       401:
  *               description: 유효하지 않은 토큰
  *               content:
