@@ -3,6 +3,7 @@
 // DB 쿼리는 sharedRepository에 위임하고, 규칙 위반 시 AppError를 던진다.
 
 import { NotificationType } from '@prisma/client';
+import { isFriend } from '../follow/follow.service';
 import { AppError } from '../utils/app-error';
 import { logger } from '../utils/logger';
 import { sharedRepository } from './shared.repository';
@@ -59,8 +60,8 @@ async function assertInvitable(ownerId: number, categoryId: number, targetUserId
   if (targetUserId === ownerId) {
     throw new AppError('COMMON_INVALID_INPUT', '자기 자신은 초대할 수 없습니다.');
   }
-  const isFriend = await sharedRepository.isFriend(ownerId, targetUserId);
-  if (!isFriend) {
+  const areFriends = await isFriend(ownerId, targetUserId);
+  if (!areFriends) {
     throw new AppError('CATEGORY_NOT_FRIEND', '팔로잉 관계가 아닌 유저는 초대할 수 없습니다.');
   }
   const existing = await sharedRepository.findMembership(categoryId, targetUserId);

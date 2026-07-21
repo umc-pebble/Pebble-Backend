@@ -109,22 +109,6 @@ export const sharedRepository = {
     return prisma.user.findFirst({ where: { nickname } });
   },
 
-  // 두 유저가 서로 수락된(ACCEPTED) 팔로우 관계인지 확인한다.
-  // Follow는 한 row가 양방향 관계를 표현하므로 방향 상관없이 하나만 찾으면 된다 (PLB-041).
-  async isFriend(userIdA: number, userIdB: number) {
-    const found = await prisma.follow.findFirst({
-      where: {
-        status: 'ACCEPTED',
-        OR: [
-          { followerId: userIdA, followingId: userIdB },
-          { followerId: userIdB, followingId: userIdA },
-        ],
-      },
-      select: { id: true },
-    });
-    return found !== null;
-  },
-
   // 알림은 최대 30일 보관 (PLB-038).
   createNotification(userId: number, type: NotificationType, relatedId: number) {
     const expiresAt = new Date();
