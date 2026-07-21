@@ -96,23 +96,26 @@ export const notificationService = {
     await notificationRepository.deleteAllExceptFollowRequest(userId);
   },
 
-  // 매일 00시(KST) 배치. 당일(SINGLE·MULTIPLE) 마감인 마일스톤·태스크에 대해 MILESTONE_DUE·
-  // TASK_DUE 알림을 일괄 생성한다(PLB-038, 이슈 #56). RANGE는 "기간 중 언제 알릴지" 기준이
-  // PM 확인 대기 중이라 milestoneRepository/taskRepository 쪽 쿼리에서 이미 제외돼 있다.
-  // 완료된 항목은 애초에 저장소 쿼리에서 제외되고, notifyTaskDue를 꺼둔 유저는 여기서 제외한다.
+  // 매일 00시(KST) 배치. 당일(SINGLE·MULTIPLE) 마감이거나 오늘이 기간에 포함된(RANGE) 마일스톤·
+  // 태스크에 대해 MILESTONE_DUE·TASK_DUE 알림을 일괄 생성한다(PLB-038, 이슈 #56).
+  // RANGE는 "기간에 오늘이 포함되면 매일 알림"으로 확정됐다(A안) — 예: 7/20~25 마일스톤이면
+  // 그 5일 내내 매일 발송된다. 완료된 항목은 애초에 저장소 쿼리에서 제외되고(완료 처리된
+  // 항목은 알림을 보내지 않는다), notifyTaskDue를 꺼둔 유저는 여기서 제외한다.
   // (userId, type, relatedId, dueDate) 유니크 제약 + skipDuplicates 덕분에 같은 날 여러 번
   // 호출돼도(서버 재시작 catch-up, QA 수동 트리거 등) 중복 알림이 쌓이지 않는다 — 멱등성 보장.
   async generateDailyDueNotifications() {
     const today = getTodayKST();
-    const [dueMilestones, dueSingleTasks, dueMultipleTaskDates] = await Promise.all([
+    const [dueMilestones, dueSingleTasks, dueRangeTasks, dueMultipleTaskDates] = await Promise.all([
       milestoneRepository.findDueTodayWithOwner(today),
       taskRepository.findSingleDueToday(today),
+      taskRepository.findRangeDueToday(today),
       taskRepository.findMultipleDueToday(today),
     ]);
 
     const candidates = [
       ...dueMilestones.map((m) => ({ userId: m.category.userId, type: 'MILESTONE_DUE' as const, relatedId: m.id })),
       ...dueSingleTasks.map((t) => ({ userId: t.userId, type: 'TASK_DUE' as const, relatedId: t.id })),
+      ...dueRangeTasks.map((t) => ({ userId: t.userId, type: 'TASK_DUE' as const, relatedId: t.id })),
       ...dueMultipleTaskDates.map((td) => ({
         userId: td.task.userId,
         type: 'TASK_DUE' as const,

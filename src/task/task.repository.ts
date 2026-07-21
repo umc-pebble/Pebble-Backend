@@ -7,8 +7,7 @@
 import prisma from '../config/database';
 
 export const taskRepository = {
-  // 오늘(KST) 알림 배치용(PLB-038). SINGLE은 startDate가 곧 그 날짜다. RANGE는 "기간 중 언제
-  // 알릴지" 기준이 PM 확인 대기 중이라 이 쿼리에서 제외한다(이슈 #56).
+  // 오늘(KST) 알림 배치용(PLB-038). SINGLE은 startDate가 곧 그 날짜다.
   findSingleDueToday(today: Date) {
     return prisma.task.findMany({
       where: { dateType: 'SINGLE', startDate: today, isCompleted: false },
@@ -16,7 +15,15 @@ export const taskRepository = {
     });
   },
 
-  // MULTIPLE 태스크는 본체(Task)에 날짜가 없고 회차마다 TaskDate 자식 row로 관리되므로,
+  // 오늘(KST) 알림 배치용(PLB-038). RANGE는 기간에 오늘이 포함되면 매일 알림(이슈 #56, A안 확정).
+  findRangeDueToday(today: Date) {
+    return prisma.task.findMany({
+      where: { dateType: 'RANGE', startDate: { lte: today }, endDate: { gte: today }, isCompleted: false },
+      select: { id: true, userId: true },
+    });
+  },
+
+  // 오늘(KST) 알림 배치용(PLB-038). MULTIPLE 태스크는 본체(Task)에 날짜가 없고 회차마다 TaskDate 자식 row로 관리되므로,
   // 오늘 날짜에 해당하는 TaskDate가 있는지로 판단한다. relatedId는 TaskDate가 아니라 상위
   // Task.id를 쓴다 — FE가 dateType과 무관하게 항상 "태스크" 하나로 이동할 수 있도록 하기 위함.
   // 회차(TaskDate.isCompleted)뿐 아니라 부모 Task.isCompleted도 함께 확인한다 — 둘 중 하나라도
