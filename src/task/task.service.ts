@@ -829,4 +829,55 @@ export const taskService = {
             tasks: updatedTasks,
         };
     },
+
+    getFriendTasks: async (
+        requesterId: number,
+        targetUserId: number,
+        baseDate?: string,
+    ) => {
+        if (
+            !Number.isInteger(targetUserId) ||
+            targetUserId <= 0
+        ) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                '유효하지 않은 사용자 ID입니다.',
+            );
+        }
+
+        const targetUser =
+            await taskRepository.findUserById(targetUserId);
+
+        if (!targetUser) {
+            throw new AppError(
+                'COMMON_NOT_FOUND',
+                '사용자를 찾을 수 없습니다.',
+            );
+        }
+
+        if (requesterId === targetUserId) {
+            throw new AppError(
+                'COMMON_FORBIDDEN',
+                '본인 태스크는 기존 태스크 조회 API를 이용해 주세요.',
+            );
+        }
+
+        const isFriend =
+            await taskRepository.existsAcceptedFollow(
+                requesterId,
+                targetUserId,
+            );
+
+        if (!isFriend) {
+            throw new AppError(
+                'COMMON_FORBIDDEN',
+                '친구의 태스크만 조회할 수 있습니다.',
+            );
+        }
+
+        return taskService.getTasks(
+            targetUserId,
+            baseDate,
+        );
+    },
 };

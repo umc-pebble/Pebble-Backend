@@ -6,6 +6,7 @@ import {
   toggleTaskComplete,
   deleteTask,
   reorderTasks,
+  getFriendTasks,
 } from './task.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { createTaskSchema, reorderTasksSchema, updateTaskSchema } from './task.schema';
@@ -1027,5 +1028,158 @@ router.patch('/tasks/:taskId/complete', authMiddleware, toggleTaskComplete);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.delete('/tasks/:taskId', authMiddleware, deleteTask);
+
+/**
+ * @swagger
+ * /tasks/users/{userId}:
+ *   get:
+ *     summary: 친구의 월별 태스크 목록 조회
+ *     description: >
+ *       ACCEPTED 친구 관계인 사용자의 태스크 목록을 조회합니다.
+ *       본인 태스크는 GET /tasks를 사용해야 하며,
+ *       본인 ID로 요청하거나 친구 관계가 아닌 경우 403을 반환합니다.
+ *       기준 날짜가 포함된 월의 독립 태스크와
+ *       숨김 처리되지 않은 카테고리의 하위 태스크를 반환합니다.
+ *       SINGLE은 시작일이 조회 월에 포함된 경우 조회하고,
+ *       RANGE는 조회 월과 기간이 하루라도 겹치는 경우 조회하며,
+ *       MULTIPLE은 조회 월에 해당하는 TaskDate 회차만 반환합니다.
+ *     tags: [Task]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: 태스크를 조회할 친구의 사용자 ID
+ *         example: 2
+ *       - name: baseDate
+ *         in: query
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: >
+ *           조회할 월을 결정하는 기준 날짜입니다.
+ *           미입력 시 KST 기준 오늘이 포함된 월을 조회합니다.
+ *         example: '2026-07-10'
+ *     responses:
+ *       200:
+ *         description: 친구 태스크 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         tasks:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Task'
+ *             example:
+ *               success: true
+ *               message: 친구 태스크 조회 성공
+ *               data:
+ *                 tasks:
+ *                   - id: 21
+ *                     userId: 2
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 장보기
+ *                     dateType: SINGLE
+ *                     startDate: '2026-07-10'
+ *                     endDate: null
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *                   - id: 22
+ *                     userId: 2
+ *                     categoryId: 3
+ *                     milestoneId: 10
+ *                     name: 운동하기
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *                     taskDates:
+ *                       - taskDateId: 201
+ *                         date: '2026-07-10'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동하기
+ *                         color: '#67E8F9'
+ *       400:
+ *         description: userId 또는 baseDate 입력값 오류
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               invalidUserId:
+ *                 summary: 잘못된 사용자 ID
+ *                 value:
+ *                   success: false
+ *                   message: 유효하지 않은 사용자 ID입니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *               invalidBaseDate:
+ *                 summary: 잘못된 기준 날짜
+ *                 value:
+ *                   success: false
+ *                   message: baseDate는 YYYY-MM-DD 형식이어야 합니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 본인 조회 또는 친구 관계가 아닌 사용자 조회
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               self:
+ *                 summary: 본인 ID로 요청
+ *                 value:
+ *                   success: false
+ *                   message: 본인 태스크는 기존 태스크 조회 API를 이용해 주세요.
+ *                   error:
+ *                     code: COMMON_FORBIDDEN
+ *               notFriend:
+ *                 summary: ACCEPTED 친구 관계가 아님
+ *                 value:
+ *                   success: false
+ *                   message: 친구의 태스크만 조회할 수 있습니다.
+ *                   error:
+ *                     code: COMMON_FORBIDDEN
+ *       404:
+ *         description: 조회 대상 사용자를 찾을 수 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 사용자를 찾을 수 없습니다.
+ *               error:
+ *                 code: COMMON_NOT_FOUND
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get(
+  '/tasks/users/:userId',
+  authMiddleware,
+  getFriendTasks,
+);
 
 export default router;

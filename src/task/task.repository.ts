@@ -673,4 +673,41 @@ export const taskRepository = {
         );
     },
 
+    findUserById: async (userId: number) => {
+        return prisma.user.findUnique({
+            where: {
+                id: userId,
+            },
+            select: {
+                id: true,
+            },
+        });
+    },
+
+    existsAcceptedFollow: async (
+        requesterId: number,
+        targetUserId: number,
+    ): Promise<boolean> => {
+        const follow = await prisma.follow.findFirst({
+            where: {
+                status: 'ACCEPTED',
+                OR: [
+                    {
+                        followerId: requesterId,
+                        followingId: targetUserId,
+                    },
+                    {
+                        followerId: targetUserId,
+                        followingId: requesterId,
+                    },
+                ],
+            },
+            select: {
+                id: true,
+            },
+        });
+
+        return follow !== null;
+    },
+
 };

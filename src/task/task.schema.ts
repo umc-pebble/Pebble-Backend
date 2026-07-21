@@ -155,9 +155,9 @@ export const updateTaskSchema = z
     taskDateId: z.number().int().positive().optional(),
 
     // 생성 이후 변경할 수 없는 필드
-    dateType: z.any().optional(),
-    categoryId: z.any().optional(),
-    milestoneId: z.any().optional(),
+    dateType: z.unknown().optional(),
+    categoryId: z.unknown().optional(),
+    milestoneId: z.unknown().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.dateType !== undefined) {

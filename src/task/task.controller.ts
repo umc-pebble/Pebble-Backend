@@ -155,3 +155,35 @@ export const reorderTasks = async (
     next(error);
   }
 };
+
+export const getFriendTasks = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const requesterId = req.userId!;
+        const targetUserId = Number(req.params.userId);
+
+        const baseDate =
+            req.query.baseDate !== undefined
+                ? String(req.query.baseDate)
+                : undefined;
+
+        const result =
+            await taskService.getFriendTasks(
+                requesterId,
+                targetUserId,
+                baseDate,
+            );
+
+        sendSuccess(
+            res,
+            result,
+            '친구 태스크 조회 성공',
+            200,
+        );
+    } catch (error) {
+        next(error);
+    }
+};
