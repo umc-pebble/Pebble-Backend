@@ -62,4 +62,18 @@ export const notificationRepository = {
       where: { userId, type: { not: 'FOLLOW_REQUEST' } },
     });
   },
+
+  // 일괄 생성 (PLB-038 당일 마감 알림 배치 등에서 사용). skipDuplicates로 (userId, type,
+  // relatedId, dueDate) 유니크 제약과 충돌하는 행은 조용히 건너뛴다 — 배치 재실행(재시작 후
+  // catch-up, cron 중복 실행 등)으로 같은 날짜의 알림이 중복 생성되는 것을 막기 위함이다.
+  createMany(data: Prisma.NotificationCreateManyInput[]) {
+    if (data.length === 0) return Promise.resolve({ count: 0 });
+    return prisma.notification.createMany({ data, skipDuplicates: true });
+  },
+
+  // 만료(expiresAt < now) 알림 물리 삭제 (PLB-038 보관 정책). 조회 쪽은 notExpiredWhere()로
+  // 이미 숨기고 있으므로, 이 배치는 순수하게 DB 용량 정리 목적이다.
+  deleteExpired() {
+    return prisma.notification.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+  },
 };

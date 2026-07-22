@@ -7,10 +7,10 @@
 
 */
 -- DropIndex
-DROP INDEX `Task_seriesId_idx` ON `task`;
+DROP INDEX `Task_seriesId_idx` ON `Task`;
 
 -- AlterTable
-ALTER TABLE `task` DROP COLUMN `memo`,
+ALTER TABLE `Task` DROP COLUMN `memo`,
     DROP COLUMN `seriesId`,
     DROP COLUMN `taskTime`,
     MODIFY `startDate` DATE NULL;

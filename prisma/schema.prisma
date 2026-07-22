@@ -277,13 +277,18 @@ model Notification {
   userId    Int
   type      NotificationType
   relatedId Int?
+  // TASK_DUE·MILESTONE_DUE 배치가 "이 알림이 어느 날짜(KST) 마감 건인지"를 기록해 같은 날 같은
+  // 대상에 대한 중복 생성을 막는 유니크 키의 일부로 쓴다. 그 외 타입(FOLLOW_REQUEST 등)은 NULL.
+  dueDate   DateTime?        @db.Date
   isRead    Boolean          @default(false)
   expiresAt DateTime? // 생성 후 30일 자동삭제 대상 (PLB-038)
   createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, type, relatedId, dueDate])
   @@index([userId, isRead])
+  @@index([expiresAt])
 }
 
 model SharedCategoryMember {
