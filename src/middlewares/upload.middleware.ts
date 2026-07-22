@@ -40,9 +40,11 @@ interface UploadRequest extends Request {
 
 const multerUpload = multer({
   storage: multer.memoryStorage(),
-  // 이 엔드포인트는 파일 1개만 받으므로 텍스트 필드는 허용하지 않고(fields: 0),
-  // 전체 part 수도 파일 1개로 제한한다(parts: 1) — 불필요한 multipart 필드가 req.body에 쌓이는 것을 막는다.
-  limits: { fileSize: MAX_FILE_SIZE, fields: 0, parts: 1 },
+  // 이 엔드포인트는 파일 1개만 받으므로 텍스트 필드는 허용하지 않는다(fields: 0).
+  // parts 제한은 별도로 두지 않는다 — busboy가 정상적인 단일 파일 요청도 part 수를 초과로 잘못 세어
+  // LIMIT_PART_COUNT로 거부하는 문제가 있었고, fields: 0 + .single('file')만으로도
+  // "파일 1개 외 다른 값 금지"라는 목적은 이미 충족된다.
+  limits: { fileSize: MAX_FILE_SIZE, fields: 0 },
   fileFilter: (req: UploadRequest, file, cb) => {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       // cb(error)로 즉시 거부하면 busboy가 남은 요청 스트림을 비우지 않고 파싱을 중단한다.
