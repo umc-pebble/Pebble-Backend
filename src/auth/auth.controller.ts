@@ -27,10 +27,17 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
-// 소셜 로그인은 OAuth 클라이언트 키 발급 후 별도 이슈에서 구현 예정
-export const socialLogin = async (_req: Request, res: Response, next: NextFunction) => {
+export const socialLogin = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    sendSuccess(res, null, '소셜 로그인 (미구현)');
+    const result = await authService.socialLogin(req.params.provider, req.body);
+    // 이번 요청으로 계정이 생성됐으면 201, 기존 계정 로그인이면 200 (스웨거 계약)
+    const { isNewUser } = result;
+    sendSuccess(
+      res,
+      result,
+      isNewUser ? '소셜 회원가입 성공' : '소셜 로그인 성공',
+      isNewUser ? 201 : 200,
+    );
   } catch (err) {
     next(err);
   }
@@ -54,10 +61,11 @@ export const logout = async (req: AuthRequest, res: Response, next: NextFunction
   }
 };
 
-// 임시 비밀번호 발급은 이메일 발송(Resend) 연동과 함께 이슈 #13에서 구현 예정
-export const issueTempPassword = async (_req: Request, res: Response, next: NextFunction) => {
+export const issueTempPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    sendSuccess(res, null, '임시 비밀번호 발급 (미구현)');
+    await authService.issueTempPassword(req.body.email);
+    // 가입 여부·rate limit과 무관하게 항상 동일 응답 (계정 존재 노출 방지, PLB-047)
+    sendSuccess(res, null, '입력하신 이메일로 임시 비밀번호를 발송했어요.');
   } catch (err) {
     next(err);
   }

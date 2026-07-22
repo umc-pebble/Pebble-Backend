@@ -34,8 +34,13 @@ export const updateMe = async (req: AuthRequest, res: Response, next: NextFuncti
   }
 };
 
-export const deleteMe = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '회원탈퇴 (미구현)');
+export const deleteMe = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    await userService.withdraw(req.userId!);
+    sendSuccess(res, null, '회원탈퇴가 완료되었습니다.');
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const getUser = async (req: AuthRequest, res: Response, next: NextFunction) => {

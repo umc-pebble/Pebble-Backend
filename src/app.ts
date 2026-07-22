@@ -19,6 +19,7 @@ import notificationRouter from './notification/notification.route';
 import reportRouter from './report/report.route';
 import subscriptionRouter from './subscription/subscription.route';
 import { ERROR_CODE } from './constants/error-code';
+import { startReportScheduler } from './report/report.scheduler';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -65,6 +66,8 @@ app.use((_req, res) => {
 });
 
 app.use(errorHandler);
+
+startReportScheduler();
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
