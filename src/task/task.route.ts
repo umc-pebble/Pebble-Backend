@@ -6,7 +6,11 @@ import {
   toggleTaskComplete,
   deleteTask,
   reorderTasks,
+  getFriendTasks,
 } from './task.controller';
+import { authMiddleware } from '../middlewares/auth.middleware';
+import { createTaskSchema, reorderTasksSchema, updateTaskSchema } from './task.schema';
+import { validateBody } from '../middlewares/validate.middleware';
 
 const router = Router();
 
@@ -14,110 +18,23 @@ const router = Router();
  * @swagger
  * tags:
  *   name: Task
- *   description: 태스크 (마일스톤 하위 또는 독립, 다중 날짜는 TaskDate로 회차 관리)
+ *   description: 태스크 (독립 또는 카테고리 하위, 다중 날짜는 TaskDate로 회차 관리)
  */
-
-/**
- * @swagger
- * /milestones/{milestoneId}/tasks:
- *   get:
- *     summary: 하위 태스크 목록 조회 (PLB-020·021)
- *     description: >
- *       특정 마일스톤에 속한 하위 태스크 목록을 조회합니다.
- *       기본 정렬은 D-Day가 가까운 순(오름차순)입니다.
- *       사용자가 순서를 직접 변경한 경우 저장된 displayOrder 순서대로 조회합니다.
- *       상위 카테고리가 숨김 처리된 경우 캘린더에 노출되지 않습니다.
- *     tags: [Task]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - $ref: '#/components/parameters/MilestoneIdPath'
- *     responses:
- *       200:
- *         description: 조회 성공
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     data:
- *                       type: object
- *                       properties:
- *                         tasks:
- *                           type: array
- *                           items:
- *                             $ref: '#/components/schemas/Task'
- *             example:
- *               success: true
- *               message: 태스크 조회 성공
- *               data:
- *                 tasks:
- *                   - id: 12
- *                     userId: 1
- *                     milestoneId: 10
- *                     name: 기획서 작성
- *                     dateType: SINGLE
- *                     startDate: '2026-07-01'
- *                     endDate: null
- *                     color: null
- *                     isCompleted: false
- *                     completedAt: null
- *                     displayOrder: 1
- *                   - id: 13
- *                     userId: 1
- *                     milestoneId: 10
- *                     name: 보고서 작성
- *                     dateType: RANGE
- *                     startDate: '2026-07-10'
- *                     endDate: '2026-07-20'
- *                     color: null
- *                     isCompleted: false
- *                     completedAt: null
- *                     displayOrder: 2
- *                   - id: 30
- *                     userId: 1
- *                     milestoneId: 10
- *                     name: 자료 조사
- *                     dateType: MULTI
- *                     startDate: null
- *                     endDate: null
- *                     color: null
- *                     displayOrder: 3
- *                     taskDates:
- *                       - taskDateId: 101
- *                         date: '2026-07-10'
- *                         isCompleted: true
- *                         completedAt: '2026-07-10T09:10:00+09:00'
- *                         name: 자료 조사
- *                         color: null
- *                       - taskDateId: 102
- *                         date: '2026-07-14'
- *                         isCompleted: false
- *                         completedAt: null
- *                         name: 자료 조사
- *                         color: null
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- *       500:
- *         $ref: '#/components/responses/InternalServerError'
- */
-router.get('/milestones/:milestoneId/tasks', getTasks);
 
 /**
  * @swagger
  * /tasks:
  *   get:
- *     summary: 독립 태스크 목록 조회 (PLB-020·021)
+ *     summary: 월별 태스크 목록 조회 (PLB-020·021)
  *     description: >
- *       독립 태스크 목록을 조회합니다.
- *       독립 태스크는 마일스톤에 속하지 않는 태스크이며, 캘린더 사이드바 상단에 표시됩니다.
- *       독립 태스크도 날짜 유형으로 일반(SINGLE), 기간(RANGE), 다중(MULTI)을 가질 수 있습니다.
+ *       기준 날짜가 포함된 월의 태스크 목록을 조회합니다.
+ *       독립 태스크와 숨김 처리되지 않은 카테고리의 하위 태스크를 모두 반환합니다.
+ *       categoryId와 milestoneId가 모두 null이면 독립 태스크입니다.
+ *       categoryId만 존재하면 카테고리 직속 태스크입니다.
+ *       categoryId와 milestoneId가 모두 존재하면 마일스톤 하위 태스크입니다.
+ *       SINGLE은 시작일이 조회 월에 포함된 경우 조회합니다.
+ *       RANGE는 조회 월과 기간이 하루라도 겹치는 경우 조회합니다.
+ *       MULTIPLE은 조회 월에 해당하는 TaskDate 회차만 반환합니다.
  *     tags: [Task]
  *     security:
  *       - bearerAuth: []
@@ -128,7 +45,10 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *         schema:
  *           type: string
  *           format: date
- *         description: 조회 기준 날짜. 미입력 시 오늘 기준
+ *         description: >
+ *           조회할 월을 결정하는 기준 날짜입니다.
+ *           해당 날짜가 포함된 월의 태스크를 조회하며,
+ *           미입력 시 KST 기준 오늘이 포함된 월을 조회합니다.
  *         example: '2026-07-10'
  *     responses:
  *       200:
@@ -149,11 +69,12 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *                             $ref: '#/components/schemas/Task'
  *             example:
  *               success: true
- *               message: 독립 태스크 조회 성공
+ *               message: 월별 태스크 조회 성공
  *               data:
  *                 tasks:
  *                   - id: 21
  *                     userId: 1
+ *                     categoryId: null
  *                     milestoneId: null
  *                     name: 장보기
  *                     dateType: SINGLE
@@ -165,6 +86,7 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *                     displayOrder: 1
  *                   - id: 22
  *                     userId: 1
+ *                     categoryId: null
  *                     milestoneId: null
  *                     name: 여행 준비
  *                     dateType: RANGE
@@ -176,12 +98,15 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *                     displayOrder: 2
  *                   - id: 23
  *                     userId: 1
+ *                     categoryId: null
  *                     milestoneId: null
  *                     name: 운동하기
- *                     dateType: MULTI
+ *                     dateType: MULTIPLE
  *                     startDate: null
  *                     endDate: null
  *                     color: '#86EFAC'
+ *                     isCompleted: false
+ *                     completedAt: null
  *                     displayOrder: 3
  *                     taskDates:
  *                       - taskDateId: 201
@@ -196,6 +121,131 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *                         completedAt: '2026-07-14T09:10:00+09:00'
  *                         name: 운동하기
  *                         color: '#86EFAC'
+ *
+ *                   - id: 24
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: null
+ *                     name: 카테고리 자료 조사
+ *                     dateType: SINGLE
+ *                     startDate: '2026-07-11'
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *
+ *                   - id: 25
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: null
+ *                     name: 카테고리 일정 정리
+ *                     dateType: RANGE
+ *                     startDate: '2026-06-28'
+ *                     endDate: '2026-07-05'
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *
+ *                   - id: 26
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: null
+ *                     name: 카테고리 회의 준비
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 3
+ *                     taskDates:
+ *                       - taskDateId: 203
+ *                         date: '2026-07-08'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 카테고리 회의 준비
+ *                         color: '#67E8F9'
+ *                       - taskDateId: 204
+ *                         date: '2026-07-22'
+ *                         isCompleted: true
+ *                         completedAt: '2026-07-22T18:30:00+09:00'
+ *                         name: 카테고리 회의 준비
+ *                         color: '#67E8F9'
+ *
+ *                   - id: 27
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: 10
+ *                     name: 기획서 작성
+ *                     dateType: SINGLE
+ *                     startDate: '2026-07-12'
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *
+ *                   - id: 28
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: 10
+ *                     name: 화면 설계
+ *                     dateType: RANGE
+ *                     startDate: '2026-07-15'
+ *                     endDate: '2026-07-25'
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *
+ *                   - id: 29
+ *                     userId: 1
+ *                     categoryId: 3
+ *                     milestoneId: 10
+ *                     name: 기능 테스트
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 3
+ *                     taskDates:
+ *                       - taskDateId: 205
+ *                         date: '2026-07-18'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 기능 테스트
+ *                         color: '#67E8F9'
+ *                       - taskDateId: 206
+ *                         date: '2026-07-27'
+ *                         isCompleted: true
+ *                         completedAt: '2026-07-27T16:00:00+09:00'
+ *                         name: 기능 테스트
+ *                         color: '#67E8F9'
+ *       400:
+ *         description: baseDate 입력값 오류
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *             examples:
+ *               invalidFormat:
+ *                 summary: 날짜 형식 오류
+ *                 value:
+ *                   success: false
+ *                   message: baseDate는 YYYY-MM-DD 형식이어야 합니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *               invalidDate:
+ *                 summary: 존재하지 않는 날짜
+ *                 value:
+ *                   success: false
+ *                   message: 유효하지 않은 baseDate입니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -203,16 +253,17 @@ router.get('/milestones/:milestoneId/tasks', getTasks);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/tasks', getTasks);
+router.get('/tasks', authMiddleware, getTasks);
 
 /**
  * @swagger
  * /tasks/order:
  *   patch:
- *     summary: 하위 태스크 순서 변경 (PLB-021)
+ *     summary: 마일스톤 내 태스크 순서 변경 (PLB-021)
  *     description: >
  *       같은 마일스톤 내에서 태스크 순서를 변경합니다.
- *       전달된 orderedIds 순서가 displayOrder로 저장되며, 이후 하위 태스크 목록 조회 시 해당 순서가 반영됩니다.
+ *       전달된 orderedIds 순서가 displayOrder로 저장되며,
+ *       이후 해당 마일스톤의 하위 태스크 목록 조회 시 해당 순서가 반영됩니다.
  *       다른 마일스톤으로의 이동은 지원하지 않습니다.
  *     tags: [Task]
  *     security:
@@ -227,13 +278,13 @@ router.get('/tasks', getTasks);
  *             properties:
  *               milestoneId:
  *                 type: integer
- *                 description: 대상 마일스톤 ID
+ *                 description: 순서를 변경할 마일스톤 ID
  *                 example: 10
  *               orderedIds:
  *                 type: array
  *                 items:
  *                   type: integer
- *                 description: 화면 순서대로 나열한 taskId 배열
+ *                 description: 화면 순서대로 나열한 해당 마일스톤의 taskId 배열
  *                 example: [102, 100, 101]
  *     responses:
  *       200:
@@ -247,7 +298,7 @@ router.get('/tasks', getTasks);
  *               message: 순서 변경 성공
  *               data: {}
  *       400:
- *         description: 다른 마일스톤의 태스크 ID가 포함된 경우
+ *         description: orderedIds에 다른 마일스톤의 태스크가 포함된 경우
  *         content:
  *           application/json:
  *             schema:
@@ -266,16 +317,18 @@ router.get('/tasks', getTasks);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/tasks/order', reorderTasks);
-
+router.patch('/tasks/order', authMiddleware, validateBody(reorderTasksSchema), reorderTasks);
 /**
  * @swagger
  * /tasks:
  *   post:
  *     summary: 태스크 생성 — 독립/하위 (PLB-017)
  *     description: >
- *       태스크를 생성합니다. milestoneId가 없으면 독립 태스크, 있으면 마일스톤 하위 태스크로 생성합니다.
- *       독립 태스크와 하위 태스크 모두 날짜 유형으로 SINGLE(일반), RANGE(기간), MULTI(다중) 중 하나를 선택할 수 있습니다.
+ *       태스크를 생성합니다. categoryId가 없으면 독립 태스크로 생성합니다.
+ *       categoryId가 있고 milestoneId가 없으면 카테고리 직속 하위 태스크로 생성합니다.
+ *       categoryId와 milestoneId가 모두 있으면 해당 카테고리의 마일스톤 하위 태스크로 생성합니다.
+ *       categoryId 없이 milestoneId만 전달하는 조합은 허용하지 않습니다.
+ *       독립 태스크와 하위 태스크 모두 날짜 유형으로 SINGLE(일반), RANGE(기간), MULTIPLE(다중) 중 하나를 선택할 수 있습니다.
  *       색상은 독립 태스크만 설정할 수 있으며(사용자가 설정하지 않을 경우 기본값을 전달), 하위 태스크는 상위 카테고리 색상을 따릅니다.
  *     tags: [Task]
  *     security:
@@ -288,10 +341,21 @@ router.patch('/tasks/order', reorderTasks);
  *             type: object
  *             required: [name, dateType]
  *             properties:
+ *               categoryId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: >
+ *                   태스크가 속할 카테고리 ID입니다.
+ *                   null 또는 생략하면 독립 태스크입니다.
+ *                   값이 있으면 카테고리 하위 태스크입니다.
+ *                 example: 3
  *               milestoneId:
  *                 type: integer
  *                 nullable: true
- *                 description: 하위 태스크일 경우 마일스톤 ID, 독립 태스크일 경우 null 또는 생략
+ *                 description: >
+ *                   태스크가 속할 마일스톤 ID입니다.
+ *                   null 또는 생략하면 독립 태스크이거나 카테고리 직속 하위 태스크입니다.
+ *                   값을 전달하려면 categoryId도 반드시 함께 전달해야 합니다.
  *                 example: 10
  *               name:
  *                 type: string
@@ -300,7 +364,7 @@ router.patch('/tasks/order', reorderTasks);
  *                 example: 기획서 작성
  *               dateType:
  *                 type: string
- *                 enum: [SINGLE, RANGE, MULTI]
+ *                 enum: [SINGLE, RANGE, MULTIPLE]
  *                 description: 날짜 유형. 생성 이후 변경할 수 없습니다.
  *                 example: SINGLE
  *               startDate:
@@ -318,7 +382,7 @@ router.patch('/tasks/order', reorderTasks);
  *               dates:
  *                 type: array
  *                 nullable: true
- *                 description: MULTI에서 사용하는 날짜 배열. 각 날짜는 TaskDate로 생성됩니다.
+ *                 description: MULTIPLE에서 사용하는 날짜 배열. 각 날짜는 TaskDate로 생성됩니다.
  *                 items:
  *                   type: string
  *                   format: date
@@ -336,6 +400,8 @@ router.patch('/tasks/order', reorderTasks);
  *             independentSingleTask:
  *               summary: 독립 태스크 생성 - 일반 날짜
  *               value:
+ *                 categoryId: null
+ *                 milestoneId: null
  *                 name: 장보기
  *                 dateType: SINGLE
  *                 startDate: '2026-07-10'
@@ -343,42 +409,74 @@ router.patch('/tasks/order', reorderTasks);
  *             independentRangeTask:
  *               summary: 독립 태스크 생성 - 기간
  *               value:
+ *                 categoryId: null
+ *                 milestoneId: null
  *                 name: 여행 준비
  *                 dateType: RANGE
  *                 startDate: '2026-07-10'
  *                 endDate: '2026-07-20'
  *                 color: '#A5B4FC'
- *             independentMultiTask:
+ *             independentMultipleTask:
  *               summary: 독립 태스크 생성 - 다중 날짜
  *               value:
+ *                 categoryId: null
+ *                 milestoneId: null
  *                 name: 운동하기
- *                 dateType: MULTI
+ *                 dateType: MULTIPLE
  *                 dates: ['2026-07-10', '2026-07-14', '2026-07-20']
  *                 color: '#A5B4FC'
- *             childSingleTask:
- *               summary: 하위 태스크 생성 - 일반 날짜
+ *             categoryChildSingleTask:
+ *               summary: 카테고리 직속 하위 태스크 생성 - 일반 날짜
  *               value:
+ *                 categoryId: 3
+ *                 milestoneId: null
+ *                 name: 자료 조사
+ *                 dateType: SINGLE
+ *                 startDate: '2026-07-10'
+ *             categoryChildRangeTask:
+ *               summary: 카테고리 직속 하위 태스크 생성 - 기간
+ *               value:
+ *                 categoryId: 3
+ *                 milestoneId: null
+ *                 name: 리서치 진행
+ *                 dateType: RANGE
+ *                 startDate: '2026-07-10'
+ *                 endDate: '2026-07-20'
+ *             categoryChildMultipleTask:
+ *               summary: 카테고리 직속 하위 태스크 생성 - 다중 날짜
+ *               value:
+ *                 categoryId: 3
+ *                 milestoneId: null
+ *                 name: 운동하기
+ *                 dateType: MULTIPLE
+ *                 dates: ['2026-07-10', '2026-07-14', '2026-07-20']
+ *             milestoneChildSingleTask:
+ *               summary: 마일스톤 하위 태스크 생성 - 일반 날짜
+ *               value:
+ *                 categoryId: 3
  *                 milestoneId: 10
  *                 name: 기획서 작성
  *                 dateType: SINGLE
  *                 startDate: '2026-07-10'
- *             childRangeTask:
- *               summary: 하위 태스크 생성 - 기간
+ *             milestoneChildRangeTask:
+ *               summary: 마일스톤 하위 태스크 생성 - 기간
  *               value:
+ *                 categoryId: 3
  *                 milestoneId: 10
  *                 name: 기획서 작성
  *                 dateType: RANGE
  *                 startDate: '2026-07-10'
  *                 endDate: '2026-07-20'
- *             childMultiTask:
- *               summary: 하위 태스크 생성 - 다중 날짜
+ *             milestoneChildMultipleTask:
+ *               summary: 마일스톤 하위 태스크 생성 - 다중 날짜
  *               value:
+ *                 categoryId: 3
  *                 milestoneId: 10
  *                 name: 자료 조사
- *                 dateType: MULTI
+ *                 dateType: MULTIPLE
  *                 dates: ['2026-07-10', '2026-07-14', '2026-07-20']
  *     responses:
-  *       201:
+ *       201:
  *         description: 태스크 생성 성공
  *         content:
  *           application/json:
@@ -398,6 +496,7 @@ router.patch('/tasks/order', reorderTasks);
  *                   data:
  *                     id: 12
  *                     userId: 1
+ *                     categoryId: null
  *                     milestoneId: null
  *                     name: 장보기
  *                     dateType: SINGLE
@@ -407,61 +506,17 @@ router.patch('/tasks/order', reorderTasks);
  *                     isCompleted: false
  *                     completedAt: null
  *                     displayOrder: 1
- *               independentRangeTask:
- *                 summary: 독립 기간 태스크 생성 성공
- *                 value:
- *                   success: true
- *                   message: 태스크 생성 성공
- *                   data:
- *                     id: 13
- *                     userId: 1
- *                     milestoneId: null
- *                     name: 여행 준비
- *                     dateType: RANGE
- *                     startDate: '2026-07-10'
- *                     endDate: '2026-07-20'
- *                     color: '#F9A8D4'
- *                     isCompleted: false
- *                     completedAt: null
- *                     displayOrder: 2
- *               independentMultiTask:
- *                 summary: 독립 다중 태스크 생성 성공
- *                 value:
- *                   success: true
- *                   message: 태스크 생성 성공
- *                   data:
- *                     id: 14
- *                     userId: 1
- *                     milestoneId: null
- *                     name: 운동하기
- *                     dateType: MULTI
- *                     startDate: null
- *                     endDate: null
- *                     color: '#86EFAC'
- *                     displayOrder: 3
- *                     taskDates:
- *                       - taskDateId: 101
- *                         date: '2026-07-10'
- *                         isCompleted: false
- *                         completedAt: null
- *                         name: 운동하기
- *                         color: '#86EFAC'
- *                       - taskDateId: 102
- *                         date: '2026-07-14'
- *                         isCompleted: false
- *                         completedAt: null
- *                         name: 운동하기
- *                         color: '#86EFAC'
- *               childSingleTask:
- *                 summary: 하위 일반 태스크 생성 성공
+ *               categoryChildTask:
+ *                 summary: 카테고리 직속 하위 태스크 생성 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 생성 성공
  *                   data:
  *                     id: 20
  *                     userId: 1
- *                     milestoneId: 10
- *                     name: 기획서 작성
+ *                     categoryId: 3
+ *                     milestoneId: null
+ *                     name: 자료 조사
  *                     dateType: SINGLE
  *                     startDate: '2026-07-10'
  *                     endDate: null
@@ -469,38 +524,22 @@ router.patch('/tasks/order', reorderTasks);
  *                     isCompleted: false
  *                     completedAt: null
  *                     displayOrder: 1
- *               childRangeTask:
- *                 summary: 하위 기간 태스크 생성 성공
- *                 value:
- *                   success: true
- *                   message: 태스크 생성 성공
- *                   data:
- *                     id: 21
- *                     userId: 1
- *                     milestoneId: 10
- *                     name: 기획서 작성
- *                     dateType: RANGE
- *                     startDate: '2026-07-10'
- *                     endDate: '2026-07-20'
- *                     color: null
- *                     isCompleted: false
- *                     completedAt: null
- *                     displayOrder: 2
- *               childMultiTask:
- *                 summary: 하위 다중 태스크 생성 성공
+ *               milestoneChildTask:
+ *                 summary: 마일스톤 하위 다중 태스크 생성 성공
  *                 value:
  *                   success: true
  *                   message: 태스크 생성 성공
  *                   data:
  *                     id: 30
  *                     userId: 1
+ *                     categoryId: 3
  *                     milestoneId: 10
  *                     name: 자료 조사
- *                     dateType: MULTI
+ *                     dateType: MULTIPLE
  *                     startDate: null
  *                     endDate: null
  *                     color: null
- *                     displayOrder: 3
+ *                     displayOrder: 1
  *                     taskDates:
  *                       - taskDateId: 201
  *                         date: '2026-07-10'
@@ -542,25 +581,39 @@ router.patch('/tasks/order', reorderTasks);
  *                   message: 하위 태스크에는 color를 지정할 수 없습니다.
  *                   error:
  *                     code: COMMON_INVALID_INPUT
+ *               milestoneWithoutCategory:
+ *                 summary: categoryId 없이 milestoneId 전달
+ *                 value:
+ *                   success: false
+ *                   message: milestoneId를 지정하려면 categoryId가 필요합니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *               milestoneCategoryMismatch:
+ *                 summary: categoryId와 milestoneId의 소속 불일치
+ *                 value:
+ *                   success: false
+ *                   message: 해당 마일스톤은 요청한 카테고리에 속하지 않습니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  *       404:
- *         description: milestoneId에 해당하는 마일스톤이 없는 경우
+ *         description: categoryId 또는 milestoneId에 해당하는 리소스가 없는 경우
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
  *               success: false
- *               message: 마일스톤을 찾을 수 없습니다.
+ *               message: 카테고리 또는 마일스톤을 찾을 수 없습니다.
  *               error:
  *                 code: COMMON_NOT_FOUND
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/tasks', createTask);
+router.post('/tasks', authMiddleware, validateBody(createTaskSchema), createTask);
 
 /**
  * @swagger
@@ -568,7 +621,7 @@ router.post('/tasks', createTask);
  *   patch:
  *     summary: 태스크 수정 (PLB-018)
  *     description: >
- *       태스크 정보를 수정합니다. dateType과 소속 마일스톤은 변경할 수 없습니다.
+ *       태스크 정보를 수정합니다. dateType, categoryId, milestoneId는 변경할 수 없습니다.
  *       다중 태스크의 이름/색상 수정은 editScope로 이 항목만 수정할지 전체 수정할지 지정합니다.
  *       날짜 수정은 editScope를 사용하지 않고 현재 dateType에 맞는 날짜 필드를 직접 수정합니다.
  *       editScope=ALL인 경우 오늘 이후 미완료 회차에만 적용되며, 과거 또는 완료 회차의 기존 이름/색상은 서버에서 보존합니다.
@@ -719,7 +772,7 @@ router.post('/tasks', createTask);
  *                   data:
  *                     editScope: ALL
  *                     id: 30
- *                     dateType: MULTI
+ *                     dateType: MULTIPLE
  *                     name: 아침 운동
  *                     color: '#A5B4FC'
  *       400:
@@ -741,6 +794,13 @@ router.post('/tasks', createTask);
  *                 value:
  *                   success: false
  *                   message: dateType은 수정할 수 없습니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *               invalidCategoryChange:
+ *                 summary: categoryId 변경 시도
+ *                 value:
+ *                   success: false
+ *                   message: 태스크의 소속 카테고리는 수정할 수 없습니다.
  *                   error:
  *                     code: COMMON_INVALID_INPUT
  *               invalidMilestoneChange:
@@ -787,7 +847,7 @@ router.post('/tasks', createTask);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/tasks/:taskId', updateTask);
+router.patch('/tasks/:taskId', authMiddleware, validateBody(updateTaskSchema), updateTask);
 
 /**
  * @swagger
@@ -797,7 +857,7 @@ router.patch('/tasks/:taskId', updateTask);
  *     description: >
  *       태스크의 완료 상태를 토글합니다.
  *       일반(SINGLE)은 태스크 하나에 체크박스 하나가 있으며, 기간(RANGE)은 시작일~종료일 전체에 체크박스 하나가 있습니다.
- *       일반/기간은 Task의 완료 상태를 변경하고, 다중(MULTI)은 날짜별 TaskDate의 완료 상태를 변경합니다.
+ *       일반/기간은 Task의 완료 상태를 변경하고, 다중(MULTIPLE)은 날짜별 TaskDate의 완료 상태를 변경합니다.
  *     tags: [Task]
  *     security:
  *       - bearerAuth: []
@@ -863,7 +923,7 @@ router.patch('/tasks/:taskId', updateTask);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/tasks/:taskId/complete', toggleTaskComplete);
+router.patch('/tasks/:taskId/complete', authMiddleware, toggleTaskComplete);
 
 /**
  * @swagger
@@ -898,7 +958,7 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *         description: 다중 태스크에서 THIS_ONLY 삭제 시 대상 TaskDate ID
  *         example: 101
  *     responses:
-  *       200:
+ *       200:
  *         description: 삭제 성공
  *         content:
  *           application/json:
@@ -930,7 +990,6 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *                     deleteScope: ALL
  *                     deletedTaskDateIds: [102, 103]
  *                     deletedCount: 2
- *                     preservedCount: 1
  *       400:
  *         description: 삭제 범위 입력값 오류
  *         content:
@@ -968,6 +1027,159 @@ router.patch('/tasks/:taskId/complete', toggleTaskComplete);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.delete('/tasks/:taskId', deleteTask);
+router.delete('/tasks/:taskId', authMiddleware, deleteTask);
+
+/**
+ * @swagger
+ * /tasks/users/{userId}:
+ *   get:
+ *     summary: 친구의 월별 태스크 목록 조회
+ *     description: >
+ *       ACCEPTED 친구 관계인 사용자의 태스크 목록을 조회합니다.
+ *       본인 태스크는 GET /tasks를 사용해야 하며,
+ *       본인 ID로 요청하거나 친구 관계가 아닌 경우 403을 반환합니다.
+ *       기준 날짜가 포함된 월의 독립 태스크와
+ *       숨김 처리되지 않은 카테고리의 하위 태스크를 반환합니다.
+ *       SINGLE은 시작일이 조회 월에 포함된 경우 조회하고,
+ *       RANGE는 조회 월과 기간이 하루라도 겹치는 경우 조회하며,
+ *       MULTIPLE은 조회 월에 해당하는 TaskDate 회차만 반환합니다.
+ *     tags: [Task]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: 태스크를 조회할 친구의 사용자 ID
+ *         example: 2
+ *       - name: baseDate
+ *         in: query
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: >
+ *           조회할 월을 결정하는 기준 날짜입니다.
+ *           미입력 시 KST 기준 오늘이 포함된 월을 조회합니다.
+ *         example: '2026-07-10'
+ *     responses:
+ *       200:
+ *         description: 친구 태스크 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         tasks:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Task'
+ *             example:
+ *               success: true
+ *               message: 친구 태스크 조회 성공
+ *               data:
+ *                 tasks:
+ *                   - id: 21
+ *                     userId: 2
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 장보기
+ *                     dateType: SINGLE
+ *                     startDate: '2026-07-10'
+ *                     endDate: null
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *                   - id: 22
+ *                     userId: 2
+ *                     categoryId: 3
+ *                     milestoneId: 10
+ *                     name: 운동하기
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#67E8F9'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *                     taskDates:
+ *                       - taskDateId: 201
+ *                         date: '2026-07-10'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동하기
+ *                         color: '#67E8F9'
+ *       400:
+ *         description: userId 또는 baseDate 입력값 오류
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               invalidUserId:
+ *                 summary: 잘못된 사용자 ID
+ *                 value:
+ *                   success: false
+ *                   message: 유효하지 않은 사용자 ID입니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *               invalidBaseDate:
+ *                 summary: 잘못된 기준 날짜
+ *                 value:
+ *                   success: false
+ *                   message: baseDate는 YYYY-MM-DD 형식이어야 합니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 본인 조회 또는 친구 관계가 아닌 사용자 조회
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               self:
+ *                 summary: 본인 ID로 요청
+ *                 value:
+ *                   success: false
+ *                   message: 본인 태스크는 기존 태스크 조회 API를 이용해 주세요.
+ *                   error:
+ *                     code: COMMON_FORBIDDEN
+ *               notFriend:
+ *                 summary: ACCEPTED 친구 관계가 아님
+ *                 value:
+ *                   success: false
+ *                   message: 친구의 태스크만 조회할 수 있습니다.
+ *                   error:
+ *                     code: COMMON_FORBIDDEN
+ *       404:
+ *         description: 조회 대상 사용자를 찾을 수 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 사용자를 찾을 수 없습니다.
+ *               error:
+ *                 code: COMMON_NOT_FOUND
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get(
+  '/tasks/users/:userId',
+  authMiddleware,
+  getFriendTasks,
+);
 
 export default router;
