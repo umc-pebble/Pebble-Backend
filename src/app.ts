@@ -1,6 +1,8 @@
+// 아래 라우터 import들이 모듈 로드 시점에 process.env를 참조하므로(config/supabase.ts 등),
+// dotenv 로딩은 다른 import보다 먼저 실행되어야 한다.
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 import { errorHandler } from './middlewares/error.middleware';
 import { swaggerSpec } from './config/swagger';
@@ -18,8 +20,6 @@ import reportRouter from './report/report.route';
 import subscriptionRouter from './subscription/subscription.route';
 import { ERROR_CODE } from './constants/error-code';
 import { startReportScheduler } from './report/report.scheduler';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

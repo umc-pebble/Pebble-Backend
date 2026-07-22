@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authMiddleware } from '../middlewares/auth.middleware';
+import { uploadSingleImage } from '../middlewares/upload.middleware';
 import { uploadImage } from './upload.controller';
 
 const router = Router();
@@ -74,6 +76,6 @@ const router = Router();
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/uploads/image', uploadImage);
+router.post('/uploads/image', authMiddleware, uploadSingleImage, uploadImage);
 
 export default router;

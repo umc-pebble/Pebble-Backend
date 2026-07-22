@@ -3,21 +3,35 @@ import { z } from 'zod';
 // User 요청 body 스키마 (라우트의 validateBody 미들웨어에서 사용).
 // 컨트롤러/서비스는 여기서 파싱된 타입(z.infer)을 그대로 신뢰한다.
 
-const colorField = z
-  .string()
-  .max(20)
-  .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, '색상은 hex 코드 형식이어야 합니다.');
-
 export const updateMeSchema = z.object({
+  // 100자 제한은 기능명세서(PLB-003)엔 없는 값이지만, 합의된 ERD의 nickname VarChar(100) 컬럼 폭에서
+  // 파생된 기술적 가드다(원시 DB 오류 대신 400을 주기 위함). 커스텀 메시지는 넣지 않는다.
   nickname: z.string().max(100).optional(),
   bio: z.string().nullable().optional(),
-  profileImageUrl: z.string().nullable().optional(),
+  // 실제 파일이 아니라 POST /uploads/image로 먼저 업로드한 뒤 받은 URL을 전달한다.
+  // auth.schema.ts와 동일하게 형식(.url())만 검증하며, 업로드 API가 준 URL인지(origin)는
+  // 제한하지 않는다 — 스토리지 도메인이 바뀔 수 있고 명세에도 없는 제약이라 의도적으로 안 건다.
+  profileImageUrl: z.string().url('프로필 이미지 URL 형식이 올바르지 않습니다.').max(500).nullable().optional(),
+});
+
+// PLB-026 확정 팔레트 (색상군당 대표색 1개, 총 6개): 조약돌·시냇물·새싹·햇살·노을·꽃
+export const ACTIVITY_COLOR_PALETTE = [
+  '#A3A3A3',
+  '#82A0FF',
+  '#ABE692',
+  '#FFE48B',
+  '#FFB67A',
+  '#FFB4B4',
+] as const;
+
+const colorField = z.enum(ACTIVITY_COLOR_PALETTE, {
+  message: `색상은 다음 팔레트 중 하나여야 합니다: ${ACTIVITY_COLOR_PALETTE.join(', ')}`,
 });
 
 export const updateSettingsSchema = z.object({
   theme: z.enum(['LIGHT', 'DARK']).optional(),
   notifyTaskDue: z.boolean().optional(),
-  activityColor: colorField.nullable().optional(),
+  activityColor: colorField.optional(),
 });
 
 export const changePasswordSchema = z.object({

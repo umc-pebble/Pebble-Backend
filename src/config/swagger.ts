@@ -89,7 +89,7 @@ const options: swaggerJSDoc.Options = {
         Milestone: {
           type: 'object',
           description:
-            'userId 없음 — 카테고리를 통한 2-hop 소유 판정. 날짜 유형(dateType)에 따라 startDate/endDate 사용 여부가 달라집니다. ※ MULTIPLE(다중)는 준비 중 — 현재 저장·반환되는 값은 SINGLE/RANGE뿐입니다. (구현 예정: MULTIPLE는 선택한 날짜마다 실제 row로 존재하며 같은 seriesId를 공유)',
+            'userId 없음 — 카테고리를 통한 2-hop 소유 판정. 날짜 유형(dateType)에 따라 startDate/endDate 사용 여부가 달라집니다. MULTIPLE(다중)는 선택한 날짜마다 실제 row(회차)로 존재하며 같은 seriesId를 공유합니다.',
           properties: {
             id: { type: 'integer', example: 10 },
             categoryId: { type: 'integer', example: 1 },
@@ -103,7 +103,7 @@ const options: swaggerJSDoc.Options = {
             dateType: {
               type: 'string',
               enum: ['SINGLE', 'RANGE', 'MULTIPLE'],
-              description: '현재 SINGLE/RANGE만 사용됨. MULTIPLE는 준비 중',
+              description: 'SINGLE=단일 / RANGE=기간 / MULTIPLE=다중(회차 row)',
               example: 'RANGE',
             },
             startDate: {
@@ -287,7 +287,7 @@ const options: swaggerJSDoc.Options = {
               description: '마지막 닉네임 변경 시각 (15일 쿨다운 계산용, PLB-043)',
               example: null,
             },
-            nicknameChangableAfter: {
+            nicknameChangeableAfter: {
               type: 'string',
               format: 'date-time',
               nullable: true,
@@ -311,10 +311,9 @@ const options: swaggerJSDoc.Options = {
               properties: {
                 activityColor: {
                   type: 'string',
-                  maxLength: 20,
-                  nullable: true,
-                  description: '징검다리 색상 (팔레트 내 선택, PLB-026)',
-                  example: '#7ED321',
+                  enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'],
+                  description: '징검다리 색상 (PEBBLE 팔레트 6종 중 선택, PLB-026)',
+                  example: '#82A0FF',
                 },
                 notifyTaskDue: { type: 'boolean', description: '당일/마감 알림 on/off', example: true },
                 theme: { type: 'string', enum: ['LIGHT', 'DARK'], example: 'LIGHT' },
