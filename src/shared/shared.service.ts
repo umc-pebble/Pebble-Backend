@@ -148,6 +148,8 @@ export const sharedService = {
   },
 
   // 나에게 온 초대를 수락/거절한다 (PLB-044). 대기 중(PENDING)인 초대만 대상이다.
+  // 수락 시 오너에게 CATEGORY_ACCEPTED 알림을 보낸다 — Category.userId는 공유 전환 이후에도
+  // 바뀌지 않는 오너 필드라 그대로 수신자로 쓸 수 있다.
   async respondInvite(userId: number, categoryId: number, action: 'ACCEPT' | 'REJECT') {
     const membership = await sharedRepository.findMembership(categoryId, userId);
     if (!membership || membership.status !== 'PENDING') {
@@ -155,6 +157,10 @@ export const sharedService = {
     }
     if (action === 'ACCEPT') {
       await sharedRepository.updateMemberStatus(categoryId, userId, 'ACCEPTED');
+      const category = await sharedRepository.findCategoryById(categoryId);
+      if (category) {
+        await notifySafely(category.userId, 'CATEGORY_ACCEPTED', categoryId);
+      }
     } else {
       await sharedRepository.deleteMembership(categoryId, userId);
     }

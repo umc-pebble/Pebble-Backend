@@ -14,7 +14,10 @@ const inviteTargetSchema = z
   });
 
 export const shareCategorySchema = z.object({
-  invites: z.array(inviteTargetSchema).min(1, '초대할 친구를 1명 이상 지정해야 합니다.'),
+  invites: z
+    .array(inviteTargetSchema)
+    .min(1, '초대할 친구를 1명 이상 지정해야 합니다.')
+    .max(50, '한 번에 최대 50명까지 초대할 수 있습니다.'),
 });
 
 export const inviteMemberSchema = inviteTargetSchema;
