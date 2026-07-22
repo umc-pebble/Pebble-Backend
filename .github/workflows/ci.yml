@@ -6,7 +6,7 @@ on:
 
 # 같은 PR에 연속으로 push하면 이전 CI 실행을 취소하고 최신 실행만 유지 (runner·시간 절약)
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 # GITHUB_TOKEN 최소 권한: 이 job은 코드 검증만 하므로 읽기 전용으로 제한
