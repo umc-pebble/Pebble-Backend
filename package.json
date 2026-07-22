@@ -5,11 +5,11 @@
   "main": "dist/app.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/app.js",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
-    "_postinstall(스키마 확정 후 이름 복구)": "prisma generate"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^5.16.0",
