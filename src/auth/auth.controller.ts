@@ -61,10 +61,11 @@ export const logout = async (req: AuthRequest, res: Response, next: NextFunction
   }
 };
 
-// 임시 비밀번호 발급은 이메일 발송(Resend) 연동과 함께 이슈 #13에서 구현 예정
-export const issueTempPassword = async (_req: Request, res: Response, next: NextFunction) => {
+export const issueTempPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    sendSuccess(res, null, '임시 비밀번호 발급 (미구현)');
+    await authService.issueTempPassword(req.body.email);
+    // 가입 여부·rate limit과 무관하게 항상 동일 응답 (계정 존재 노출 방지, PLB-047)
+    sendSuccess(res, null, '입력하신 이메일로 임시 비밀번호를 발송했어요.');
   } catch (err) {
     next(err);
   }

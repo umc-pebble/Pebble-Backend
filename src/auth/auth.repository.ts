@@ -46,6 +46,14 @@ export const authRepository = {
       data: { refreshToken: newHash },
     }),
 
+  // 임시 비밀번호 발급·원복 겸용 (PLB-035) — 비밀번호 해시와 플래그를 함께 갱신한다.
+  // refreshToken은 건드리지 않는다: 제3자가 남의 이메일로 발급 요청해도 피해자의 기존 세션은 유지.
+  updatePasswordWithTempFlag: (userId: number, passwordHash: string, isTempPassword: boolean) =>
+    prisma.user.update({
+      where: { id: userId },
+      data: { password: passwordHash, isTempPassword },
+    }),
+
   // 소셜 연동 조회 (PLB-002) — provider + providerAccountId 조합이 유일하다.
   findSocialAccount: (provider: SocialProvider, providerAccountId: string) =>
     prisma.socialAccount.findUnique({

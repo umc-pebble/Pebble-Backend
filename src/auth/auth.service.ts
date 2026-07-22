@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 import bcrypt from 'bcrypt';
 import { Prisma, SocialProvider, User } from '@prisma/client';
 
@@ -5,11 +7,28 @@ import { AppError } from '../utils/app-error';
 import { signAccessToken, signRefreshToken, verifyRefreshToken, sha256 } from '../utils/jwt';
 
 import { authRepository } from './auth.repository';
+import { sendTempPasswordEmail } from './auth.mailer';
 import { getSocialProfile, SocialProfile } from './auth.social';
 import { SignupDto, LoginDto, SocialLoginDto } from './auth.schema';
 
 const SALT_ROUNDS = 10;
 const TAG_MAX_ATTEMPTS = 20;
+const TEMP_PASSWORD_LENGTH = 12;
+const TEMP_PASSWORD_RATE_LIMIT_MS = 5 * 60 * 1000; // 동일 이메일 5분 1회 (보안 규칙)
+
+// 임시 비밀번호 발급 시각 기록 — 남의 이메일로 반복 발급해 비밀번호를 계속 리셋시키는 괴롭힘 방지.
+// 단일 인스턴스 in-memory라 서버 재시작 시 초기화된다. 현재 배포 규모(단일 서버)에선 충분하며,
+// 다중 인스턴스로 확장하면 Redis 등 외부 저장소로 교체해야 한다.
+const tempPasswordIssuedAt = new Map<string, number>();
+
+// 임시 비밀번호 생성 — 이메일로 보고 타이핑하는 값이라 헷갈리는 문자(0/O, 1/l/I)는 제외.
+// Math.random은 예측 가능하므로 crypto.randomInt를 사용한다.
+const TEMP_PASSWORD_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+const generateTempPassword = () =>
+  Array.from(
+    { length: TEMP_PASSWORD_LENGTH },
+    () => TEMP_PASSWORD_CHARS[crypto.randomInt(TEMP_PASSWORD_CHARS.length)],
+  ).join('');
 
 // 응답용 공개 필드만 추출 — password·refreshToken은 절대 응답에 포함하지 않는다 (보안 규칙)
 const toPublicUser = (user: User) => ({
@@ -228,5 +247,43 @@ export const authService = {
     }
 
     throw new AppError('COMMON_INTERNAL_ERROR', '고유태그 발급에 실패했습니다. 다시 시도해주세요.');
+  },
+
+  // 임시 비밀번호 발급 (PLB-035·047)
+  // 계정 존재 여부 노출 방지: 미가입 이메일·rate limit 초과 모두 정상과 동일한 성공 응답으로
+  // 끝난다(발송만 생략). 소셜 전용 계정만 예외적으로 400을 준다 — 여기서 비번을 못 바꾼다는
+  // 안내가 UX상 필요해서 문서 계약(AUTH_SOCIAL_ONLY)에 이미 포함된 사항.
+  issueTempPassword: async (email: string) => {
+    const now = Date.now();
+    const issuedAt = tempPasswordIssuedAt.get(email);
+    if (issuedAt !== undefined && now - issuedAt < TEMP_PASSWORD_RATE_LIMIT_MS) {
+      return;
+    }
+
+    const user = await authRepository.findByEmail(email);
+    if (!user) {
+      return;
+    }
+    if (!user.password) {
+      throw new AppError(
+        'AUTH_SOCIAL_ONLY',
+        '소셜 로그인 계정입니다. 해당 플랫폼에서 비밀번호를 변경해주세요.',
+      );
+    }
+
+    const tempPassword = generateTempPassword();
+    const tempHash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
+    await authRepository.updatePasswordWithTempFlag(user.id, tempHash, true);
+
+    try {
+      await sendTempPasswordEmail(email, tempPassword);
+    } catch {
+      // 발송 실패 시 이전 비밀번호로 원복 — 메일은 못 받았는데 기존 비번만 못 쓰게 되는 상황 방지
+      await authRepository.updatePasswordWithTempFlag(user.id, user.password, user.isTempPassword);
+      throw new AppError('COMMON_INTERNAL_ERROR', '메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    // 발송까지 성공한 경우에만 rate limit을 기록한다 (실패한 시도가 쿨다운을 소모하지 않도록)
+    tempPasswordIssuedAt.set(email, now);
   },
 };
