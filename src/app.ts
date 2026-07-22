@@ -36,6 +36,11 @@ app.get('/health', (_req, res) => {
 // Swagger UI (API 문서)
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+// Postman 등 외부 도구가 OpenAPI 스펙을 URL로 임포트/동기화할 수 있도록 raw JSON도 노출한다.
+app.get('/api-docs.json', (_req, res) => {
+  res.json(swaggerSpec);
+});
+
 // 라우터 등록
 // 경로가 교차(category/:id/milestones, users/me/settings 등)하므로 모두 /api/v1 에 함께 마운트하고,
 // 각 라우트 파일 내부에서 전체 경로(/auth/signup, /users/me 등)를 정의한다.

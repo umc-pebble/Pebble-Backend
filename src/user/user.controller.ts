@@ -1,7 +1,8 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { sendSuccess } from '../utils/response';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { userService } from './user.service';
+import { parseId } from '../utils/params';
 import {
   UpdateMeBody,
   UpdateSettingsBody,
@@ -42,8 +43,15 @@ export const deleteMe = async (req: AuthRequest, res: Response, next: NextFuncti
   }
 };
 
-export const getUser = (_req: Request, res: Response) => {
-  sendSuccess(res, null, '타인 프로필 조회 (미구현)');
+export const getUser = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const requesterId = req.userId!;
+    const targetUserId = parseId(req.params.userId, '사용자');
+    const profile = await userService.getUserProfileById(requesterId, targetUserId);
+    sendSuccess(res, profile, '프로필 조회 성공');
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const getSettings = async (req: AuthRequest, res: Response, next: NextFunction) => {

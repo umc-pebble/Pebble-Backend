@@ -138,8 +138,58 @@ router.patch('/users/me', validateBody(updateMeSchema), updateMe);
  */
 router.delete('/users/me', deleteMe);
 
-// 타인 프로필 조회: 불필요한 것으로 판명되어 Swagger 문서에서 제외했다. 라우트 자체는
-// 하위 호환을 위해 스텁으로 남겨둔다("미구현" 응답).
+/**
+ * @swagger
+ * /users/{userId}:
+ *   get:
+ *     summary: 타인 프로필 조회 (issue #64)
+ *     description: >
+ *       친구(팔로우 ACCEPTED 관계)의 기본 프로필을 조회합니다. 본인 프로필은 이 API가 아닌 GET /users/me를 사용하며,
+ *       본인 id로 요청해도 팔로우 관계가 아니면 동일하게 403이 반환됩니다.
+ *       설정값(theme·notifyTaskDue·isTempPassword 등)이나 email처럼 민감한 필드는 응답에 포함되지 않습니다.
+ *       징검다리(활동기록)·마일스톤·태스크·카테고리 등 나머지 데이터는 각 도메인의 friend-view 엔드포인트를 따로 호출합니다.
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *         description: 조회 대상 사용자 id
+ *         example: 7
+ *     responses:
+ *       200:
+ *         description: 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: integer, example: 7 }
+ *                         nickname: { type: string, example: 조약돌 }
+ *                         uniqueTag: { type: string, example: '0417' }
+ *                         bio: { type: string, nullable: true, example: 한 걸음씩 }
+ *                         profileImageUrl: { type: string, nullable: true, example: null }
+ *                         activityColor: { type: string, enum: ['#A3A3A3', '#82A0FF', '#ABE692', '#FFE48B', '#FFB67A', '#FFB4B4'], example: '#82A0FF' }
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 친구가 아닌 사용자의 프로필 조회 시도
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             example: { success: false, message: 친구의 프로필만 조회할 수 있습니다., error: { code: "COMMON_FORBIDDEN" } }
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.get('/users/:userId', getUser);
 
 /**

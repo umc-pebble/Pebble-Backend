@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 import { uploadService } from '../upload/upload.service';
 import { userRepository } from './user.repository';
 import { UpdateMeBody, UpdateSettingsBody, ChangePasswordBody } from './user.schema';
+import { followRepository } from '../follow/follow.repository';
 
 const NICKNAME_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000; // 15일 (PLB-003·043)
 const EMAIL_CHANGE_TOKEN_TTL_MS = 60 * 60 * 1000; // 1시간
@@ -53,6 +54,31 @@ export const userService = {
       lastNicknameChangedAt: user.lastNicknameChangedAt,
       nicknameChangeableAfter: computeNicknameChangeableAfter(user.lastNicknameChangedAt),
       createdAt: user.createdAt,
+    };
+  },
+
+  // 친구 프로필 조회 (issue #64). 본인 조회는 /users/me 전용이라 이 경로는 타인(친구) 전용으로 취급한다.
+  // 친구 판정은 Follow 도메인의 findRelationBetween(follow.repository.ts)을 사용한다 — 이전엔 Follow
+  // 도메인이 미구현이라 activity 모듈이 자체 구현해둔 걸 빌려썼으나, #14가 머지되며 진짜 소유 도메인이
+  // 생겨 그쪽으로 전환했다.
+  async getUserProfileById(requesterId: number, targetUserId: number) {
+    const user = await userRepository.findById(targetUserId);
+    if (!user) {
+      throw new AppError('COMMON_NOT_FOUND', '사용자를 찾을 수 없습니다.');
+    }
+
+    const relation = await followRepository.findRelationBetween(requesterId, targetUserId);
+    if (relation?.status !== 'ACCEPTED') {
+      throw new AppError('COMMON_FORBIDDEN', '친구의 프로필만 조회할 수 있습니다.');
+    }
+
+    return {
+      id: user.id,
+      nickname: user.nickname,
+      uniqueTag: user.uniqueTag,
+      bio: user.bio,
+      profileImageUrl: user.profileImageUrl,
+      activityColor: user.activityColor,
     };
   },
 
