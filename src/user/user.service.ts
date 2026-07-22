@@ -7,6 +7,8 @@ import { Prisma } from '@prisma/client';
 import { AppError } from '../utils/app-error';
 import { signAccessToken, signRefreshToken, sha256 } from '../utils/jwt';
 import { sendEmailChangeVerification } from '../utils/mailer';
+import { logger } from '../utils/logger';
+import { uploadService } from '../upload/upload.service';
 import { userRepository } from './user.repository';
 import { UpdateMeBody, UpdateSettingsBody, ChangePasswordBody } from './user.schema';
 import { followRepository } from '../follow/follow.repository';
@@ -84,6 +86,12 @@ export const userService = {
   async updateProfile(userId: number, input: UpdateMeBody) {
     const user = await getUserOrThrow(userId);
 
+    // 타인의 업로드 URL(같은 버킷)을 profileImageUrl에 넣고 나중에 교체/삭제해 그 파일이
+    // 지워지는 것을 막기 위해, 본인이 업로드한 파일인지 먼저 검증한다.
+    if (input.profileImageUrl) {
+      uploadService.assertOwnedImage(input.profileImageUrl, userId);
+    }
+
     // bio/profileImageUrl은 undefined면 Prisma가 update SET절에서 알아서 제외하므로 별도 가드가 필요 없다.
     const data: Prisma.UserUncheckedUpdateInput = {
       bio: input.bio,
@@ -143,6 +151,17 @@ export const userService = {
       }
       throw new AppError('COMMON_UNAUTHORIZED', '유효하지 않은 사용자입니다.');
     }
+
+    // profileImageUrl이 실제로 교체/제거된 경우에만, DB 반영이 끝난 뒤 변경 전 파일을 정리한다.
+    // 이전 값이 null이면 PLB-004 기본 이미지라 Storage에 지울 파일이 없다.
+    if (
+      input.profileImageUrl !== undefined &&
+      input.profileImageUrl !== user.profileImageUrl &&
+      user.profileImageUrl
+    ) {
+      await uploadService.deleteImage(user.profileImageUrl, userId);
+    }
+
     const updated = await getUserOrThrow(userId);
     return {
       id: updated.id,
@@ -250,7 +269,11 @@ export const userService = {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
       }
-      throw err;
+      logger.error(err);
+      throw new AppError(
+        'COMMON_INTERNAL_ERROR',
+        '이메일 변경 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.',
+      );
     }
     if (result.count === 0) {
       // 위 사전 검증과 실제 반영 사이에 동시 요청이 쿨다운/상한을 먼저 채운 경합 상황.
@@ -304,7 +327,11 @@ export const userService = {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 사용 중인 이메일입니다.');
       }
-      throw err;
+      logger.error(err);
+      throw new AppError(
+        'COMMON_INTERNAL_ERROR',
+        '이메일 변경 확정에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      );
     }
     if (result.count === 0) {
       throw new AppError('COMMON_INVALID_INPUT', '인증 링크가 만료되었거나 유효하지 않습니다.');
