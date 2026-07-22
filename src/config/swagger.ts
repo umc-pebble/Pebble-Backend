@@ -425,7 +425,7 @@ const options: swaggerJSDoc.Options = {
             reportImageUrl: {
               type: 'string',
               maxLength: 500,
-              example: 'https://storage.pebble.app/reports/42-2026-06.png',
+              example: 'https://~~/reports/42-2026-06.png',
             },
             expiresAt: {
               type: 'string',

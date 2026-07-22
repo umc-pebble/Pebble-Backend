@@ -14,3 +14,15 @@ export const validateBody =
     req.body = result.data;
     next();
   };
+
+// 쿼리스트링 검증 — body와 동일한 규칙. 쿼리는 항상 문자열로 들어오므로
+// 스키마에서 z.coerce로 숫자·불리언 변환을 해두고, 여기서 변환된 값으로 교체한다.
+export const validateQuery =
+  (schema: ZodSchema) => (req: Request, _res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.query);
+    if (!result.success) {
+      return next(new AppError('COMMON_INVALID_INPUT', result.error.issues[0].message));
+    }
+    req.query = result.data;
+    next();
+  };
