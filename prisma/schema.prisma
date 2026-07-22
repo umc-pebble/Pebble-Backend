@@ -133,16 +133,17 @@ model Follow {
 }
 
 model Report {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   userId         Int
-  month          String   @db.VarChar(7) // YYYY-MM
-  reportImageUrl String   @db.VarChar(500)
-  expiresAt      DateTime // 발송 후 1주일
-  createdAt      DateTime @default(now())
+  month          String    @db.VarChar(7) // YYYY-MM (집계 대상 월, 전월 기준)
+  statsData      Json?                     // activityLogs, topCategory, busiestDay, sharedCategories 통계
+  reportImageUrl String?   @db.VarChar(500) // 캡처 이미지 업로드 전엔 null
+  expiresAt      DateTime  // 발송 후 1주일
+  createdAt      DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, month])
+  @@unique([userId, month])
 }
 
 model Subscription {
@@ -209,12 +210,9 @@ model Task {
   milestoneId  Int? // 카테고리 직속 태스크는 NULL, 마일스톤 하위 태스크는 NOT NULL
   name         String    @db.VarChar(100)
   dateType     DateType
-  startDate    DateTime  @db.Date
+  startDate    DateTime? @db.Date // MULTIPLE이면 NULL
   endDate      DateTime? @db.Date
-  seriesId     Int? // MULTIPLE(다중 날짜 선택) 회차들을 묶는 그룹 키. 일반/기간 태스크는 NULL (PLB-017, 07-14 확정: 반복요일 방식 폐기, 사용자가 날짜를 직접 여러 개 선택하는 방식으로 변경)
-  taskTime     DateTime? @db.Time // 시:분 입력
-  memo         String?   @db.Text
-  color        String?   @db.VarChar(20) // 단일 태스크만 사용 (종속 태스크는 카테고리 색상 계열 따름)
+  color        String?   @db.VarChar(20) // 독립 태스크만 사용
   isCompleted  Boolean   @default(false)
   completedAt  DateTime? // KST 일별 집계 기준, 완료 해제 시 NULL
   displayOrder Int       @default(0)
@@ -224,11 +222,38 @@ model Task {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   category  Category?  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  taskDates TaskDate[]
 
   @@index([userId, startDate])
   @@index([categoryId, startDate])
   @@index([milestoneId, startDate])
-  @@index([seriesId])
+}
+
+model TaskDate {
+  id          Int       @id @default(autoincrement())
+  taskId      Int
+  date        DateTime  @db.Date
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  exception TaskException?
+
+  @@unique([taskId, date])
+  @@index([taskId, date])
+}
+
+model TaskException {
+  id         Int      @id @default(autoincrement())
+  taskDateId Int      @unique
+  name       String?  @db.VarChar(100)
+  color      String?  @db.VarChar(20)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  taskDate TaskDate @relation(fields: [taskDateId], references: [id], onDelete: Cascade)
 }
 
 // UK: userId + date (PLB-022, PLB-023 징검다리 집계용 일별 스냅샷)
