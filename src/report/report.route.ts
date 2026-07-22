@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { getReports } from './report.controller';
+import { getReports, updateReportImage } from './report.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { validateBody } from '../middlewares/validate.middleware';
+import { updateReportImageSchema } from './report.schema';
 
 const router = Router();
 
@@ -27,7 +29,7 @@ router.use(authMiddleware);
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: 리포트 조회 성공
+ *         description: 리포트 조회 성공 / 없으면 빈 배열
  *         content:
  *           application/json:
  *             schema:
@@ -60,5 +62,41 @@ router.use(authMiddleware);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/reports', getReports);
+
+/**
+ * @swagger
+ * /reports/{reportId}:
+ *   patch:
+ *     summary: 리포트 이미지 URL 저장
+ *     tags: [Report]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: reportId
+ *         in: path
+ *         required: true
+ *         schema: { type: integer, minimum: 1 }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reportImageUrl]
+ *             properties:
+ *               reportImageUrl: { type: string, format: uri, example: 'https://example.com/report-1.png' }
+ *     responses:
+ *       200:
+ *         description: 리포트 이미지 저장 성공
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
+router.patch('/reports/:reportId', validateBody(updateReportImageSchema), updateReportImage);
 
 export default router;

@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { AppError } from '../utils/app-error';
 import { reportRepository } from './report.repository';
 
 // DB의 UTC Date 객체와 리포트의 KST 월·일 경계를 변환할 때 사용하는 오프셋이다.
@@ -28,6 +29,7 @@ type ReportStats = {
             categoryName: string | null;
             milestoneName: string | null;
             taskName: string;
+            completed: boolean;
             color: string | null;
         }[];
     } | null;
@@ -80,6 +82,20 @@ export const reportService = {
             },
             ...(report.statsData as unknown as ReportStats),
         };
+    },
+
+    async updateReportImage(userId: number, reportId: number, reportImageUrl: string) {
+        // 리포트가 없을 때와 다른 사용자의 리포트일 때를 구분해 안전하게 차단한다.
+        const report = await reportRepository.findById(reportId);
+        if (!report) {
+            throw new AppError('COMMON_NOT_FOUND', '리포트를 찾을 수 없습니다.');
+        }
+        if (report.userId !== userId) {
+            throw new AppError('COMMON_FORBIDDEN', '해당 리포트를 수정할 권한이 없습니다.');
+        }
+
+        const updated = await reportRepository.updateImageUrl(reportId, reportImageUrl);
+        return { reportImageUrl: updated.reportImageUrl };
     },
 
     async createMonthlyReport(userId: number, userCreatedAt: Date, year: number, monthIndex: number) {
@@ -176,6 +192,7 @@ export const reportService = {
                 categoryName: task.milestone ? task.milestone.category.name : null,
                 milestoneName: task.milestone?.name ?? null,
                 taskName: task.name,
+                completed: task.isCompleted,
                 color: task.milestone?.category.color ?? task.color,
             })),
         } : null;

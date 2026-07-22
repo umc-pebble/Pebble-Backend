@@ -1,6 +1,11 @@
 import prisma from '../config/database';
 
 export const reportRepository = {
+  // 소유권 검증을 위해 리포트의 사용자 ID를 포함한 원본 데이터를 조회한다.
+  findById(reportId: number) {
+    return prisma.report.findUnique({ where: { id: reportId } });
+  },
+
   // 만료되지 않은 리포트 중 가장 최근 월의 리포트 한 건을 조회한다.
   findLatestAvailableByUserId(userId: number, now: Date) {
     return prisma.report.findFirst({
@@ -22,6 +27,14 @@ export const reportRepository = {
       // 최초 발행 시각과 만료 시각을 변경하지 않는다.
       update: { statsData },
       create: { userId, month, statsData, expiresAt, createdAt },
+    });
+  },
+
+  // 이미지 생성·업로드가 끝난 리포트의 이미지 URL만 갱신한다.
+  updateImageUrl(reportId: number, reportImageUrl: string) {
+    return prisma.report.update({
+      where: { id: reportId },
+      data: { reportImageUrl },
     });
   },
 };
