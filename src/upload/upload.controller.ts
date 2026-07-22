@@ -13,7 +13,7 @@ export const uploadImage = async (req: AuthRequest, res: Response, next: NextFun
     if (!req.file) {
       throw new AppError('COMMON_INVALID_INPUT', '업로드할 파일이 없습니다.');
     }
-    const data = await uploadService.uploadImage(req.file);
+    const data = await uploadService.uploadImage(req.file, req.userId!);
     sendSuccess(res, data, '이미지 업로드 성공', 200);
   } catch (err) {
     next(err);
