@@ -1,4 +1,11 @@
 import { Router } from 'express';
+import { authMiddleware } from '../middlewares/auth.middleware';
+import { validateBody } from '../middlewares/validate.middleware';
+import {
+  shareCategorySchema,
+  inviteMemberSchema,
+  respondInviteSchema,
+} from './shared.schema';
 import {
   shareCategory,
   inviteMember,
@@ -10,6 +17,10 @@ import {
 } from './shared.controller';
 
 const router = Router();
+
+// SharedCategory API는 모두 로그인 필요(bearerAuth). authMiddleware가 req.userId를 채운다.
+// 경로 한정 필수: category.route.ts와 동일한 이유로 '/categories'로 한정한다.
+router.use('/categories', authMiddleware);
 
 /**
  * @swagger
@@ -27,7 +38,8 @@ const router = Router();
  *       기존 개인 카테고리를 공유 카테고리로 전환하고 팔로잉 관계인 친구를 초대합니다.
  *       요청자는 OWNER(status=ACCEPTED)로, 초대된 사용자는 MEMBER(status=PENDING)로
  *       SharedCategoryMember에 등록되며 카테고리의 isShared가 true로 바뀝니다.
- *       팔로잉 관계가 아닌 유저는 초대할 수 없습니다.
+ *       팔로잉 관계가 아닌 유저는 초대할 수 없습니다. 한 번에 최대 50명까지 초대할 수 있습니다.
+ *       초대된 각 사용자에게 알림(CATEGORY_INVITE)을 발송합니다.
  *     tags: [SharedCategory]
  *     security:
  *       - bearerAuth: []
@@ -127,7 +139,7 @@ const router = Router();
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/categories/:categoryId/share', shareCategory);
+router.post('/categories/:categoryId/share', validateBody(shareCategorySchema), shareCategory);
 
 /**
  * @swagger
@@ -138,6 +150,7 @@ router.post('/categories/:categoryId/share', shareCategory);
  *       이미 공유 중인 카테고리에 친구를 추가로 초대합니다. 닉네임 또는 이메일로 한 명씩 초대하며,
  *       초대된 사용자는 MEMBER(status=PENDING)로 등록됩니다.
  *       초대는 오너만 가능하고, 대상은 오너와 팔로잉(친구) 관계여야 합니다.
+ *       초대된 사용자에게 알림(CATEGORY_INVITE)을 발송합니다.
  *     tags: [SharedCategory]
  *     security:
  *       - bearerAuth: []
@@ -212,7 +225,7 @@ router.post('/categories/:categoryId/share', shareCategory);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/categories/:categoryId/members', inviteMember);
+router.post('/categories/:categoryId/members', validateBody(inviteMemberSchema), inviteMember);
 
 /**
  * @swagger
@@ -281,6 +294,7 @@ router.get('/categories/:categoryId/members', getMembers);
  *       나에게 온 공유 카테고리 초대(status=PENDING)를 수락(ACCEPT) 또는 거절(REJECT)합니다.
  *       수락 시 status=ACCEPTED가 되어 해당 카테고리가 내 카테고리 목록에 추가되고,
  *       거절 시 SharedCategoryMember 레코드가 삭제됩니다.
+ *       수락 시 카테고리 오너에게 알림(CATEGORY_ACCEPTED)을 발송합니다.
  *     tags: [SharedCategory]
  *     security:
  *       - bearerAuth: []
@@ -315,7 +329,11 @@ router.get('/categories/:categoryId/members', getMembers);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.patch('/categories/:categoryId/members/me', respondInvite);
+router.patch(
+  '/categories/:categoryId/members/me',
+  validateBody(respondInviteSchema),
+  respondInvite,
+);
 
 /**
  * @swagger
