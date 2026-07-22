@@ -1,4 +1,8 @@
 import { Router } from 'express';
+
+import { authMiddleware } from '../middlewares/auth.middleware';
+import { validateBody, validateQuery } from '../middlewares/validate.middleware';
+
 import {
   searchUsers,
   requestFollow,
@@ -6,6 +10,11 @@ import {
   acceptFollow,
   deleteFollow,
 } from './follow.controller';
+import {
+  requestFollowSchema,
+  searchUsersQuerySchema,
+  followListQuerySchema,
+} from './follow.schema';
 
 const router = Router();
 
@@ -86,7 +95,7 @@ const router = Router();
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/users/search', searchUsers);
+router.get('/users/search', authMiddleware, validateQuery(searchUsersQuerySchema), searchUsers);
 
 /**
  * @swagger
@@ -143,7 +152,7 @@ router.get('/users/search', searchUsers);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/follows', requestFollow);
+router.post('/follows', authMiddleware, validateBody(requestFollowSchema), requestFollow);
 
 /**
  * @swagger
@@ -207,7 +216,7 @@ router.post('/follows', requestFollow);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/follows', getFollows);
+router.get('/follows', authMiddleware, validateQuery(followListQuerySchema), getFollows);
 
 /**
  * @swagger
@@ -257,7 +266,7 @@ router.get('/follows', getFollows);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/follows/:followId/accept', acceptFollow);
+router.post('/follows/:followId/accept', authMiddleware, acceptFollow);
 
 /**
  * @swagger
@@ -298,6 +307,6 @@ router.post('/follows/:followId/accept', acceptFollow);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.delete('/follows/:followId', deleteFollow);
+router.delete('/follows/:followId', authMiddleware, deleteFollow);
 
 export default router;
