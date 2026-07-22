@@ -5,6 +5,7 @@ import {
   readNotification,
   deleteNotification,
   deleteAllNotifications,
+  triggerDailyDueBatch,
 } from './notification.controller';
 
 const router = Router();
@@ -168,5 +169,9 @@ router.delete('/notifications/:notificationId', deleteNotification);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.delete('/notifications', deleteAllNotifications);
+
+// QA/개발 편의용 수동 트리거(#56). 실제 배포에서는 notification.scheduler.ts의 cron이 매일 00:00
+// KST에 자동 실행하므로 앱이 호출할 일이 없는 내부용 엔드포인트라 Swagger 문서화 대상에서 제외한다.
+router.post('/notifications/internal/generate-daily-due', triggerDailyDueBatch);
 
 export default router;

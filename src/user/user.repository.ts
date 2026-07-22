@@ -14,6 +14,16 @@ export const userRepository = {
     return prisma.user.findUnique({ where: { email } });
   },
 
+  // 알림 배치용(PLB-038). 후보 유저 중 당일 일정 알림을 켜둔(notifyTaskDue) 유저만 걸러낸다.
+  async findNotifyEnabledIds(userIds: number[]): Promise<Set<number>> {
+    if (userIds.length === 0) return new Set();
+    const rows = await prisma.user.findMany({
+      where: { id: { in: userIds }, notifyTaskDue: true },
+      select: { id: true },
+    });
+    return new Set(rows.map((row) => row.id));
+  },
+
   // 이메일 변경 요청 시 중복 체크용. 이미 확정된 email뿐 아니라 다른 유저가 변경 요청 중(pendingEmail)인
   // 이메일과도 겹치면 안 되므로 둘 다 확인한다. 본인의 이전 pendingEmail 재요청(토큰 만료 후 재시도 등)은
   // 충돌로 보지 않도록 자기 자신은 제외한다.
