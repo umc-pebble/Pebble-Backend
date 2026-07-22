@@ -318,4 +318,19 @@ export const userService = {
       uniqueTag: user.uniqueTag,
     };
   },
+
+  // 회원탈퇴 (PLB-006). DELETE /users/me — 담당 분리상 이 메서드만 하은현(Auth) 소유다.
+  // User row를 삭제하면 스키마의 onDelete: Cascade로 카테고리·마일스톤·태스크·팔로우·알림·
+  // 구독·소셜계정·공유멤버가 함께 삭제된다(refreshToken도 같은 row라 함께 파기).
+  async withdraw(userId: number) {
+    // 유효한 토큰인데 유저가 이미 없으면(중복 탈퇴 등) 인증 실패로 처리한다.
+    await getUserOrThrow(userId);
+
+    // TODO(#55 머지 후): 프로필 이미지가 있으면 Supabase Storage에서도 삭제한다.
+    //   uploadService.deleteImage(user.profileImageUrl, userId) 연결 예정. 지금은 DB만 정리하며,
+    //   남는 이미지 파일은 고아 상태로만 남고 기능 영향은 없다.
+    // TODO(소셜 로그인 구현 후): 연동된 소셜 계정이 있으면 provider unlink API도 호출한다.
+
+    await userRepository.delete(userId);
+  },
 };
