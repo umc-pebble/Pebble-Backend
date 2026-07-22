@@ -39,3 +39,21 @@ export const refreshSchema = z.object({
     .min(1, 'refreshToken이 필요합니다.'),
 });
 export type RefreshDto = z.infer<typeof refreshSchema>;
+
+// 임시 비밀번호 발급 (PLB-035)
+export const tempPasswordSchema = z.object({
+  email: z
+    .string({ required_error: '이메일을 입력해주세요.' })
+    .email('이메일 형식이 올바르지 않습니다.'),
+});
+export type TempPasswordDto = z.infer<typeof tempPasswordSchema>;
+
+// 소셜 로그인 (PLB-002) — 프론트가 OAuth 콜백에서 받은 인가코드를 전달한다.
+// redirectUri는 인가코드를 발급받을 때 쓴 값과 반드시 같아야 하며, 생략 시 서버 환경변수를 사용한다.
+export const socialLoginSchema = z.object({
+  code: z
+    .string({ required_error: '인가코드가 필요합니다.' })
+    .min(1, '인가코드가 필요합니다.'),
+  redirectUri: z.string().url('redirectUri 형식이 올바르지 않습니다.').optional(),
+});
+export type SocialLoginDto = z.infer<typeof socialLoginSchema>;

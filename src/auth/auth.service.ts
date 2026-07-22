@@ -1,14 +1,34 @@
+import crypto from 'crypto';
+
 import bcrypt from 'bcrypt';
-import { Prisma, User } from '@prisma/client';
+import { Prisma, SocialProvider, User } from '@prisma/client';
 
 import { AppError } from '../utils/app-error';
 import { signAccessToken, signRefreshToken, verifyRefreshToken, sha256 } from '../utils/jwt';
 
 import { authRepository } from './auth.repository';
-import { SignupDto, LoginDto } from './auth.schema';
+import { sendTempPasswordEmail } from './auth.mailer';
+import { getSocialProfile, SocialProfile } from './auth.social';
+import { SignupDto, LoginDto, SocialLoginDto } from './auth.schema';
 
 const SALT_ROUNDS = 10;
 const TAG_MAX_ATTEMPTS = 20;
+const TEMP_PASSWORD_LENGTH = 12;
+const TEMP_PASSWORD_RATE_LIMIT_MS = 5 * 60 * 1000; // 동일 이메일 5분 1회 (보안 규칙)
+
+// 임시 비밀번호 발급 시각 기록 — 남의 이메일로 반복 발급해 비밀번호를 계속 리셋시키는 괴롭힘 방지.
+// 단일 인스턴스 in-memory라 서버 재시작 시 초기화된다. 현재 배포 규모(단일 서버)에선 충분하며,
+// 다중 인스턴스로 확장하면 Redis 등 외부 저장소로 교체해야 한다.
+const tempPasswordIssuedAt = new Map<string, number>();
+
+// 임시 비밀번호 생성 — 이메일로 보고 타이핑하는 값이라 헷갈리는 문자(0/O, 1/l/I)는 제외.
+// Math.random은 예측 가능하므로 crypto.randomInt를 사용한다.
+const TEMP_PASSWORD_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+const generateTempPassword = () =>
+  Array.from(
+    { length: TEMP_PASSWORD_LENGTH },
+    () => TEMP_PASSWORD_CHARS[crypto.randomInt(TEMP_PASSWORD_CHARS.length)],
+  ).join('');
 
 // 응답용 공개 필드만 추출 — password·refreshToken은 절대 응답에 포함하지 않는다 (보안 규칙)
 const toPublicUser = (user: User) => ({
@@ -26,6 +46,14 @@ const p2002Target = (err: unknown): string | null =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
     ? String(err.meta?.target ?? '')
     : null;
+
+// 소셜 프로필의 닉네임을 우리 규격(1~100자)으로 맞춘다.
+// provider가 닉네임을 안 주거나 공백뿐이면 이메일 앞부분으로 대체한다 — nickname은 NOT NULL이라 비울 수 없다.
+const resolveSocialNickname = (profile: SocialProfile) => {
+  const candidate = profile.nickname?.trim();
+  const fallback = profile.email.split('@')[0];
+  return (candidate && candidate.length > 0 ? candidate : fallback).slice(0, 100);
+};
 
 // 로그인 시 토큰 발급 — refresh는 sha256 해시로 저장 (회원가입은 createUserWithRefreshToken 트랜잭션 사용)
 const issueInitialTokens = async (userId: number) => {
@@ -136,5 +164,126 @@ export const authService = {
       throw new AppError('COMMON_UNAUTHORIZED', '인증 정보가 없습니다.');
     }
     await authRepository.updateRefreshToken(userId, null);
+  },
+
+  // 소셜 로그인 (PLB-002) — 인가코드 교환·프로필 조회는 auth.social이 담당하고, 여기서는 계정 연결 규칙만 다룬다.
+  // 반환의 isNewUser로 컨트롤러가 200(기존)/201(가입)을 가른다.
+  socialLogin: async (provider: string, dto: SocialLoginDto) => {
+    if (provider !== 'google' && provider !== 'naver') {
+      throw new AppError('COMMON_INVALID_INPUT', '지원하지 않는 소셜 플랫폼입니다.');
+    }
+    const socialProvider = provider as SocialProvider;
+
+    const profile = await getSocialProfile(socialProvider, dto.code, dto.redirectUri);
+
+    // 1) 이미 연동된 계정이면 그대로 로그인
+    const linked = await authRepository.findSocialAccount(
+      socialProvider,
+      profile.providerAccountId,
+    );
+    if (linked) {
+      const tokens = await issueInitialTokens(linked.user.id);
+      return { user: toPublicUser(linked.user), ...tokens, isNewUser: false };
+    }
+
+    // 2) 같은 이메일의 기존 계정이 있으면 그 계정에 연동을 추가한다.
+    //    provider가 이메일 소유를 검증한 뒤 넘겨준 값이라 안전하며, 계정이 둘로 갈라지는 것을 막는다.
+    const existing = await authRepository.findByEmail(profile.email);
+    if (existing) {
+      await authRepository.linkSocialAccount(
+        existing.id,
+        socialProvider,
+        profile.providerAccountId,
+      );
+      const tokens = await issueInitialTokens(existing.id);
+      return { user: toPublicUser(existing), ...tokens, isNewUser: false };
+    }
+
+    // 3) 완전 신규 — 자체 회원가입과 동일하게 태그 충돌 시 재발급하며 생성한다.
+    const nickname = resolveSocialNickname(profile);
+    for (let attempt = 0; attempt < TAG_MAX_ATTEMPTS; attempt += 1) {
+      const uniqueTag = generateTag();
+      if (await authRepository.existsByNicknameTag(nickname, uniqueTag)) {
+        continue;
+      }
+      try {
+        const tokens = { accessToken: '', refreshToken: '' };
+        const user = await authRepository.createSocialUser(
+          {
+            email: profile.email,
+            // 소셜 전용 계정은 password가 NULL — 임시비번·비번변경에서 AUTH_SOCIAL_ONLY 판정 기준이 된다.
+            password: null,
+            nickname,
+            uniqueTag,
+            profileImageUrl: profile.profileImageUrl,
+          },
+          { provider: socialProvider, providerAccountId: profile.providerAccountId },
+          (userId) => {
+            tokens.accessToken = signAccessToken(userId);
+            tokens.refreshToken = signRefreshToken(userId);
+            return sha256(tokens.refreshToken);
+          },
+        );
+        return { user: toPublicUser(user), ...tokens, isNewUser: true };
+      } catch (err) {
+        const target = p2002Target(err);
+        if (target && (target.includes('nickname') || target.includes('uniqueTag'))) {
+          continue; // 태그 충돌 — 재발급 후 재시도
+        }
+        // 같은 소셜 계정으로 동시에 최초 로그인한 경우 — 먼저 만들어진 계정으로 로그인시킨다.
+        if (target && (target.includes('email') || target.includes('providerAccountId'))) {
+          const created = await authRepository.findSocialAccount(
+            socialProvider,
+            profile.providerAccountId,
+          );
+          if (created) {
+            const tokens = await issueInitialTokens(created.user.id);
+            return { user: toPublicUser(created.user), ...tokens, isNewUser: false };
+          }
+          throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 가입된 이메일입니다.');
+        }
+        throw err;
+      }
+    }
+
+    throw new AppError('COMMON_INTERNAL_ERROR', '고유태그 발급에 실패했습니다. 다시 시도해주세요.');
+  },
+
+  // 임시 비밀번호 발급 (PLB-035·047)
+  // 계정 존재 여부 노출 방지: 미가입 이메일·rate limit 초과 모두 정상과 동일한 성공 응답으로
+  // 끝난다(발송만 생략). 소셜 전용 계정만 예외적으로 400을 준다 — 여기서 비번을 못 바꾼다는
+  // 안내가 UX상 필요해서 문서 계약(AUTH_SOCIAL_ONLY)에 이미 포함된 사항.
+  issueTempPassword: async (email: string) => {
+    const now = Date.now();
+    const issuedAt = tempPasswordIssuedAt.get(email);
+    if (issuedAt !== undefined && now - issuedAt < TEMP_PASSWORD_RATE_LIMIT_MS) {
+      return;
+    }
+
+    const user = await authRepository.findByEmail(email);
+    if (!user) {
+      return;
+    }
+    if (!user.password) {
+      throw new AppError(
+        'AUTH_SOCIAL_ONLY',
+        '소셜 로그인 계정입니다. 해당 플랫폼에서 비밀번호를 변경해주세요.',
+      );
+    }
+
+    const tempPassword = generateTempPassword();
+    const tempHash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
+    await authRepository.updatePasswordWithTempFlag(user.id, tempHash, true);
+
+    try {
+      await sendTempPasswordEmail(email, tempPassword);
+    } catch {
+      // 발송 실패 시 이전 비밀번호로 원복 — 메일은 못 받았는데 기존 비번만 못 쓰게 되는 상황 방지
+      await authRepository.updatePasswordWithTempFlag(user.id, user.password, user.isTempPassword);
+      throw new AppError('COMMON_INTERNAL_ERROR', '메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    // 발송까지 성공한 경우에만 rate limit을 기록한다 (실패한 시도가 쿨다운을 소모하지 않도록)
+    tempPasswordIssuedAt.set(email, now);
   },
 };
