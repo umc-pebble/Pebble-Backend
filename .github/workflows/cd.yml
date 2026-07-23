@@ -1,0 +1,82 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# 배포 중 다른 push가 겹치면 ~/deploy.tar.gz, ~/app을 두 job이 동시에 건드려 상태가 섞일 수 있어 직렬화한다.
+# cancel-in-progress로 중간에 끊으면 docker compose up이 반쯤 진행된 상태로 남을 수 있어 취소 대신 대기시킨다.
+concurrency:
+  group: cd-deploy-production
+  cancel-in-progress: false
+
+# 이 job은 EC2에 SSH로 접속해 배포하므로 리포 내용을 읽는 것 외 추가 권한 불필요
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # secrets.*를 run 스크립트 안에 직접 ${{ }}로 넣으면 셸 실행 전 텍스트로 치환되어,
+    # 값에 따옴표/백틱/$()/세미콜론이 섞였을 때 명령 주입으로 이어질 수 있다.
+    # 그래서 셸에는 환경변수로만 전달하되, job 전체가 아니라 실제로 필요한 step에만
+    # step-level env로 최소 노출한다 (checkout/tar 압축 step은 아무 시크릿도 필요 없음).
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up SSH
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # ssh-keyscan은 접속 시점에 보이는 키를 무조건 신뢰하므로 MITM에 취약하다.
+          # 미리 검증해둔 host key를 고정값으로 심어 StrictHostKeyChecking이 실제로 의미를 갖게 한다.
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # .env는 .gitignore 대상이라 checkout 결과물에 애초에 포함되지 않는다 -> EC2의 기존 .env는 건드리지 않음
+      - name: Build deployment archive
+        run: tar czf /tmp/deploy.tar.gz --exclude='.git' --exclude='node_modules' .
+
+      - name: Upload and deploy
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes /tmp/deploy.tar.gz "${EC2_USER}@${EC2_HOST}:~/deploy.tar.gz"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes "${EC2_USER}@${EC2_HOST}" '
+            set -e
+            # tar는 이전 릴리스에 있었지만 이번엔 삭제된 파일을 지우지 않으므로,
+            # .env만 남기고 ~/app을 비운 뒤 새로 추출해 스테일 파일이 빌드 컨텍스트에 섞이지 않게 한다.
+            mkdir -p ~/app
+            find ~/app -mindepth 1 -maxdepth 1 -not -name ".env" -exec rm -rf {} +
+            tar xzf ~/deploy.tar.gz -C ~/app
+            rm ~/deploy.tar.gz
+            cd ~/app
+            sudo docker compose -f docker-compose.prod.yml up -d --build
+            sudo docker image prune -f
+          '
+
+      - name: Verify health check
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          for i in $(seq 1 20); do
+            if curl --fail --silent --connect-timeout 5 --max-time 10 "http://${EC2_HOST}:3000/health"; then
+              echo "Health check passed."
+              exit 0
+            fi
+            echo "Health check attempt ${i}/20 failed, retrying..."
+            sleep 5
+          done
+          echo "Health check failed."
+          exit 1
