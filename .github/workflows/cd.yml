@@ -20,15 +20,11 @@ jobs:
     name: Deploy to EC2
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     # secrets.*를 run 스크립트 안에 직접 ${{ }}로 넣으면 셸 실행 전 텍스트로 치환되어,
     # 값에 따옴표/백틱/$()/세미콜론이 섞였을 때 명령 주입으로 이어질 수 있다.
-    # job env로만 노출해 셸이 일반 환경변수로 안전하게 다루도록 한다.
-    env:
-      EC2_HOST: ${{ secrets.EC2_HOST }}
-      EC2_USER: ${{ secrets.EC2_USER }}
-      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-      EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
-
+    # 그래서 셸에는 환경변수로만 전달하되, job 전체가 아니라 실제로 필요한 step에만
+    # step-level env로 최소 노출한다 (checkout/tar 압축 step은 아무 시크릿도 필요 없음).
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -36,6 +32,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up SSH
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
@@ -49,6 +48,9 @@ jobs:
         run: tar czf /tmp/deploy.tar.gz --exclude='.git' --exclude='node_modules' .
 
       - name: Upload and deploy
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes /tmp/deploy.tar.gz "${EC2_USER}@${EC2_HOST}:~/deploy.tar.gz"
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes "${EC2_USER}@${EC2_HOST}" '
@@ -65,6 +67,8 @@ jobs:
           '
 
       - name: Verify health check
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
           for i in $(seq 1 20); do
             if curl --fail --silent --connect-timeout 5 --max-time 10 "http://${EC2_HOST}:3000/health"; then
