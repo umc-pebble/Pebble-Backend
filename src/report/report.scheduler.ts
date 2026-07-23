@@ -26,3 +26,10 @@ export async function runMonthlyReportBatch() {
     );
   }
 }
+
+export function startReportScheduler() {
+  // 매월 1일 00:00(KST)에 리포트 생성
+  cron.schedule('0 0 1 * *', runMonthlyReportBatch, {
+    timezone: 'Asia/Seoul',
+  });
+}
