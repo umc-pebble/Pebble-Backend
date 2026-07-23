@@ -120,10 +120,14 @@ src/
 ├── category/
 ├── milestone/
 ├── task/
+├── shared/               # 공유 카테고리
+├── activity/             # 징검다리(활동 기록)
 ├── follow/
 ├── notification/
 ├── report/
+├── uploads/              # 공통 이미지 업로드
 ├── config/               # 환경변수, DB 연결, 외부 서비스 설정
+├── constants/            # 에러 코드 등 상수
 ├── middlewares/          # 인증(JWT), 에러 핸들링
 ├── utils/                # 공통 유틸 함수
 └── app.ts
@@ -185,6 +189,14 @@ refactor(task): 완료 처리 로직 분리
 npm run type-check && npm run lint
 ```
 
+### 4. dev 동기화 규칙 (merge 사용)
+
+- dev 반영은 **merge**로 통일합니다. 공유(푸시된) 브랜치에서 `rebase`, `push --force`는 사용하지 않습니다. (푸시 전 로컬 커밋 정리 용도의 rebase는 자유)
+- **새 작업 시작**: `git checkout dev` → `git pull origin dev` → `git checkout -b <type>/#이슈번호-설명`
+- **PR에 충돌이 표시될 때**: 내 작업 브랜치에서 `git pull origin dev` → 충돌 해결 → 커밋 → 푸시
+- **작업 중 dev에 들어온 코드가 필요할 때**: 내 작업 브랜치에서 `git pull origin dev`
+- dev에 머지한 사람은 단톡에 한 줄 공지합니다.
+
 ---
 
 ## 🚀 PR 컨벤션 (Pull Request Convention)
@@ -212,10 +224,17 @@ npm run type-check && npm run lint
 
 ### 4. 머지(Merge) 조건
 
-- 팀원 중 **최소 1명 이상의 Approve**를 받아야 합니다.
+- 팀원 중 **최소 2명 이상의 Approve**를 받아야 합니다.
 - `npm run type-check && npm run lint`를 로컬에서 통과해야 합니다.
 - **API 테스트 스크린샷**이 PR 본문에 첨부되어야 합니다.
 - 모든 피드백 반영 후, PR을 올린 본인이 직접 Merge합니다.
+
+### 5. CodeRabbit 자동 리뷰
+
+- dev 대상 PR에는 CodeRabbit이 한국어 리뷰 코멘트를 자동으로 답니다 (설정: 레포 루트 `.coderabbit.yaml`).
+- 봇 리뷰는 **참고용**입니다 — 머지 조건의 approve 2인은 **사람 기준**입니다.
+- 리뷰 재요청: PR 코멘트로 `@coderabbitai review` (처음부터 전체 리뷰는 `@coderabbitai full review`).
+- 지적이 타당하면 반영하고, 반영하지 않을 때는 답글로 사유를 남깁니다.
 
 ---
 
