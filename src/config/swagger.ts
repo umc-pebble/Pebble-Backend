@@ -11,8 +11,8 @@ const options: swaggerJSDoc.Options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000/api/v1',
-        description: '로컬 개발 서버',
+        url: '/api/v1',
+        description: '현재 접속 중인 호스트 기준 (로컬/배포 서버 공통)',
       },
     ],
     components: {
