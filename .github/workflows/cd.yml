@@ -5,6 +5,12 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# 배포 중 다른 push가 겹치면 ~/deploy.tar.gz, ~/app을 두 job이 동시에 건드려 상태가 섞일 수 있어 직렬화한다.
+# cancel-in-progress로 중간에 끊으면 docker compose up이 반쯤 진행된 상태로 남을 수 있어 취소 대신 대기시킨다.
+concurrency:
+  group: cd-deploy-production
+  cancel-in-progress: false
+
 # 이 job은 EC2에 SSH로 접속해 배포하므로 리포 내용을 읽는 것 외 추가 권한 불필요
 permissions:
   contents: read
@@ -25,7 +31,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          # ssh-keyscan은 접속 시점에 보이는 키를 무조건 신뢰하므로 MITM에 취약하다.
+          # 미리 검증해둔 host key를 고정값으로 심어 StrictHostKeyChecking이 실제로 의미를 갖게 한다.
+          echo "${{ secrets.EC2_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       # .env는 .gitignore 대상이라 checkout 결과물에 애초에 포함되지 않는다 -> EC2의 기존 .env는 건드리지 않음
       - name: Build deployment archive
@@ -33,10 +41,13 @@ jobs:
 
       - name: Upload and deploy
         run: |
-          scp -i ~/.ssh/deploy_key /tmp/deploy.tar.gz "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/deploy.tar.gz"
-          ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" '
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes /tmp/deploy.tar.gz "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/deploy.tar.gz"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" '
             set -e
+            # tar는 이전 릴리스에 있었지만 이번엔 삭제된 파일을 지우지 않으므로,
+            # .env만 남기고 ~/app을 비운 뒤 새로 추출해 스테일 파일이 빌드 컨텍스트에 섞이지 않게 한다.
             mkdir -p ~/app
+            find ~/app -mindepth 1 -not -name ".env" -delete
             tar xzf ~/deploy.tar.gz -C ~/app
             rm ~/deploy.tar.gz
             cd ~/app
