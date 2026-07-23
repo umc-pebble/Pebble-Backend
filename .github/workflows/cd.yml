@@ -47,7 +47,7 @@ jobs:
             # tar는 이전 릴리스에 있었지만 이번엔 삭제된 파일을 지우지 않으므로,
             # .env만 남기고 ~/app을 비운 뒤 새로 추출해 스테일 파일이 빌드 컨텍스트에 섞이지 않게 한다.
             mkdir -p ~/app
-            find ~/app -mindepth 1 -not -name ".env" -delete
+            find ~/app -mindepth 1 -maxdepth 1 -not -name ".env" -exec rm -rf {} +
             tar xzf ~/deploy.tar.gz -C ~/app
             rm ~/deploy.tar.gz
             cd ~/app
@@ -58,7 +58,7 @@ jobs:
       - name: Verify health check
         run: |
           for i in $(seq 1 20); do
-            if curl --fail --silent "http://${{ secrets.EC2_HOST }}:3000/health"; then
+            if curl --fail --silent --connect-timeout 5 --max-time 10 "http://${{ secrets.EC2_HOST }}:3000/health"; then
               echo "Health check passed."
               exit 0
             fi
