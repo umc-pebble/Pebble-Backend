@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { NotificationType } from '@prisma/client';
 
 export const reportRepository = {
   // 소유권 검증을 위해 리포트의 사용자 ID를 포함한 원본 데이터를 조회한다.
@@ -36,5 +37,11 @@ export const reportRepository = {
       where: { id: reportId },
       data: { reportImageUrl },
     });
+  },
+
+  createNotification(userId: number, type: NotificationType, relatedId: number) {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+    return prisma.notification.create({ data: { userId, type, relatedId, expiresAt } });
   },
 };

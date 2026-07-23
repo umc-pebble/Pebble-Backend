@@ -221,10 +221,21 @@ export const reportService = {
         return reportRepository.upsert(userId, monthKey(year, monthIndex), statsData, expiresAt, createdAt);
     },
 
+    // 알림 생성 시 reportId를 사용하기 위해 결과를 반환하게 수정함.
     async createPreviousMonthReports() {
         // 배치 실행 시점의 KST 기준 전월을 모든 사용자에 대해 생성한다.
         const now = kstParts(new Date());
         const users = await reportRepository.findUsers();
-        await Promise.all(users.map((user) => this.createMonthlyReport(user.id, user.createdAt, now.year, now.month - 2)));
+
+        return Promise.all(
+            users.map((user) =>
+                this.createMonthlyReport(
+                    user.id,
+                    user.createdAt,
+                    now.year,
+                    now.month - 2,
+                ),
+            ),
+        );
     },
 };
