@@ -171,7 +171,7 @@ router.get('/categories/:categoryId', getCategory);
  *   get:
  *     summary: 친구 카테고리 목록 조회 (#64·PLB-040)
  *     description: >
- *       친구(수락된 팔로우) 또는 본인의 공개 카테고리 목록을 생성순(displayOrder 오름차순)으로 조회합니다.
+ *       친구(수락된 팔로우) 또는 본인의 공개 카테고리 목록을 화면 표시 순서(displayOrder 오름차순, 사용자가 드래그로 재정렬한 순서가 반영됨)로 조회합니다.
  *       공개(isPublic=true)로 설정된 카테고리만 노출되며, 비공개 카테고리는 포함되지 않습니다.
  *       친구가 아닌 유저의 프로필은 조회할 수 없습니다(403).
  *     tags: [Category]
