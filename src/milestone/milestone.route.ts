@@ -8,6 +8,7 @@ import {
 } from './milestone.schema';
 import {
   getMilestones,
+  getFriendMilestones,
   createMilestone,
   updateMilestone,
   deleteMilestone,
@@ -87,6 +88,77 @@ router.use(['/categories', '/milestones'], authMiddleware);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/categories/:categoryId/milestones', getMilestones);
+
+/**
+ * @swagger
+ * /users/{userId}/categories/{categoryId}/milestones:
+ *   get:
+ *     summary: 친구 마일스톤 목록 조회 (#64·PLB-040)
+ *     description: >
+ *       친구(수락된 팔로우) 또는 본인의 공개 카테고리에 속한 마일스톤을 D-Day 가까운 순(오름차순)으로 조회합니다.
+ *       대상 카테고리가 공개(isPublic=true)이며 대상 유저 소유일 때만 조회되고,
+ *       비공개이거나 존재하지 않으면 404를 반환합니다. 친구가 아닌 유저의 프로필은 조회할 수 없습니다(403).
+ *     tags: [Milestone]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: 마일스톤을 조회할 대상 사용자 ID
+ *         example: 2
+ *       - $ref: '#/components/parameters/CategoryIdPath'
+ *     responses:
+ *       200:
+ *         description: 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         milestones:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Milestone'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 친구가 아니어서 조회 권한 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 친구의 프로필만 조회할 수 있습니다.
+ *               error:
+ *                 code: COMMON_FORBIDDEN
+ *       404:
+ *         description: 유저 또는 공개 카테고리를 찾을 수 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 카테고리를 찾을 수 없습니다.
+ *               error:
+ *                 code: COMMON_NOT_FOUND
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get(
+  '/users/:userId/categories/:categoryId/milestones',
+  authMiddleware,
+  getFriendMilestones,
+);
 
 /**
  * @swagger

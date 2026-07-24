@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { sendSuccess } from '../utils/response';
 import { AppError } from '../utils/app-error';
+import { parseId } from '../utils/params';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { categoryService } from './category.service';
 import {
@@ -26,6 +27,17 @@ function parseCategoryId(raw: string): number {
 export const getCategories = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const categories = await categoryService.getCategories(req.userId!);
+    sendSuccess(res, { categories }, '카테고리 목록 조회 성공');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// 친구 프로필 조회(#64): 다른 유저의 공개 카테고리 목록. userId는 경로 파라미터.
+export const getFriendCategories = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const targetUserId = parseId(req.params.userId, '사용자');
+    const categories = await categoryService.getFriendCategories(req.userId!, targetUserId);
     sendSuccess(res, { categories }, '카테고리 목록 조회 성공');
   } catch (err) {
     next(err);

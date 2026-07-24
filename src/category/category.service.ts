@@ -3,6 +3,7 @@
 // DB 쿼리는 categoryRepository에 위임하고, 규칙 위반 시 AppError를 던진다(포맷은 error.middleware가 통일).
 
 import { AppError } from '../utils/app-error';
+import { isFriend } from '../follow/follow.service';
 import { categoryRepository } from './category.repository';
 
 // 참고: 개수 제한(CATEGORY_LIMIT_EXCEEDED) 생략
@@ -37,10 +38,50 @@ async function getOwnedCategoryOrThrow(userId: number, categoryId: number) {
   return category;
 }
 
+// 친구 프로필 조회(#64) 접근 판정. 대상 유저가 존재하고, 본인이거나 수락된 친구여야 한다.
+// 친구 판정은 follow 도메인의 isFriend를 재사용한다(팔로우 로직을 여기서 다시 만들지 않는다).
+// milestone friend-view도 같은 규칙을 써야 하므로 이 한 곳에 모아 재사용한다.
+async function assertFriendProfileAccess(requesterId: number, targetUserId: number) {
+  const target = await categoryRepository.findUserById(targetUserId);
+  if (!target) {
+    throw new AppError('COMMON_NOT_FOUND', '유저를 찾을 수 없습니다.');
+  }
+  // 본인 조회는 허용(활동기록 조회와 동일 규칙). 그 외에는 수락된 친구만 가능.
+  if (requesterId === targetUserId) {
+    return;
+  }
+  const areFriends = await isFriend(requesterId, targetUserId);
+  if (!areFriends) {
+    throw new AppError('COMMON_FORBIDDEN', '친구의 프로필만 조회할 수 있습니다.');
+  }
+}
+
 export const categoryService = {
   // 내 카테고리 목록 (displayOrder 순은 repository가 보장).
   getCategories(userId: number) {
     return categoryRepository.findManyByUserId(userId);
+  },
+
+  // 친구(또는 본인)의 공개 카테고리 목록 (#64·PLB-040). 비공개(isPublic=false)는 노출하지 않는다.
+  async getFriendCategories(requesterId: number, targetUserId: number) {
+    await assertFriendProfileAccess(requesterId, targetUserId);
+    return categoryRepository.findPublicManyByUserId(targetUserId);
+  },
+
+  // 친구 프로필에서 특정 카테고리 1건을 검증해 반환한다(하위 마일스톤 조회 등에서 재사용).
+  // 접근 판정 후, 그 카테고리가 대상 유저 소유이면서 공개(isPublic=true)일 때만 반환한다.
+  // 남의 비공개 카테고리는 존재 자체를 숨기기 위해 403이 아닌 404로 처리한다.
+  async getFriendPublicCategory(
+    requesterId: number,
+    targetUserId: number,
+    categoryId: number,
+  ) {
+    await assertFriendProfileAccess(requesterId, targetUserId);
+    const category = await categoryRepository.findById(categoryId);
+    if (!category || category.userId !== targetUserId || !category.isPublic) {
+      throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
+    }
+    return category;
   },
 
   // 단건 조회 (소유권 검증 포함).

@@ -8,6 +8,7 @@ import {
 } from './category.schema';
 import {
   getCategories,
+  getFriendCategories,
   getCategory,
   createCategory,
   updateCategory,
@@ -163,6 +164,86 @@ router.patch('/categories/order', validateBody(reorderCategoriesSchema), reorder
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/categories/:categoryId', getCategory);
+
+/**
+ * @swagger
+ * /users/{userId}/categories:
+ *   get:
+ *     summary: 친구 카테고리 목록 조회 (#64·PLB-040)
+ *     description: >
+ *       친구(수락된 팔로우) 또는 본인의 공개 카테고리 목록을 생성순(displayOrder 오름차순)으로 조회합니다.
+ *       공개(isPublic=true)로 설정된 카테고리만 노출되며, 비공개 카테고리는 포함되지 않습니다.
+ *       친구가 아닌 유저의 프로필은 조회할 수 없습니다(403).
+ *     tags: [Category]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: 카테고리를 조회할 대상 사용자 ID
+ *         example: 2
+ *     responses:
+ *       200:
+ *         description: 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         categories:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Category'
+ *             example:
+ *               success: true
+ *               message: 카테고리 목록 조회 성공
+ *               data:
+ *                 categories:
+ *                   - id: 12
+ *                     name: 학교
+ *                     color: '#FF6B6B'
+ *                     imageUrl: null
+ *                     isCompleted: false
+ *                     isHidden: false
+ *                     isPublic: true
+ *                     isShared: false
+ *                     displayOrder: 0
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 친구가 아니어서 조회 권한 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 친구의 프로필만 조회할 수 있습니다.
+ *               error:
+ *                 code: COMMON_FORBIDDEN
+ *       404:
+ *         description: 유저를 찾을 수 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 유저를 찾을 수 없습니다.
+ *               error:
+ *                 code: COMMON_NOT_FOUND
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get('/users/:userId/categories', authMiddleware, getFriendCategories);
 
 /**
  * @swagger
