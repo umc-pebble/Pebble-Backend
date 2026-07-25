@@ -1,5 +1,6 @@
 import { AppError } from "../utils/app-error";
 import { activityRepository } from "./activity.repository";
+import { isFriend } from '../follow/follow.service';
 
 // 한국 기준 YYYY-MM-DD 문자열
 const formatDateKST = (date: Date): string => {
@@ -74,12 +75,12 @@ export const activityService = {
 
         if(!isSelf) {
             //친구 조회인지 확인
-            const isFriend = await activityRepository.existsAcceptedFollow(
+            const areFriends = await isFriend(
                 requesterId,
                 targetUserId,
             );
 
-            if(!isFriend) {
+            if (!areFriends) {
                 throw new AppError(
                     'COMMON_FORBIDDEN',
                     '친구의 활동 기록만 조회할 수 있습니다.',
