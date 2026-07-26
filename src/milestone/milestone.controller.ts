@@ -24,6 +24,22 @@ export const getMilestones = async (req: AuthRequest, res: Response, next: NextF
   }
 };
 
+// 친구 프로필 조회(#64): 친구의 공개 카테고리 하위 마일스톤 목록. userId·categoryId는 경로 파라미터.
+export const getFriendMilestones = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const targetUserId = parseId(req.params.userId, '사용자');
+    const categoryId = parseId(req.params.categoryId, '카테고리');
+    const milestones = await milestoneService.getFriendMilestones(
+      req.userId!,
+      targetUserId,
+      categoryId,
+    );
+    sendSuccess(res, { milestones }, '마일스톤 목록 조회 성공');
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const createMilestone = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const categoryId = parseId(req.params.categoryId, '카테고리');
