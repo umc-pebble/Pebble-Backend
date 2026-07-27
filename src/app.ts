@@ -5,6 +5,8 @@ import express from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { errorHandler } from './middlewares/error.middleware';
+import prisma from './config/database';
+import { logger } from './utils/logger';
 import { swaggerSpec } from './config/swagger';
 import categoryRouter from './category/category.route';
 import milestoneRouter from './milestone/milestone.route';
@@ -29,8 +31,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get('/health', (_req, res) => {
-  res.json({ success: true, message: 'Pebble API is running' });
+// DB까지 확인해야 배포 파이프라인의 헬스체크(compose healthcheck, CD의 curl 검증)가
+// "프로세스는 떴지만 DB는 못 붙는" 상태를 성공으로 착각하지 않는다.
+app.get('/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ success: true, message: 'Pebble API is running' });
+  } catch (err) {
+    logger.error(err);
+    res.status(503).json({ success: false, message: 'Database unavailable' });
+  }
 });
 
 // Swagger UI (API 문서)
