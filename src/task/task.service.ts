@@ -2,6 +2,7 @@ import { DateType } from '@prisma/client';
 import { AppError } from '../utils/app-error';
 import { taskRepository, CreateTaskData } from './task.repository';
 import { CreateTaskBody, ReorderTasksBody, UpdateTaskBody } from './task.schema';
+import { isFriend } from '../follow/follow.service';
 
 const toDate = (value: string): Date => {
     const [year, month, day] = value.split('-').map(Number);
@@ -925,13 +926,12 @@ export const taskService = {
             );
         }
 
-        const isFriend =
-            await taskRepository.existsAcceptedFollow(
-                requesterId,
-                targetUserId,
-            );
+        const areFriends = await isFriend(
+            requesterId,
+            targetUserId,
+        );
 
-        if (!isFriend) {
+        if (!areFriends) {
             throw new AppError(
                 'COMMON_FORBIDDEN',
                 '친구의 태스크만 조회할 수 있습니다.',
