@@ -66,6 +66,41 @@ async function insertAtDateOrder(tx: Tx, data: CreateRowInput) {
   return tx.milestone.create({ data: { ...data, displayOrder: position } });
 }
 
+// MULTIPLE 회차 row 묶음 생성. seriesId는 별도 시퀀스 없이 "첫 회차의 id"를 재사용한다.
+// 트랜잭션은 호출자가 열어 전달한다(일부 회차만 생성되는 상태 방지).
+// 반환 배열의 0번은 항상 가장 이른 날짜의 회차다.
+async function createSeriesRows(
+  tx: Tx,
+  input: { categoryId: number; name: string; dates: Date[] },
+) {
+  const sorted = [...input.dates].sort((a, b) => a.getTime() - b.getTime());
+  const first = await insertAtDateOrder(tx, {
+    categoryId: input.categoryId,
+    name: input.name,
+    dateType: 'MULTIPLE',
+    startDate: sorted[0],
+    endDate: null,
+    seriesId: null,
+  });
+  const seriesId = first.id;
+  const created = [
+    await tx.milestone.update({ where: { id: first.id }, data: { seriesId } }),
+  ];
+  for (const date of sorted.slice(1)) {
+    created.push(
+      await insertAtDateOrder(tx, {
+        categoryId: input.categoryId,
+        name: input.name,
+        dateType: 'MULTIPLE',
+        startDate: date,
+        endDate: null,
+        seriesId,
+      }),
+    );
+  }
+  return created;
+}
+
 export const milestoneRepository = {
   // 카테고리에 속한 마일스톤 목록. 수동 순서(displayOrder) 우선, 같으면 D-Day(startDate) 순.
   findManyByCategoryId(categoryId: number) {
@@ -91,27 +126,77 @@ export const milestoneRepository = {
   },
 
   // 다중(MULTIPLE) 생성: 날짜마다 회차 row를 만들고 같은 seriesId로 묶는다(PLB-012).
-  // seriesId는 별도 시퀀스 없이 "첫 회차의 id"를 재사용한다.
   // 전체를 한 트랜잭션으로 묶어 일부 회차만 생성되는 상태를 방지한다.
   createMultiple(input: { categoryId: number; name: string; dates: Date[] }) {
-    const sorted = [...input.dates].sort((a, b) => a.getTime() - b.getTime());
+    return withDeadlockRetry(() =>
+      prisma.$transaction((tx) => createSeriesRows(tx, input)),
+    );
+  },
+
+  // 같은 시리즈(MULTIPLE)에 속한 회차 전체의 id. 날짜 타입 재지정의 교체 대상 범위로 쓰인다.
+  async findIdsBySeriesId(seriesId: number) {
+    const rows = await prisma.milestone.findMany({
+      where: { seriesId },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  },
+
+  // 날짜 타입 변경(#84). 수정 대상 row(앵커)를 지우지 않고 그대로 갱신해 milestoneId를 유지한다
+  // (태스크 도메인이 taskId를 유지한 채 자식 TaskDate만 교체하는 것과 같은 방식).
+  // 앵커가 살아남으므로 그 하위 태스크는 손댈 필요가 없고, 정리되는 형제 회차의 태스크만
+  // 앵커로 옮긴다(Milestone→Task가 onDelete: Cascade라 옮기지 않으면 함께 삭제된다).
+  // isCompleted·displayOrder는 건드리지 않는다(태스크 수정과 동일하게 보존).
+  // 반환 배열의 0번은 항상 앵커다.
+  changeDateType(input: {
+    anchorId: number;
+    siblingIds: number[]; // 정리할 같은 시리즈의 나머지 회차 (앵커 제외)
+    categoryId: number;
+    name: string;
+    dateType: 'SINGLE' | 'RANGE' | 'MULTIPLE';
+    startDate: Date | null;
+    endDate: Date | null;
+    dates: Date[] | null;
+  }) {
     return withDeadlockRetry(() =>
       prisma.$transaction(async (tx) => {
-        const first = await insertAtDateOrder(tx, {
-          categoryId: input.categoryId,
-          name: input.name,
-          dateType: 'MULTIPLE',
-          startDate: sorted[0],
-          endDate: null,
-          seriesId: null,
+        if (input.siblingIds.length > 0) {
+          await tx.task.updateMany({
+            where: { milestoneId: { in: input.siblingIds } },
+            data: { milestoneId: input.anchorId },
+          });
+          await tx.milestone.deleteMany({ where: { id: { in: input.siblingIds } } });
+        }
+
+        if (input.dateType !== 'MULTIPLE') {
+          const updated = await tx.milestone.update({
+            where: { id: input.anchorId },
+            data: {
+              name: input.name,
+              dateType: input.dateType,
+              startDate: input.startDate!, // zod가 SINGLE/RANGE에서 필수 보장
+              endDate: input.dateType === 'RANGE' ? input.endDate : null,
+              seriesId: null, // MULTIPLE 전용 필드라 벗어나면 비운다
+            },
+          });
+          return [updated];
+        }
+
+        // MULTIPLE: 앵커가 가장 이른 날짜의 첫 회차가 되고 seriesId로 자기 id를 쓴다
+        // (생성 경로의 "seriesId = 첫 회차 id" 규칙과 동일).
+        const sorted = [...(input.dates ?? [])].sort((a, b) => a.getTime() - b.getTime());
+        const anchor = await tx.milestone.update({
+          where: { id: input.anchorId },
+          data: {
+            name: input.name,
+            dateType: 'MULTIPLE',
+            startDate: sorted[0],
+            endDate: null,
+            seriesId: input.anchorId,
+          },
         });
-        const seriesId = first.id;
-        const created = [
-          await tx.milestone.update({
-            where: { id: first.id },
-            data: { seriesId },
-          }),
-        ];
+
+        const created = [anchor];
         for (const date of sorted.slice(1)) {
           created.push(
             await insertAtDateOrder(tx, {
@@ -120,7 +205,7 @@ export const milestoneRepository = {
               dateType: 'MULTIPLE',
               startDate: date,
               endDate: null,
-              seriesId,
+              seriesId: input.anchorId,
             }),
           );
         }

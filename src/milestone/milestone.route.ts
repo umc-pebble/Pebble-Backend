@@ -357,7 +357,19 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *       날짜(startDate) 변경은 모달 없이 항상 해당 회차 1건만 이동하고(PLB-013),
  *       완료(isCompleted)는 회차별 독립 기록이므로 둘 다 editScope 없이 요청합니다.
  *       SINGLE/RANGE 마일스톤에는 editScope를 지정할 수 없습니다.
- *       날짜 타입(dateType) 전환은 지원하지 않습니다.
+ *
+ *
+ *
+ *
+ *       dateType을 함께 보내면 "날짜 타입 변경" 모드로 동작합니다(#84). 하루/기간/다중 6가지 전환을 모두 지원하며,
+ *       같은 타입을 다시 지정해도 날짜는 통째로 새로 설정됩니다.
+ *       URL로 지정한 마일스톤을 그대로 갱신하므로 milestoneId는 유지되며, 하위 태스크·완료 여부·표시 순서도 보존됩니다
+ *       (태스크 수정이 taskId를 유지하는 것과 동일한 방식).
+ *       MULTIPLE에서 다른 타입으로 바꾸면 같은 seriesId의 나머지 회차는 정리되고(완료된 과거 회차 포함),
+ *       정리되는 회차에 달려 있던 태스크는 삭제되지 않고 지정한 마일스톤으로 이관됩니다.
+ *       MULTIPLE로 바꾸면 지정한 마일스톤이 가장 이른 날짜의 첫 회차가 되고 나머지 날짜의 회차가 추가 생성됩니다.
+ *       이 모드에서는 editScope·isCompleted를 함께 보낼 수 없고, 날짜 필드 조합은 생성과 동일한 규칙을 따릅니다
+ *       (SINGLE=startDate / RANGE=startDate+endDate / MULTIPLE=dates).
  *     tags: [Milestone]
  *     security:
  *       - bearerAuth: []
@@ -373,24 +385,41 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *               name:
  *                 type: string
  *                 maxLength: 100
- *                 description: 변경할 이름 (중복 허용). MULTIPLE에서는 editScope 필수
+ *                 description: 변경할 이름 (중복 허용). MULTIPLE에서는 editScope 필수. 날짜 타입 변경 모드에서 생략하면 기존 이름이 유지됨
+ *               categoryId:
+ *                 type: integer
+ *                 description: >
+ *                   카테고리 이동은 이 엔드포인트에서 아직 지원하지 않습니다(별도 이슈로 진행 예정).
+ *                   수정 모달이 폼 전체를 보내는 경우를 위해 필드는 받지만, 현재 소속 카테고리와 같은 값일 때만
+ *                   통과하고 다른 값이면 400을 반환합니다. 조용히 무시되지 않으므로 이동 시도는 즉시 드러납니다.
+ *               dateType:
+ *                 type: string
+ *                 enum: [SINGLE, RANGE, MULTIPLE]
+ *                 description: '지정 시 날짜 타입 변경 모드로 동작함(#84). 생략하면 기존 날짜 타입을 유지한 부분 수정'
  *               startDate:
  *                 type: string
  *                 format: date
  *                 nullable: true
- *                 description: 날짜 변경. MULTIPLE 회차 row에서는 해당 회차의 날짜이며 editScope 없이 이 회차 1건만 이동 (PLB-013)
+ *                 description: 날짜 변경. MULTIPLE 회차 row에서는 해당 회차의 날짜이며 editScope 없이 이 회차 1건만 이동 (PLB-013). 날짜 타입 변경 모드에서는 SINGLE/RANGE 필수
  *               endDate:
  *                 type: string
  *                 format: date
  *                 nullable: true
- *                 description: 날짜 변경 (RANGE일 때)
+ *                 description: 날짜 변경 (RANGE일 때). 날짜 타입 변경 모드에서는 RANGE 필수
+ *               dates:
+ *                 type: array
+ *                 nullable: true
+ *                 items:
+ *                   type: string
+ *                   format: date
+ *                 description: 날짜 타입 변경 모드에서 MULTIPLE 필수 — 선택한 날짜 배열(중복 불가, 최대 100개). dateType 없이 단독으로 보내면 400
  *               isCompleted:
  *                 type: boolean
- *                 description: 완료/미완료 토글 (회차 row별 독립 기록, editScope 불필요)
+ *                 description: 완료/미완료 토글 (회차 row별 독립 기록, editScope 불필요). 날짜 타입 변경 시에는 완료 여부가 그대로 보존되므로 함께 보낼 수 없음
  *               editScope:
  *                 type: string
  *                 enum: [THIS_ONLY, ALL]
- *                 description: 'MULTIPLE 이름 수정 전용 필수 택1. THIS_ONLY=이 회차 1건 / ALL=이 회차 + 같은 seriesId의 오늘 이후 미완료 회차에 이름 일괄 반영. 그 외 상황에서 지정 시 400'
+ *                 description: 'MULTIPLE 이름 수정 전용 필수 택1. THIS_ONLY=이 회차 1건 / ALL=이 회차 + 같은 seriesId의 오늘 이후 미완료 회차에 이름 일괄 반영. 그 외 상황(날짜 타입 변경 모드 포함)에서 지정 시 400'
  *           examples:
  *             completeToggle:
  *               summary: 완료 처리 (scope 없이, 회차별 독립)
@@ -406,9 +435,30 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *               value:
  *                 editScope: ALL
  *                 name: 주간 회의
+ *             toSingle:
+ *               summary: 날짜 타입 변경 - 하루로
+ *               value:
+ *                 dateType: SINGLE
+ *                 startDate: '2026-07-15'
+ *             toRange:
+ *               summary: 날짜 타입 변경 - 기간으로 (이름도 함께 변경)
+ *               value:
+ *                 name: 굿즈 제작
+ *                 dateType: RANGE
+ *                 startDate: '2026-07-27'
+ *                 endDate: '2026-08-01'
+ *             toMultiple:
+ *               summary: 날짜 타입 변경 - 다중으로 (날짜마다 회차 row 생성)
+ *               value:
+ *                 dateType: MULTIPLE
+ *                 dates: ['2026-07-06', '2026-07-13', '2026-07-20']
  *     responses:
  *       200:
- *         description: 수정 성공. editScope=ALL이어도 URL로 지정한 회차 기준으로 응답 (나머지 회차에 이름 동일 반영)
+ *         description: >
+ *           수정 성공. 수정된 마일스톤 1건을 반환합니다(milestoneId는 항상 유지).
+ *           editScope=ALL이어도 URL로 지정한 회차 기준으로 응답하며 나머지 회차에 이름은 반영됩니다.
+ *           MULTIPLE로 날짜 타입을 바꾼 경우에만 series 필드에 회차 전체가 날짜 오름차순으로 함께 담깁니다
+ *           (태스크 수정 응답의 taskDates에 대응).
  *         content:
  *           application/json:
  *             schema:
@@ -417,9 +467,53 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *                 - type: object
  *                   properties:
  *                     data:
- *                       $ref: '#/components/schemas/Milestone'
+ *                       allOf:
+ *                         - $ref: '#/components/schemas/Milestone'
+ *                         - type: object
+ *                           properties:
+ *                             series:
+ *                               type: array
+ *                               description: MULTIPLE로 변경한 응답에만 존재. 같은 seriesId 회차 전체(날짜 오름차순, 0번이 지정한 마일스톤)
+ *                               items:
+ *                                 $ref: '#/components/schemas/Milestone'
+ *             examples:
+ *               toRange:
+ *                 summary: 기간으로 변경 (id 유지)
+ *                 value:
+ *                   success: true
+ *                   message: 마일스톤 수정 성공
+ *                   data:
+ *                     id: 42
+ *                     seriesId: null
+ *                     name: 굿즈 제작
+ *                     dateType: RANGE
+ *                     startDate: '2026-07-27'
+ *                     endDate: '2026-08-01'
+ *                     isCompleted: false
+ *               toMultiple:
+ *                 summary: 다중으로 변경 (id 유지 + 회차 전체 동봉)
+ *                 value:
+ *                   success: true
+ *                   message: 마일스톤 수정 성공
+ *                   data:
+ *                     id: 42
+ *                     seriesId: 42
+ *                     name: 주간 회의
+ *                     dateType: MULTIPLE
+ *                     startDate: '2026-07-06'
+ *                     endDate: null
+ *                     isCompleted: false
+ *                     series:
+ *                       - id: 42
+ *                         seriesId: 42
+ *                         dateType: MULTIPLE
+ *                         startDate: '2026-07-06'
+ *                       - id: 88
+ *                         seriesId: 42
+ *                         dateType: MULTIPLE
+ *                         startDate: '2026-07-13'
  *       400:
- *         description: MULTIPLE 이름 수정인데 editScope 누락, 이름 변경 없이 editScope 지정, SINGLE/RANGE에 editScope 지정, 또는 dateType과 날짜 필드 조합 불일치
+ *         description: MULTIPLE 이름 수정인데 editScope 누락, 이름 변경 없이 editScope 지정, SINGLE/RANGE에 editScope 지정, dateType과 날짜 필드 조합 불일치, 날짜 타입 변경에 editScope·isCompleted 동반, 현재와 다른 categoryId 지정(카테고리 이동 미지원), 또는 수정할 값이 하나도 없음
  *         content:
  *           application/json:
  *             schema:
