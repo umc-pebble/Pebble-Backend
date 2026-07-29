@@ -16,7 +16,7 @@ interface CreateMilestoneInput {
 
 interface UpdateMilestoneInput {
   name?: string;
-  categoryId?: number; // 이동 미지원. 현재 카테고리와 같은 값만 허용(폼 전체 전송 호환)
+  categoryId?: number; // 지정 시 카테고리 이동(#86). 현재와 같은 값이면 변경 없음
   dateType?: 'SINGLE' | 'RANGE' | 'MULTIPLE'; // 지정 시 "날짜 재지정" 경로
   startDate?: string;
   endDate?: string | null;
@@ -82,6 +82,7 @@ async function changeDateType(
     seriesId: number | null;
   },
   input: UpdateMilestoneInput,
+  moveToCategoryId?: number, // 함께 요청된 카테고리 이동(#86). 같은 트랜잭션에서 처리된다.
 ) {
   const siblingIds =
     existing.dateType === 'MULTIPLE' && existing.seriesId !== null
@@ -99,7 +100,19 @@ async function changeDateType(
     startDate: input.startDate ? new Date(input.startDate) : null,
     endDate: input.endDate ? new Date(input.endDate) : null,
     dates: input.dates ? input.dates.map((d) => new Date(d)) : null,
+    moveToCategoryId,
   });
+}
+
+// 카테고리 이동(#86)의 대상 id 목록.
+// MULTIPLE는 같은 seriesId 회차 전체가 함께 움직여야 한다. 회차가 여러 카테고리로 흩어지면
+// "마일스톤이 이 카테고리에 속하는지"를 보는 태스크 생성 검증과 목록 조회의 전제가 깨진다.
+// editScope(이름 전파 범위)와는 무관하게 항상 시리즈 전체가 대상이다.
+function movingIds(row: { id: number; dateType: string; seriesId: number | null }) {
+  if (row.dateType !== 'MULTIPLE' || row.seriesId === null) {
+    return Promise.resolve([row.id]);
+  }
+  return milestoneRepository.findIdsBySeriesId(row.seriesId);
 }
 
 export const milestoneService = {
@@ -160,6 +173,8 @@ export const milestoneService = {
   //   (날짜 수정은 모달이 뜨지 않음, 완료는 회차별 독립 기록).
   // - editScope=ALL은 같은 seriesId 중 "오늘 이후 + 미완료" 회차에 이름을 전파한다
   //   (완료된 과거 회차는 보존).
+  // - categoryId가 현재와 다르면 카테고리 이동이 함께 수행된다(#86). 이름·날짜 수정과 같이 보낼 수 있고,
+  //   MULTIPLE는 회차 전체가 함께 옮겨진다.
   // - dateType이 오면 날짜 타입 변경 경로로 빠진다(#84).
   //   응답은 태스크 수정과 같이 "수정한 리소스 1건"이며, MULTIPLE인 경우에만 회차 전체를
   //   series로 동봉한다(태스크가 taskDates를 동봉하는 것과 같은 형태).
@@ -170,20 +185,24 @@ export const milestoneService = {
   ) {
     const existing = await getOwnedMilestoneOrThrow(userId, milestoneId);
 
-    // 카테고리 이동은 미지원. 같은 값이면 변경이 없으므로 통과시키고(수정 모달이 폼 전체를
-    // 보내는 경우가 있다), 다른 값일 때만 막는다. 조용히 무시하면 프론트에서 "카테고리가
-    // 안 바뀐다"는 증상만 남아 원인을 찾기 어렵다.
-    if (input.categoryId !== undefined && input.categoryId !== existing.categoryId) {
-      throw new AppError(
-        'COMMON_INVALID_INPUT',
-        '마일스톤의 소속 카테고리는 수정할 수 없습니다.',
-      );
+    // 카테고리 이동(#86). 같은 값이면 변경이 없으므로 이동하지 않는다(수정 모달이 폼 전체를
+    // 보내는 경우가 있다). 대상 카테고리 소유 검증은 여기서 먼저 해서(없으면 404, 남의 것이면 403)
+    // 이름·날짜가 반영되기 전에 막는다. 실제 이동은 이름·날짜 수정을 마친 뒤 마지막에 수행한다 —
+    // 폼 전체 전송이면 날짜도 함께 바뀌는데, 바뀐 startDate 기준으로 대상 카테고리의 순번을
+    // 채번해야 목록이 D-Day 순으로 정리되기 때문이다.
+    const moveTo =
+      input.categoryId !== undefined && input.categoryId !== existing.categoryId
+        ? input.categoryId
+        : undefined;
+    if (moveTo !== undefined) {
+      await categoryService.getCategory(userId, moveTo); // 404/403 판정 재사용
     }
 
     // 날짜 타입 변경: 같은 타입을 다시 골라도 날짜는 통째로 새로 지정되므로 동일하게 처리한다.
     // 아래 부분 수정 규칙(editScope·endDate 정합성)은 기존 dateType 유지가 전제라 여기서 갈라진다.
     if (input.dateType !== undefined) {
-      const rows = await changeDateType(existing, input);
+      // 이동이 함께 오면 changeDateType이 같은 트랜잭션 안에서 끝까지 처리한다.
+      const rows = await changeDateType(existing, input, moveTo);
       const milestones = rows.map(toMilestoneResponse);
       const anchor = milestones[0];
       return input.dateType === 'MULTIPLE' ? { ...anchor, series: milestones } : anchor;
@@ -250,17 +269,33 @@ export const milestoneService = {
           : undefined,
     };
 
-    // ALL: 지정 회차는 전체 필드, 나머지 미래 미완료 회차에는 이름만 전파(한 트랜잭션).
-    if (input.editScope === 'ALL' && existing.seriesId !== null) {
-      const updated = await milestoneRepository.updateWithSeriesName(milestoneId, data, {
-        seriesId: existing.seriesId,
-        fromDate: kstToday(),
-        name: input.name!, // 위 규칙상 ALL이면 name이 반드시 존재
+    // ALL: 지정 회차는 전체 필드, 나머지 미래 미완료 회차에는 이름만 전파.
+    const series =
+      input.editScope === 'ALL' && existing.seriesId !== null
+        ? {
+            seriesId: existing.seriesId,
+            fromDate: kstToday(),
+            name: input.name!, // 위 규칙상 ALL이면 name이 반드시 존재
+          }
+        : undefined;
+
+    // 이동이 함께 오면 수정과 이동을 한 트랜잭션으로 처리한다(#86).
+    // 나누면 이동에서 실패했을 때 이름·날짜만 반영된 상태가 남는다.
+    if (moveTo !== undefined) {
+      const moved = await milestoneRepository.updateWithMove({
+        milestoneId,
+        data,
+        series,
+        moveIds: await movingIds(existing),
+        targetCategoryId: moveTo,
       });
-      return toMilestoneResponse(updated);
+      return toMilestoneResponse(moved);
     }
 
-    return toMilestoneResponse(await milestoneRepository.update(milestoneId, data));
+    const updated = series
+      ? await milestoneRepository.updateWithSeriesName(milestoneId, data, series)
+      : await milestoneRepository.update(milestoneId, data);
+    return toMilestoneResponse(updated);
   },
 
   // 삭제 (PLB-014, 하위 task는 CASCADE).
