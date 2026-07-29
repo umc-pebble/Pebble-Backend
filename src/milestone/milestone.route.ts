@@ -358,13 +358,11 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *       완료(isCompleted)는 회차별 독립 기록이므로 둘 다 editScope 없이 요청합니다.
  *       SINGLE/RANGE 마일스톤에는 editScope를 지정할 수 없습니다.
  *
- *
- *
- *
  *       dateType을 함께 보내면 "날짜 타입 변경" 모드로 동작합니다(#84). 하루/기간/다중 6가지 전환을 모두 지원하며,
  *       같은 타입을 다시 지정해도 날짜는 통째로 새로 설정됩니다.
- *       URL로 지정한 마일스톤을 그대로 갱신하므로 milestoneId는 유지되며, 하위 태스크·완료 여부·표시 순서도 보존됩니다
+ *       URL로 지정한 마일스톤을 그대로 갱신하므로 milestoneId는 유지되며, 하위 태스크와 완료 여부도 보존됩니다
  *       (태스크 수정이 taskId를 유지하는 것과 동일한 방식).
+ *       단, 표시 순서(displayOrder)는 새 날짜 기준 D-Day 위치로 다시 잡힙니다.
  *       MULTIPLE에서 다른 타입으로 바꾸면 같은 seriesId의 나머지 회차는 정리되고(완료된 과거 회차 포함),
  *       정리되는 회차에 달려 있던 태스크는 삭제되지 않고 지정한 마일스톤으로 이관됩니다.
  *       MULTIPLE로 바꾸면 지정한 마일스톤이 가장 이른 날짜의 첫 회차가 되고 나머지 날짜의 회차가 추가 생성됩니다.
@@ -399,8 +397,7 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *               startDate:
  *                 type: string
  *                 format: date
- *                 nullable: true
- *                 description: 날짜 변경. MULTIPLE 회차 row에서는 해당 회차의 날짜이며 editScope 없이 이 회차 1건만 이동 (PLB-013). 날짜 타입 변경 모드에서는 SINGLE/RANGE 필수
+ *                 description: 날짜 변경 (YYYY-MM-DD, null 불가). MULTIPLE 회차 row에서는 해당 회차의 날짜이며 editScope 없이 이 회차 1건만 이동 (PLB-013). 날짜 타입 변경 모드에서는 SINGLE/RANGE 필수
  *               endDate:
  *                 type: string
  *                 format: date
