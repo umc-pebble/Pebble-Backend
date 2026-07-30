@@ -32,6 +32,7 @@ const router = Router();
  *       토큰 자체가 본인 확인 수단이므로(비밀번호 재설정 링크와 동일 패턴) 로그인 여부와 무관하게 호출할 수 있습니다.
  *       토큰이 만료되었거나 위조된 경우 400을 반환합니다.
  *     tags: [User]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
