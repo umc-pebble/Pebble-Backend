@@ -1,6 +1,6 @@
 import { DateType } from '@prisma/client';
 import { AppError } from '../utils/app-error';
-import { taskRepository, CreateTaskData } from './task.repository';
+import { taskRepository, CreateTaskData, ReplaceTaskData } from './task.repository';
 import { CreateTaskBody, ReorderTasksBody, UpdateTaskBody } from './task.schema';
 
 const toDate = (value: string): Date => {
@@ -58,6 +58,71 @@ const parseBaseDate = (baseDate?: string): string => {
     }
 
     return value;
+};
+
+type TaskMutationResult = {
+    id: number;
+    userId: number;
+    categoryId: number | null;
+    milestoneId: number | null;
+    name: string;
+    dateType: DateType;
+    startDate: Date | null;
+    endDate: Date | null;
+    color: string | null;
+    isCompleted: boolean;
+    completedAt: Date | null;
+    displayOrder: number;
+    taskDates: Array<{
+        id: number;
+        date: Date;
+        isCompleted: boolean;
+        completedAt: Date | null;
+        exception?: {
+            name: string | null;
+            color: string | null;
+        } | null;
+    }>;
+};
+
+const formatTaskMutationResult = (task: TaskMutationResult) => ({
+    id: task.id,
+    userId: task.userId,
+    categoryId: task.categoryId,
+    milestoneId: task.milestoneId,
+    name: task.name,
+    dateType: task.dateType,
+    startDate: toDateString(task.startDate),
+    endDate: toDateString(task.endDate),
+    color: task.color,
+    isCompleted: task.isCompleted,
+    completedAt: task.completedAt,
+    displayOrder: task.displayOrder,
+    ...(task.dateType === DateType.MULTIPLE
+        ? {
+            taskDates: task.taskDates.map((taskDate) => ({
+                taskDateId: taskDate.id,
+                date: toDateString(taskDate.date),
+                isCompleted: taskDate.isCompleted,
+                completedAt: taskDate.completedAt,
+                name: taskDate.exception?.name ?? task.name,
+                color: taskDate.exception?.color ?? task.color,
+            })),
+        }
+        : {}),
+});
+
+const sameStringSet = (left: string[], right: string[]) => {
+    if (left.length !== right.length) {
+        return false;
+    }
+
+    const sortedLeft = [...left].sort();
+    const sortedRight = [...right].sort();
+
+    return sortedLeft.every(
+        (value, index) => value === sortedRight[index],
+    );
 };
 
 export const taskService = {
@@ -143,379 +208,207 @@ export const taskService = {
             );
         }
 
-        // 하위 태스크는 카테고리 색상을 상속하므로 color 수정 불가
-        if (
-            task.categoryId !== null &&
-            body.color !== undefined
-        ) {
+        const categoryId = body.categoryId;
+        const milestoneId = body.milestoneId;
+
+        if (categoryId === null && milestoneId !== null) {
+            throw new AppError(
+                'COMMON_INVALID_INPUT',
+                'milestoneId를 지정하려면 categoryId가 필요합니다.',
+            );
+        }
+
+        if (categoryId !== null) {
+            const category =
+                await taskRepository.findCategoryByIdAndUserId(
+                    categoryId,
+                    userId,
+                );
+
+            if (!category) {
+                throw new AppError(
+                    'COMMON_NOT_FOUND',
+                    '카테고리를 찾을 수 없습니다.',
+                );
+            }
+        }
+
+        if (milestoneId !== null) {
+            const milestone =
+                await taskRepository.findMilestoneByIdAndCategoryIdAndUserId(
+                    milestoneId,
+                    categoryId!,
+                    userId,
+                );
+
+            if (!milestone) {
+                throw new AppError(
+                    'COMMON_INVALID_INPUT',
+                    '해당 마일스톤이 존재하지 않거나 선택한 카테고리에 속하지 않습니다.',
+                );
+            }
+        }
+
+        if (categoryId !== null && body.color != null) {
             throw new AppError(
                 'COMMON_INVALID_INPUT',
                 '하위 태스크에는 color를 지정할 수 없습니다.',
             );
         }
 
-        // SINGLE
-        if (task.dateType === DateType.SINGLE) {
-            if (
-                body.dates !== undefined ||
-                body.editScope !== undefined ||
-                body.taskDateId !== undefined
-            ) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '일반 태스크에는 dates, editScope, taskDateId를 사용할 수 없습니다.',
+        const resolvedColor =
+            categoryId === null
+                ? body.color !== undefined
+                    ? body.color
+                    : task.categoryId === null
+                        ? task.color
+                        : null
+                : null;
+
+        const replacementData: ReplaceTaskData = {
+            userId,
+            categoryId,
+            milestoneId,
+            name: body.name.trim(),
+            dateType: body.dateType as DateType,
+            startDate:
+                body.dateType === DateType.SINGLE ||
+                body.dateType === DateType.RANGE
+                    ? toDate(body.startDate!)
+                    : null,
+            endDate:
+                body.dateType === DateType.RANGE
+                    ? toDate(body.endDate!)
+                    : null,
+            color: resolvedColor,
+            dates:
+                body.dateType === DateType.MULTIPLE
+                    ? body.dates!.map(toDate)
+                    : [],
+        };
+
+        // 날짜 구성이 동일하면 이름/소속만 같은 Task에서 변경
+        // 완료 상태, TaskDate ID, displayOrder는 모두 그대로 유지
+        const scheduleChanged = (() => {
+            if (task.dateType !== replacementData.dateType) {
+                return true;
+            }
+
+            if (replacementData.dateType === DateType.SINGLE) {
+                return (
+                    toDateString(task.startDate) !==
+                    toDateString(replacementData.startDate)
                 );
             }
 
-            if (body.endDate !== undefined && body.endDate !== null) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    'SINGLE에는 endDate를 지정할 수 없습니다.',
+            if (replacementData.dateType === DateType.RANGE) {
+                return (
+                    toDateString(task.startDate) !==
+                        toDateString(replacementData.startDate) ||
+                    toDateString(task.endDate) !==
+                        toDateString(replacementData.endDate)
                 );
             }
 
-            const startDate =
-                body.startDate !== undefined
-                    ? body.startDate
-                    : toDateString(task.startDate);
-
-            if (!startDate) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    'SINGLE에는 startDate가 필요합니다.',
-                );
-            }
-
-            const updatedTask =
-                await taskRepository.updateTask(
-                    taskId,
-                    {
-                        ...(body.name !== undefined
-                            ? {
-                                name: body.name.trim(),
-                            }
-                            : {}),
-                        ...(body.startDate !== undefined
-                            ? {
-                                startDate: toDate(startDate),
-                            }
-                            : {}),
-                        ...(body.color !== undefined
-                            ? {
-                                color: body.color,
-                            }
-                            : {}),
-                    },
-                );
-
-            return {
-                id: updatedTask.id,
-                userId: updatedTask.userId,
-                categoryId: updatedTask.categoryId,
-                milestoneId: updatedTask.milestoneId,
-                name: updatedTask.name,
-                dateType: updatedTask.dateType,
-                startDate: toDateString(updatedTask.startDate),
-                endDate: null,
-                color: updatedTask.color,
-                isCompleted: updatedTask.isCompleted,
-                completedAt: updatedTask.completedAt,
-                displayOrder: updatedTask.displayOrder,
-            };
-        }
-
-        // RANGE
-        if (task.dateType === DateType.RANGE) {
-            if (
-                body.dates !== undefined ||
-                body.editScope !== undefined ||
-                body.taskDateId !== undefined
-            ) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '기간 태스크에는 dates, editScope, taskDateId를 사용할 수 없습니다.',
-                );
-            }
-
-            const startDate =
-                body.startDate !== undefined
-                    ? body.startDate
-                    : toDateString(task.startDate);
-
-            const endDate =
-                body.endDate !== undefined
-                    ? body.endDate
-                    : toDateString(task.endDate);
-
-            if (!startDate) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    'RANGE에는 startDate가 필요합니다.',
-                );
-            }
-
-            if (!endDate) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    'RANGE에는 endDate가 필요합니다.',
-                );
-            }
-
-            if (endDate < startDate) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '종료일은 시작일 이후여야 합니다.',
-                );
-            }
-
-            const updatedTask =
-                await taskRepository.updateTask(
-                    taskId,
-                    {
-                        ...(body.name !== undefined
-                            ? {
-                                name: body.name.trim(),
-                            }
-                            : {}),
-                        ...(body.startDate !== undefined
-                            ? {
-                                startDate: toDate(startDate),
-                            }
-                            : {}),
-                        ...(body.endDate !== undefined
-                            ? {
-                                endDate: toDate(endDate),
-                            }
-                            : {}),
-                        ...(body.color !== undefined
-                            ? {
-                                color: body.color,
-                            }
-                            : {}),
-                    },
-                );
-
-            return {
-                id: updatedTask.id,
-                userId: updatedTask.userId,
-                categoryId: updatedTask.categoryId,
-                milestoneId: updatedTask.milestoneId,
-                name: updatedTask.name,
-                dateType: updatedTask.dateType,
-                startDate: toDateString(updatedTask.startDate),
-                endDate: toDateString(updatedTask.endDate),
-                color: updatedTask.color,
-                isCompleted: updatedTask.isCompleted,
-                completedAt: updatedTask.completedAt,
-                displayOrder: updatedTask.displayOrder,
-            };
-        }
-
-        // MULTIPLE
-        if (
-            body.startDate !== undefined ||
-            body.endDate !== undefined
-        ) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                'MULTIPLE에는 startDate와 endDate를 지정할 수 없습니다.',
-            );
-        }
-
-        const kstTodayString =
-            new Intl.DateTimeFormat('en-CA', {
-                timeZone: 'Asia/Seoul',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-            }).format(new Date());
-
-        const today = toDate(kstTodayString);
-
-        // MULTIPLE 날짜 배열 수정
-        if (body.dates !== undefined) {
-            if (
-                body.editScope !== undefined ||
-                body.taskDateId !== undefined
-            ) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '다중 날짜 수정에는 editScope와 taskDateId를 사용할 수 없습니다.',
-                );
-            }
-
-            if (!body.dates || body.dates.length === 0) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    'MULTIPLE에는 하나 이상의 dates가 필요합니다.',
-                );
-            }
-
-            const requestedDates = body.dates.map(toDate);
-
-            if (requestedDates.some((date) => date < today)) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '다중 태스크의 날짜는 오늘 이후만 수정할 수 있습니다.',
-                );
-            }
-
-            const updatedTaskDates =
-                await taskRepository.replaceFutureIncompleteTaskDates(
-                    taskId,
-                    today,
-                    requestedDates,
-                );
-
-            return {
-                id: task.id,
-                dateType: task.dateType,
-                taskDates: updatedTaskDates.map(
-                    (taskDate) => ({
-                        taskDateId: taskDate.id,
-                        date: toDateString(taskDate.date),
-                        isCompleted: taskDate.isCompleted,
-                        completedAt: taskDate.completedAt,
-                        name:
-                            taskDate.exception?.name
-                            ?? task.name,
-                        color:
-                            taskDate.exception?.color
-                            ?? task.color,
-                    }),
+            return !sameStringSet(
+                task.taskDates
+                    .filter((taskDate) => !taskDate.isCompleted)
+                    .map((taskDate) =>
+                    toDateString(taskDate.date)!,
+                    ),
+                replacementData.dates.map((date) =>
+                    toDateString(date)!,
                 ),
-            };
-        }
-
-        const modifiesNameOrColor =
-            body.name !== undefined ||
-            body.color !== undefined;
-
-        if (!modifiesNameOrColor) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                '수정할 값을 하나 이상 입력해야 합니다.',
             );
-        }
+        })();
 
-        if (
-            body.editScope !== 'THIS_ONLY' &&
-            body.editScope !== 'ALL'
-        ) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                '다중 태스크의 이름/색상 수정 시 editScope가 필요합니다.',
-            );
-        }
-
-        // MULTIPLE - 이 항목만 수정
-        if (body.editScope === 'THIS_ONLY') {
-            if (body.taskDateId == null) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '이 항목만 수정하려면 taskDateId가 필요합니다.',
-                );
-            }
-
-            const taskDate =
-                await taskRepository.findTaskDateByIdAndTaskId(
-                    body.taskDateId,
+        if (!scheduleChanged) {
+            const updatedTask =
+                await taskRepository.updateTaskMetadata(
                     taskId,
-                );
-
-            if (!taskDate) {
-                throw new AppError(
-                    'COMMON_NOT_FOUND',
-                    '태스크 회차를 찾을 수 없습니다.',
-                );
-            }
-
-            const existingException =
-                await taskRepository.findTaskExceptionByTaskDateId(
-                    body.taskDateId,
-                );
-
-            const exception =
-                await taskRepository.upsertTaskException(
-                    body.taskDateId,
                     {
-                        ...(body.name !== undefined
-                            ? {
-                                name: body.name.trim(),
-                            }
-                            : {
-                                name:
-                                    existingException?.name
-                                    ?? null,
-                            }),
-                        ...(body.color !== undefined
-                            ? {
-                                color: body.color,
-                            }
-                            : {
-                                color:
-                                    existingException?.color
-                                    ?? null,
-                            }),
+                        categoryId,
+                        milestoneId,
+                        name: replacementData.name,
+                        color: replacementData.color,
                     },
                 );
 
             return {
-                editScope: 'THIS_ONLY',
-                taskId,
-                taskDateId: taskDate.id,
-                date: toDateString(taskDate.date),
-                name: exception.name ?? task.name,
-                color: exception.color ?? task.color,
-                isCompleted: taskDate.isCompleted,
-                completedAt: taskDate.completedAt,
+                updateMode: 'METADATA_ONLY',
+                preservedTaskId: null,
+                ...formatTaskMutationResult(updatedTask),
             };
         }
 
-        // MULTIPLE - 전체 수정
-        if (body.taskDateId !== undefined) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                '전체 수정에는 taskDateId를 지정할 수 없습니다.',
+        const hasCompletedHistory =
+            task.isCompleted ||
+            task.taskDates.some(
+                (taskDate) => taskDate.isCompleted,
             );
+
+        // 완료 이력이 없다면 부모 Task를 그대로 재사용합니다.
+        if (!hasCompletedHistory) {
+            const updatedTask =
+                await taskRepository.replaceTaskInPlace(
+                    taskId,
+                    replacementData,
+                );
+
+            return {
+                updateMode: 'REPLACED_IN_PLACE',
+                preservedTaskId: null,
+                ...formatTaskMutationResult(updatedTask),
+            };
         }
 
-        const updatedTask =
-            await taskRepository.updateMultipleTaskAll(
+        // 기존 MULTIPLE 완료 회차와 새 dates가 하나도 겹치지 않으면
+        // 같은 Task.id에서 완료 회차를 보존하고 미완료 회차만 교체
+        if (
+            task.dateType === DateType.MULTIPLE &&
+            replacementData.dateType === DateType.MULTIPLE &&
+            !task.isCompleted
+        ) {
+            const completedDateSet = new Set(
+                task.taskDates
+                    .filter((taskDate) => taskDate.isCompleted)
+                    .map((taskDate) =>
+                        toDateString(taskDate.date)!,
+                    ),
+            );
+
+            const overlapsCompletedDate =
+                replacementData.dates.some((date) =>
+                    completedDateSet.has(toDateString(date)!),
+                );
+
+            if (!overlapsCompletedDate) {
+                const updatedTask =
+                    await taskRepository.replaceMultipleKeepingCompleted(
+                        taskId,
+                        replacementData,
+                    );
+
+                return {
+                    updateMode: 'KEPT_COMPLETED_DATES',
+                    preservedTaskId: null,
+                    ...formatTaskMutationResult(updatedTask),
+                };
+            }
+        }
+
+        // 완료 날짜와 새 날짜가 겹치면 기존 완료 기록은 원래 Task에 남기고 요청 일정은 새 Task 그룹으로 생성
+        const { preservedTask, createdTask } =
+            await taskRepository.splitTaskPreservingCompleted(
                 taskId,
-                today,
-                {
-                    ...(body.name !== undefined
-                        ? {
-                            name: body.name.trim(),
-                        }
-                        : {}),
-                    ...(body.color !== undefined
-                        ? {
-                            color: body.color,
-                        }
-                        : {}),
-                },
-                {
-                    name: task.name,
-                    color: task.color,
-                },
+                task.dateType,
+                replacementData,
             );
 
         return {
-            editScope: 'ALL',
-            id: updatedTask.id,
-            userId: updatedTask.userId,
-            categoryId: updatedTask.categoryId,
-            milestoneId: updatedTask.milestoneId,
-            name: updatedTask.name,
-            dateType: updatedTask.dateType,
-            startDate: null,
-            endDate: null,
-            color: updatedTask.color,
-            isCompleted: updatedTask.isCompleted,
-            completedAt: updatedTask.completedAt,
-            displayOrder: updatedTask.displayOrder,
+            updateMode: 'CREATED_NEW_TASK_GROUP',
+            preservedTaskId: preservedTask.id,
+            ...formatTaskMutationResult(createdTask),
         };
     },
 

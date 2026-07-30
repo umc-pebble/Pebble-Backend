@@ -44,6 +44,18 @@ export interface CreateTaskData {
   dates?: Date[];
 }
 
+export interface ReplaceTaskData {
+  userId: number;
+  categoryId: number | null;
+  milestoneId: number | null;
+  name: string;
+  dateType: DateType;
+  startDate: Date | null;
+  endDate: Date | null;
+  color: string | null;
+  dates: Date[];
+}
+
 export const taskRepository = {
     findCategoryByIdAndUserId: async (
         categoryId: number,
@@ -128,6 +140,26 @@ export const taskRepository = {
                 color: true,
                 isCompleted: true,
                 completedAt: true,
+                displayOrder: true,
+                taskDates: {
+                    select: {
+                        id: true,
+                        taskId: true,
+                        date: true,
+                        isCompleted: true,
+                        completedAt: true,
+                        exception: {
+                            select: {
+                                id: true,
+                                name: true,
+                                color: true,
+                            },
+                        },
+                    },
+                    orderBy: {
+                        date: 'asc',
+                    },
+                },
             },
         });
     },
@@ -349,6 +381,237 @@ export const taskRepository = {
                 completedAt: true,
                 displayOrder: true,
             },
+        });
+    },
+
+
+    // 날짜 구성이 동일하고 이름/소속만 바뀐 경우: 완료 상태와 날짜 행을 그대로 유지
+    updateTaskMetadata: async (
+        taskId: number,
+        data: Pick<
+            ReplaceTaskData,
+            'categoryId' | 'milestoneId' | 'name' | 'color'
+        >,
+    ) => {
+        return prisma.task.update({
+            where: {
+                id: taskId,
+            },
+            data: {
+                categoryId: data.categoryId,
+                milestoneId: data.milestoneId,
+                name: data.name,
+                color: data.color,
+            },
+            include: {
+                taskDates: {
+                    include: {
+                        exception: true,
+                    },
+                    orderBy: {
+                        date: 'asc',
+                    },
+                },
+            },
+        });
+    },
+
+    // 완료 이력이 없는 태스크는 같은 Task.id에서 날짜 타입과 날짜 구성을 전체 교체
+    replaceTaskInPlace: async (
+        taskId: number,
+        data: ReplaceTaskData,
+    ) => {
+        return prisma.$transaction(async (tx) => {
+            await tx.taskDate.deleteMany({
+                where: {
+                    taskId,
+                },
+            });
+
+            return tx.task.update({
+                where: {
+                    id: taskId,
+                },
+                data: {
+                    categoryId: data.categoryId,
+                    milestoneId: data.milestoneId,
+                    name: data.name,
+                    dateType: data.dateType,
+                    startDate: data.startDate,
+                    endDate: data.endDate,
+                    color: data.color,
+                    isCompleted: false,
+                    completedAt: null,
+                    taskDates:
+                        data.dateType === DateType.MULTIPLE
+                            ? {
+                                create: data.dates.map((date) => ({
+                                    date,
+                                })),
+                            }
+                            : undefined,
+                },
+                include: {
+                    taskDates: {
+                        include: {
+                            exception: true,
+                        },
+                        orderBy: {
+                            date: 'asc',
+                        },
+                    },
+                },
+            });
+        });
+    },
+
+    // MULTIPLE의 완료 날짜와 새 dates가 겹치지 않는 경우:
+    // 같은 Task.id를 유지하면서 완료 회차만 남기고 미완료 회차를 새 배열로 교체
+    replaceMultipleKeepingCompleted: async (
+        taskId: number,
+        data: ReplaceTaskData,
+    ) => {
+        return prisma.$transaction(async (tx) => {
+            await tx.taskDate.deleteMany({
+                where: {
+                    taskId,
+                    isCompleted: false,
+                },
+            });
+
+            await tx.task.update({
+                where: {
+                    id: taskId,
+                },
+                data: {
+                    categoryId: data.categoryId,
+                    milestoneId: data.milestoneId,
+                    name: data.name,
+                    dateType: DateType.MULTIPLE,
+                    startDate: null,
+                    endDate: null,
+                    color: data.color,
+                    isCompleted: false,
+                    completedAt: null,
+                },
+            });
+
+            await tx.taskDate.createMany({
+                data: data.dates.map((date) => ({
+                    taskId,
+                    date,
+                })),
+            });
+
+            return tx.task.findUniqueOrThrow({
+                where: {
+                    id: taskId,
+                },
+                include: {
+                    taskDates: {
+                        include: {
+                            exception: true,
+                        },
+                        orderBy: {
+                            date: 'asc',
+                        },
+                    },
+                },
+            });
+        });
+    },
+
+    // 기존 완료 일정과 새 수정 일정을 동시에 남겨야 하는데, 하나의 Task로는 둘을 함께 표현할 수 없는 경우
+    // 기존 미완료 회차는 제거하고, 요청 일정은 새 Task 부모로 생성
+    splitTaskPreservingCompleted: async (
+        currentTaskId: number,
+        currentDateType: DateType,
+        data: ReplaceTaskData,
+    ) => {
+        return prisma.$transaction(async (tx) => {
+            if (currentDateType === DateType.MULTIPLE) {
+                await tx.taskDate.deleteMany({
+                    where: {
+                        taskId: currentTaskId,
+                        isCompleted: false,
+                    },
+                });
+            }
+
+            const preservedTask = await tx.task.update({
+                where: {
+                    id: currentTaskId,
+                },
+                data: {
+                    // 완료 기록도 수정 모달의 이름/소속 변경은 반영하되,
+                    // 기존 날짜 타입·날짜·완료 상태·displayOrder는 유지
+                    categoryId: data.categoryId,
+                    milestoneId: data.milestoneId,
+                    name: data.name,
+                    color: data.color,
+                },
+                include: {
+                    taskDates: {
+                        include: {
+                            exception: true,
+                        },
+                        orderBy: {
+                            date: 'asc',
+                        },
+                    },
+                },
+            });
+
+            const maxOrder = await tx.task.aggregate({
+                where: {
+                    userId: data.userId,
+                    categoryId: data.categoryId,
+                    milestoneId: data.milestoneId,
+                },
+                _max: {
+                    displayOrder: true,
+                },
+            });
+
+            const createdTask = await tx.task.create({
+                data: {
+                    userId: data.userId,
+                    categoryId: data.categoryId,
+                    milestoneId: data.milestoneId,
+                    name: data.name,
+                    dateType: data.dateType,
+                    startDate: data.startDate,
+                    endDate: data.endDate,
+                    color: data.color,
+                    isCompleted: false,
+                    completedAt: null,
+                    displayOrder:
+                        (maxOrder._max.displayOrder ?? 0) + 1,
+                    taskDates:
+                        data.dateType === DateType.MULTIPLE
+                            ? {
+                                create: data.dates.map((date) => ({
+                                    date,
+                                })),
+                            }
+                            : undefined,
+                },
+                include: {
+                    taskDates: {
+                        include: {
+                            exception: true,
+                        },
+                        orderBy: {
+                            date: 'asc',
+                        },
+                    },
+                },
+            });
+
+            return {
+                preservedTask,
+                createdTask,
+            };
         });
     },
 
