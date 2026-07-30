@@ -148,9 +148,9 @@ export const updateTaskSchema = z
     name: nameField,
     dateType: z.enum(['SINGLE', 'RANGE', 'MULTIPLE']),
 
-    startDate: dateString.nullable().optional(),
-    endDate: dateString.nullable().optional(),
-    dates: z.array(dateString).nullable().optional(),
+    startDate: dateString.nullable(),
+    endDate: dateString.nullable(),
+    dates: z.array(dateString).nullable(),
 
     // 독립 태스크에서만 사용합니다. 하위 태스크는 null 또는 생략합니다.
     color: z.string().nullable().optional(),
@@ -189,7 +189,7 @@ export const updateTaskSchema = z
         });
       }
 
-      if (value.dates != null) {
+      if (value.dates?.length) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['dates'],
@@ -227,7 +227,7 @@ export const updateTaskSchema = z
         });
       }
 
-      if (value.dates != null) {
+      if (value.dates?.length) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['dates'],

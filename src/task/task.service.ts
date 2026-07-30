@@ -85,7 +85,10 @@ type TaskMutationResult = {
     }>;
 };
 
-const formatTaskMutationResult = (task: TaskMutationResult) => ({
+const formatTaskMutationResult = (
+    task: TaskMutationResult,
+    effectiveColor: string | null = task.color,
+) => ({
     id: task.id,
     userId: task.userId,
     categoryId: task.categoryId,
@@ -94,7 +97,7 @@ const formatTaskMutationResult = (task: TaskMutationResult) => ({
     dateType: task.dateType,
     startDate: toDateString(task.startDate),
     endDate: toDateString(task.endDate),
-    color: task.color,
+    color: effectiveColor,
     isCompleted: task.isCompleted,
     completedAt: task.completedAt,
     displayOrder: task.displayOrder,
@@ -106,7 +109,7 @@ const formatTaskMutationResult = (task: TaskMutationResult) => ({
                 isCompleted: taskDate.isCompleted,
                 completedAt: taskDate.completedAt,
                 name: taskDate.exception?.name ?? task.name,
-                color: taskDate.exception?.color ?? task.color,
+                color: taskDate.exception?.color ?? effectiveColor,
             })),
         }
         : {}),
@@ -211,12 +214,7 @@ export const taskService = {
         const categoryId = body.categoryId;
         const milestoneId = body.milestoneId;
 
-        if (categoryId === null && milestoneId !== null) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                'milestoneId를 지정하려면 categoryId가 필요합니다.',
-            );
-        }
+        let categoryColor: string | null = null;
 
         if (categoryId !== null) {
             const category =
@@ -231,29 +229,25 @@ export const taskService = {
                     '카테고리를 찾을 수 없습니다.',
                 );
             }
-        }
 
-        if (milestoneId !== null) {
-            const milestone =
-                await taskRepository.findMilestoneByIdAndCategoryIdAndUserId(
-                    milestoneId,
-                    categoryId!,
-                    userId,
-                );
+            categoryColor = category.color;
 
-            if (!milestone) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '해당 마일스톤이 존재하지 않거나 선택한 카테고리에 속하지 않습니다.',
-                );
+            if (milestoneId !== null) {
+                const milestone =
+                    await taskRepository
+                        .findMilestoneByIdAndCategoryIdAndUserId(
+                            milestoneId,
+                            categoryId,
+                            userId,
+                        );
+
+                if (!milestone) {
+                    throw new AppError(
+                        'COMMON_INVALID_INPUT',
+                        '해당 마일스톤이 존재하지 않거나 선택한 카테고리에 속하지 않습니다.',
+                    );
+                }
             }
-        }
-
-        if (categoryId !== null && body.color != null) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                '하위 태스크에는 color를 지정할 수 없습니다.',
-            );
         }
 
         const resolvedColor =
@@ -287,6 +281,11 @@ export const taskService = {
                     : [],
         };
 
+        const effectiveMutationColor =
+            categoryId === null
+                ? replacementData.color
+                : categoryColor;
+
         // 날짜 구성이 동일하면 이름/소속만 같은 Task에서 변경
         // 완료 상태, TaskDate ID, displayOrder는 모두 그대로 유지
         const scheduleChanged = (() => {
@@ -311,11 +310,9 @@ export const taskService = {
             }
 
             return !sameStringSet(
-                task.taskDates
-                    .filter((taskDate) => !taskDate.isCompleted)
-                    .map((taskDate) =>
+                task.taskDates.map((taskDate) =>
                     toDateString(taskDate.date)!,
-                    ),
+                ),
                 replacementData.dates.map((date) =>
                     toDateString(date)!,
                 ),
@@ -327,6 +324,7 @@ export const taskService = {
                 await taskRepository.updateTaskMetadata(
                     taskId,
                     {
+                        userId,
                         categoryId,
                         milestoneId,
                         name: replacementData.name,
@@ -337,7 +335,10 @@ export const taskService = {
             return {
                 updateMode: 'METADATA_ONLY',
                 preservedTaskId: null,
-                ...formatTaskMutationResult(updatedTask),
+                ...formatTaskMutationResult(
+                    updatedTask,
+                    effectiveMutationColor,
+                ),
             };
         }
 
@@ -358,7 +359,10 @@ export const taskService = {
             return {
                 updateMode: 'REPLACED_IN_PLACE',
                 preservedTaskId: null,
-                ...formatTaskMutationResult(updatedTask),
+                ...formatTaskMutationResult(
+                    updatedTask,
+                    effectiveMutationColor,
+                ),
             };
         }
 
@@ -377,6 +381,8 @@ export const taskService = {
                     ),
             );
 
+            // 전체 날짜 집합이 동일한 요청은 위에서 METADATA_ONLY로 끝납니다.
+            // 여기서의 중복은 실제 일정 변경 요청에 완료 날짜가 다시 포함된 경우입니다.
             const overlapsCompletedDate =
                 replacementData.dates.some((date) =>
                     completedDateSet.has(toDateString(date)!),
@@ -392,7 +398,10 @@ export const taskService = {
                 return {
                     updateMode: 'KEPT_COMPLETED_DATES',
                     preservedTaskId: null,
-                    ...formatTaskMutationResult(updatedTask),
+                    ...formatTaskMutationResult(
+                        updatedTask,
+                        effectiveMutationColor,
+                    ),
                 };
             }
         }
@@ -408,7 +417,10 @@ export const taskService = {
         return {
             updateMode: 'CREATED_NEW_TASK_GROUP',
             preservedTaskId: preservedTask.id,
-            ...formatTaskMutationResult(createdTask),
+            ...formatTaskMutationResult(
+                createdTask,
+                effectiveMutationColor,
+            ),
         };
     },
 

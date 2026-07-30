@@ -56,6 +56,46 @@ export interface ReplaceTaskData {
   dates: Date[];
 }
 
+type TaskOrderScope = {
+    userId: number;
+    categoryId: number | null;
+    milestoneId: number | null;
+};
+
+const lockTaskDisplayOrder = async (
+    tx: Prisma.TransactionClient,
+    userId: number,
+) => {
+    const lockedUsers = await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT id
+        FROM \`User\`
+        WHERE id = ${userId}
+        FOR UPDATE
+    `;
+
+    if (lockedUsers.length === 0) {
+        throw new Error('displayOrder 채번 대상 사용자를 찾을 수 없습니다.');
+    }
+};
+
+const getNextTaskDisplayOrder = async (
+    tx: Prisma.TransactionClient,
+    scope: TaskOrderScope,
+) => {
+    const maxOrder = await tx.task.aggregate({
+        where: {
+            userId: scope.userId,
+            categoryId: scope.categoryId,
+            milestoneId: scope.milestoneId,
+        },
+        _max: {
+            displayOrder: true,
+        },
+    });
+
+    return (maxOrder._max.displayOrder ?? 0) + 1;
+};
+
 export const taskRepository = {
     findCategoryByIdAndUserId: async (
         categoryId: number,
@@ -69,6 +109,7 @@ export const taskRepository = {
             select: {
                 id: true,
                 isHidden: true,
+                color: true,
             },
         });
     },
@@ -94,30 +135,46 @@ export const taskRepository = {
     },
     
     createTask: async (data: CreateTaskData) => {
-        return prisma.task.create({
-            data: {
+        return prisma.$transaction(async (tx) => {
+            const scope: TaskOrderScope = {
                 userId: data.userId,
                 categoryId: data.categoryId ?? null,
                 milestoneId: data.milestoneId ?? null,
-                name: data.name,
-                dateType: data.dateType,
-                startDate: data.startDate ?? null,
-                endDate: data.endDate ?? null,
-                color: data.color ?? null,
+            };
 
-                taskDates: data.dateType===DateType.MULTIPLE && data.dates ? {
-                    create: data.dates.map((date)=>({
-                        date,
-                    })),
-                } : undefined,
-            },
-            include: {
-                taskDates: {
-                    orderBy: {
-                        date: 'asc',
+            await lockTaskDisplayOrder(tx, data.userId);
+            const displayOrder =
+                await getNextTaskDisplayOrder(tx, scope);
+
+            return tx.task.create({
+                data: {
+                    userId: data.userId,
+                    categoryId: scope.categoryId,
+                    milestoneId: scope.milestoneId,
+                    name: data.name,
+                    dateType: data.dateType,
+                    startDate: data.startDate ?? null,
+                    endDate: data.endDate ?? null,
+                    color: data.color ?? null,
+                    displayOrder,
+                    taskDates:
+                        data.dateType === DateType.MULTIPLE &&
+                        data.dates
+                            ? {
+                                create: data.dates.map((date) => ({
+                                    date,
+                                })),
+                            }
+                            : undefined,
+                },
+                include: {
+                    taskDates: {
+                        orderBy: {
+                            date: 'asc',
+                        },
                     },
                 },
-            },
+            });
         });
     },
 
@@ -390,12 +447,13 @@ export const taskRepository = {
         taskId: number,
         data: Pick<
             ReplaceTaskData,
-            'categoryId' | 'milestoneId' | 'name' | 'color'
+            'userId' | 'categoryId' | 'milestoneId' | 'name' | 'color'
         >,
     ) => {
         return prisma.task.update({
             where: {
                 id: taskId,
+                userId: data.userId,
             },
             data: {
                 categoryId: data.categoryId,
@@ -431,6 +489,7 @@ export const taskRepository = {
             return tx.task.update({
                 where: {
                     id: taskId,
+                    userId: data.userId,
                 },
                 data: {
                     categoryId: data.categoryId,
@@ -482,6 +541,7 @@ export const taskRepository = {
             await tx.task.update({
                 where: {
                     id: taskId,
+                    userId: data.userId,
                 },
                 data: {
                     categoryId: data.categoryId,
@@ -506,6 +566,7 @@ export const taskRepository = {
             return tx.task.findUniqueOrThrow({
                 where: {
                     id: taskId,
+                    userId: data.userId,
                 },
                 include: {
                     taskDates: {
@@ -529,6 +590,14 @@ export const taskRepository = {
         data: ReplaceTaskData,
     ) => {
         return prisma.$transaction(async (tx) => {
+            const scope: TaskOrderScope = {
+                userId: data.userId,
+                categoryId: data.categoryId,
+                milestoneId: data.milestoneId,
+            };
+
+            await lockTaskDisplayOrder(tx, data.userId);
+
             if (currentDateType === DateType.MULTIPLE) {
                 await tx.taskDate.deleteMany({
                     where: {
@@ -538,17 +607,67 @@ export const taskRepository = {
                 });
             }
 
+            const remainingTaskDates =
+                currentDateType === DateType.MULTIPLE
+                    ? await tx.taskDate.findMany({
+                        where: {
+                            taskId: currentTaskId,
+                        },
+                        select: {
+                            isCompleted: true,
+                            completedAt: true,
+                        },
+                    })
+                    : [];
+
+            const allRemainingCompleted =
+                currentDateType === DateType.MULTIPLE &&
+                remainingTaskDates.length > 0 &&
+                remainingTaskDates.every(
+                    (taskDate) => taskDate.isCompleted,
+                );
+
+            const preservedCompletedAt =
+                allRemainingCompleted
+                    ? remainingTaskDates.reduce<Date | null>(
+                        (latest, taskDate) => {
+                            if (!taskDate.completedAt) {
+                                return latest;
+                            }
+
+                            if (
+                                !latest ||
+                                taskDate.completedAt > latest
+                            ) {
+                                return taskDate.completedAt;
+                            }
+
+                            return latest;
+                        },
+                        null,
+                    ) ?? new Date()
+                    : null;
+
             const preservedTask = await tx.task.update({
                 where: {
                     id: currentTaskId,
+                    userId: data.userId,
                 },
                 data: {
-                    // 완료 기록도 수정 모달의 이름/소속 변경은 반영하되,
-                    // 기존 날짜 타입·날짜·완료 상태·displayOrder는 유지
+                    // 완료 기록에도 수정 모달의 이름/소속 변경은 반영하되,
+                    // 기존 날짜 타입·날짜·displayOrder는 유지
                     categoryId: data.categoryId,
                     milestoneId: data.milestoneId,
                     name: data.name,
                     color: data.color,
+                    ...(currentDateType === DateType.MULTIPLE
+                        ? {
+                            isCompleted:
+                                allRemainingCompleted,
+                            completedAt:
+                                preservedCompletedAt,
+                        }
+                        : {}),
                 },
                 include: {
                     taskDates: {
@@ -562,16 +681,8 @@ export const taskRepository = {
                 },
             });
 
-            const maxOrder = await tx.task.aggregate({
-                where: {
-                    userId: data.userId,
-                    categoryId: data.categoryId,
-                    milestoneId: data.milestoneId,
-                },
-                _max: {
-                    displayOrder: true,
-                },
-            });
+            const displayOrder =
+                await getNextTaskDisplayOrder(tx, scope);
 
             const createdTask = await tx.task.create({
                 data: {
@@ -585,8 +696,7 @@ export const taskRepository = {
                     color: data.color,
                     isCompleted: false,
                     completedAt: null,
-                    displayOrder:
-                        (maxOrder._max.displayOrder ?? 0) + 1,
+                    displayOrder,
                     taskDates:
                         data.dateType === DateType.MULTIPLE
                             ? {
@@ -642,6 +752,55 @@ export const taskRepository = {
                         completedAt: true,
                     },
                 });
+
+            const siblingTaskDates =
+                await tx.taskDate.findMany({
+                    where: {
+                        taskId: updatedTaskDate.taskId,
+                    },
+                    select: {
+                        isCompleted: true,
+                        completedAt: true,
+                    },
+                });
+
+            const allTaskDatesCompleted =
+                siblingTaskDates.length > 0 &&
+                siblingTaskDates.every(
+                    (taskDate) => taskDate.isCompleted,
+                );
+
+            const taskCompletedAt =
+                allTaskDatesCompleted
+                    ? siblingTaskDates.reduce<Date | null>(
+                        (latest, taskDate) => {
+                            if (!taskDate.completedAt) {
+                                return latest;
+                            }
+
+                            if (
+                                !latest ||
+                                taskDate.completedAt > latest
+                            ) {
+                                return taskDate.completedAt;
+                            }
+
+                            return latest;
+                        },
+                        null,
+                    ) ?? new Date()
+                    : null;
+
+            await tx.task.update({
+                where: {
+                    id: updatedTaskDate.taskId,
+                    userId,
+                },
+                data: {
+                    isCompleted: allTaskDatesCompleted,
+                    completedAt: taskCompletedAt,
+                },
+            });
 
             if (isCompleted) {
                 await tx.activityLog.upsert({
