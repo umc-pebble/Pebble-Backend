@@ -8,6 +8,7 @@ import {
 } from './milestone.schema';
 import {
   getMilestones,
+  getFriendMilestones,
   createMilestone,
   updateMilestone,
   deleteMilestone,
@@ -87,6 +88,77 @@ router.use(['/categories', '/milestones'], authMiddleware);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/categories/:categoryId/milestones', getMilestones);
+
+/**
+ * @swagger
+ * /users/{userId}/categories/{categoryId}/milestones:
+ *   get:
+ *     summary: 친구 마일스톤 목록 조회 (#64·PLB-040)
+ *     description: >
+ *       친구(수락된 팔로우) 또는 본인의 공개 카테고리에 속한 마일스톤을 D-Day 가까운 순(오름차순)으로 조회합니다.
+ *       대상 카테고리가 공개(isPublic=true)이며 대상 유저 소유일 때만 조회되고,
+ *       비공개이거나 존재하지 않으면 404를 반환합니다. 친구가 아닌 유저의 프로필은 조회할 수 없습니다(403).
+ *     tags: [Milestone]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: 마일스톤을 조회할 대상 사용자 ID
+ *         example: 2
+ *       - $ref: '#/components/parameters/CategoryIdPath'
+ *     responses:
+ *       200:
+ *         description: 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         milestones:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Milestone'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 친구가 아니어서 조회 권한 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 친구의 프로필만 조회할 수 있습니다.
+ *               error:
+ *                 code: COMMON_FORBIDDEN
+ *       404:
+ *         description: 유저 또는 공개 카테고리를 찾을 수 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 카테고리를 찾을 수 없습니다.
+ *               error:
+ *                 code: COMMON_NOT_FOUND
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get(
+  '/users/:userId/categories/:categoryId/milestones',
+  authMiddleware,
+  getFriendMilestones,
+);
 
 /**
  * @swagger
@@ -216,7 +288,8 @@ router.post('/categories/:categoryId/milestones', validateBody(createMilestoneSc
  *   patch:
  *     summary: 마일스톤 순서 변경 (PLB-016)
  *     description: >
- *       같은 카테고리 내에서 마일스톤 순서를 변경합니다. 카테고리 간 이동은 불가합니다.
+ *       같은 카테고리 내에서 마일스톤 순서를 변경합니다.
+ *       이 엔드포인트로는 카테고리를 넘나들 수 없습니다 — 카테고리 이동은 PATCH /milestones/{milestoneId}에 categoryId를 보내는 방식입니다(#86).
  *       기본 정렬은 D-Day 가까운 순(오름차순)이며, 드래그 앤 드롭 결과를 orderedIds로 전달합니다.
  *     tags: [Milestone]
  *     security:
@@ -285,7 +358,30 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *       날짜(startDate) 변경은 모달 없이 항상 해당 회차 1건만 이동하고(PLB-013),
  *       완료(isCompleted)는 회차별 독립 기록이므로 둘 다 editScope 없이 요청합니다.
  *       SINGLE/RANGE 마일스톤에는 editScope를 지정할 수 없습니다.
- *       날짜 타입(dateType) 전환은 지원하지 않습니다.
+ *
+ *       dateType을 함께 보내면 "날짜 타입 변경" 모드로 동작합니다(#84). 하루/기간/다중 6가지 전환을 모두 지원하며,
+ *       같은 타입을 다시 지정해도 날짜는 통째로 새로 설정됩니다.
+ *       URL로 지정한 마일스톤을 그대로 갱신하므로 milestoneId는 유지되며, 하위 태스크와 완료 여부도 보존됩니다
+ *       (태스크 수정이 taskId를 유지하는 것과 동일한 방식).
+ *       단, 표시 순서(displayOrder)는 새 날짜 기준 D-Day 위치로 다시 잡힙니다.
+ *       MULTIPLE에서 다른 타입으로 바꾸면 같은 seriesId의 나머지 회차는 정리되고(완료된 과거 회차 포함),
+ *       정리되는 회차에 달려 있던 태스크는 삭제되지 않고 지정한 마일스톤으로 이관됩니다.
+ *       MULTIPLE로 바꾸면 지정한 마일스톤이 가장 이른 날짜의 첫 회차가 되고 나머지 날짜의 회차가 추가 생성됩니다.
+ *       이 모드에서는 editScope·isCompleted를 함께 보낼 수 없고, 날짜 필드 조합은 생성과 동일한 규칙을 따릅니다
+ *       (SINGLE=startDate / RANGE=startDate+endDate / MULTIPLE=dates).
+ *
+ *
+ *
+ *
+ *       현재 소속과 다른 categoryId를 보내면 카테고리 이동으로 동작합니다(#86). 이름·날짜 수정과 함께 보낼 수 있으며,
+ *       이름·날짜를 먼저 반영한 뒤 이동하므로 바뀐 날짜 기준으로 대상 카테고리의 표시 순서가 정해집니다.
+ *       대상 카테고리는 본인 소유여야 하고(없으면 404, 남의 것이면 403), 검증은 수정 전에 이루어지므로
+ *       실패하면 이름·날짜도 바뀌지 않습니다.
+ *       하위 태스크도 같은 카테고리로 함께 이동하며(태스크 생성이 "마일스톤이 그 카테고리에 속하는지"를 검증하기 때문),
+ *       taskId·milestoneId·태스크 날짜는 그대로 유지됩니다.
+ *       MULTIPLE는 회차가 흩어지면 안 되므로 editScope와 무관하게 같은 seriesId의 회차 전체가 함께 이동합니다.
+ *       표시 순서(displayOrder)는 대상 카테고리 안에서 D-Day 순 위치로 다시 부여됩니다.
+ *       숨김 카테고리로 옮기면 하위 태스크도 캘린더에서 함께 숨겨지고, 태스크 색상은 새 카테고리 색상으로 표시됩니다.
  *     tags: [Milestone]
  *     security:
  *       - bearerAuth: []
@@ -301,24 +397,40 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *               name:
  *                 type: string
  *                 maxLength: 100
- *                 description: 변경할 이름 (중복 허용). MULTIPLE에서는 editScope 필수
+ *                 description: 변경할 이름 (중복 허용). MULTIPLE에서는 editScope 필수. 날짜 타입 변경 모드에서 생략하면 기존 이름이 유지됨
+ *               categoryId:
+ *                 type: integer
+ *                 description: >
+ *                   옮길 카테고리 ID(#86). 현재 소속과 다르면 카테고리 이동이 수행되고, 같은 값이면 변경 없이 통과합니다
+ *                   (수정 모달이 폼 전체를 보내는 경우). 이 필드만 단독으로 보내도 유효한 수정 요청입니다.
+ *                   본인 소유가 아니면 403, 존재하지 않으면 404.
+ *               dateType:
+ *                 type: string
+ *                 enum: [SINGLE, RANGE, MULTIPLE]
+ *                 description: '지정 시 날짜 타입 변경 모드로 동작함(#84). 생략하면 기존 날짜 타입을 유지한 부분 수정'
  *               startDate:
  *                 type: string
  *                 format: date
- *                 nullable: true
- *                 description: 날짜 변경. MULTIPLE 회차 row에서는 해당 회차의 날짜이며 editScope 없이 이 회차 1건만 이동 (PLB-013)
+ *                 description: 날짜 변경 (YYYY-MM-DD, null 불가). MULTIPLE 회차 row에서는 해당 회차의 날짜이며 editScope 없이 이 회차 1건만 이동 (PLB-013). 날짜 타입 변경 모드에서는 SINGLE/RANGE 필수
  *               endDate:
  *                 type: string
  *                 format: date
  *                 nullable: true
- *                 description: 날짜 변경 (RANGE일 때)
+ *                 description: 날짜 변경 (RANGE일 때). 날짜 타입 변경 모드에서는 RANGE 필수
+ *               dates:
+ *                 type: array
+ *                 nullable: true
+ *                 items:
+ *                   type: string
+ *                   format: date
+ *                 description: 날짜 타입 변경 모드에서 MULTIPLE 필수 — 선택한 날짜 배열(중복 불가, 최대 100개). dateType 없이 단독으로 보내면 400
  *               isCompleted:
  *                 type: boolean
- *                 description: 완료/미완료 토글 (회차 row별 독립 기록, editScope 불필요)
+ *                 description: 완료/미완료 토글 (회차 row별 독립 기록, editScope 불필요). 날짜 타입 변경 시에는 완료 여부가 그대로 보존되므로 함께 보낼 수 없음
  *               editScope:
  *                 type: string
  *                 enum: [THIS_ONLY, ALL]
- *                 description: 'MULTIPLE 이름 수정 전용 필수 택1. THIS_ONLY=이 회차 1건 / ALL=이 회차 + 같은 seriesId의 오늘 이후 미완료 회차에 이름 일괄 반영. 그 외 상황에서 지정 시 400'
+ *                 description: 'MULTIPLE 이름 수정 전용 필수 택1. THIS_ONLY=이 회차 1건 / ALL=이 회차 + 같은 seriesId의 오늘 이후 미완료 회차에 이름 일괄 반영. 그 외 상황(날짜 타입 변경 모드 포함)에서 지정 시 400'
  *           examples:
  *             completeToggle:
  *               summary: 완료 처리 (scope 없이, 회차별 독립)
@@ -334,9 +446,40 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *               value:
  *                 editScope: ALL
  *                 name: 주간 회의
+ *             toSingle:
+ *               summary: 날짜 타입 변경 - 하루로
+ *               value:
+ *                 dateType: SINGLE
+ *                 startDate: '2026-07-15'
+ *             toRange:
+ *               summary: 날짜 타입 변경 - 기간으로 (이름도 함께 변경)
+ *               value:
+ *                 name: 굿즈 제작
+ *                 dateType: RANGE
+ *                 startDate: '2026-07-27'
+ *                 endDate: '2026-08-01'
+ *             toMultiple:
+ *               summary: 날짜 타입 변경 - 다중으로 (날짜마다 회차 row 생성)
+ *               value:
+ *                 dateType: MULTIPLE
+ *                 dates: ['2026-07-06', '2026-07-13', '2026-07-20']
+ *             moveCategory:
+ *               summary: 카테고리 이동 (하위 태스크 동반, MULTIPLE은 회차 전체)
+ *               value:
+ *                 categoryId: 7
+ *             moveWithRename:
+ *               summary: 카테고리 이동 + 이름 변경 (수정 모달 폼 전체 전송)
+ *               value:
+ *                 categoryId: 7
+ *                 name: 굿즈 제작
  *     responses:
  *       200:
- *         description: 수정 성공. editScope=ALL이어도 URL로 지정한 회차 기준으로 응답 (나머지 회차에 이름 동일 반영)
+ *         description: >
+ *           수정 성공. 수정된 마일스톤 1건을 반환합니다(milestoneId는 항상 유지).
+ *           editScope=ALL이어도 URL로 지정한 회차 기준으로 응답하며 나머지 회차에 이름은 반영됩니다.
+ *           MULTIPLE로 날짜 타입을 바꾼 경우에만 series 필드에 회차 전체가 날짜 오름차순으로 함께 담깁니다
+ *           (태스크 수정 응답의 taskDates에 대응).
+ *           카테고리를 이동한 경우 categoryId와 displayOrder가 새 카테고리 기준 값으로 반영됩니다.
  *         content:
  *           application/json:
  *             schema:
@@ -345,9 +488,53 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *                 - type: object
  *                   properties:
  *                     data:
- *                       $ref: '#/components/schemas/Milestone'
+ *                       allOf:
+ *                         - $ref: '#/components/schemas/Milestone'
+ *                         - type: object
+ *                           properties:
+ *                             series:
+ *                               type: array
+ *                               description: MULTIPLE로 변경한 응답에만 존재. 같은 seriesId 회차 전체(날짜 오름차순, 0번이 지정한 마일스톤)
+ *                               items:
+ *                                 $ref: '#/components/schemas/Milestone'
+ *             examples:
+ *               toRange:
+ *                 summary: 기간으로 변경 (id 유지)
+ *                 value:
+ *                   success: true
+ *                   message: 마일스톤 수정 성공
+ *                   data:
+ *                     id: 42
+ *                     seriesId: null
+ *                     name: 굿즈 제작
+ *                     dateType: RANGE
+ *                     startDate: '2026-07-27'
+ *                     endDate: '2026-08-01'
+ *                     isCompleted: false
+ *               toMultiple:
+ *                 summary: 다중으로 변경 (id 유지 + 회차 전체 동봉)
+ *                 value:
+ *                   success: true
+ *                   message: 마일스톤 수정 성공
+ *                   data:
+ *                     id: 42
+ *                     seriesId: 42
+ *                     name: 주간 회의
+ *                     dateType: MULTIPLE
+ *                     startDate: '2026-07-06'
+ *                     endDate: null
+ *                     isCompleted: false
+ *                     series:
+ *                       - id: 42
+ *                         seriesId: 42
+ *                         dateType: MULTIPLE
+ *                         startDate: '2026-07-06'
+ *                       - id: 88
+ *                         seriesId: 42
+ *                         dateType: MULTIPLE
+ *                         startDate: '2026-07-13'
  *       400:
- *         description: MULTIPLE 이름 수정인데 editScope 누락, 이름 변경 없이 editScope 지정, SINGLE/RANGE에 editScope 지정, 또는 dateType과 날짜 필드 조합 불일치
+ *         description: MULTIPLE 이름 수정인데 editScope 누락, 이름 변경 없이 editScope 지정, SINGLE/RANGE에 editScope 지정, dateType과 날짜 필드 조합 불일치, 날짜 타입 변경에 editScope·isCompleted 동반, 또는 수정할 값이 하나도 없음
  *         content:
  *           application/json:
  *             schema:
@@ -361,8 +548,28 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 남의 마일스톤을 수정하거나, 남의 카테고리로 이동을 시도한 경우
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 해당 카테고리에 접근할 권한이 없습니다.
+ *               error:
+ *                 code: COMMON_FORBIDDEN
  *       404:
- *         $ref: '#/components/responses/NotFound'
+ *         description: 마일스톤 또는 이동할 대상 카테고리를 찾을 수 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 카테고리를 찾을 수 없습니다.
+ *               error:
+ *                 code: COMMON_NOT_FOUND
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */

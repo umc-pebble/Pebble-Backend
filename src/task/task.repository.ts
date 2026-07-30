@@ -1126,32 +1126,6 @@ export const taskRepository = {
         });
     },
 
-    existsAcceptedFollow: async (
-        requesterId: number,
-        targetUserId: number,
-    ): Promise<boolean> => {
-        const follow = await prisma.follow.findFirst({
-            where: {
-                status: 'ACCEPTED',
-                OR: [
-                    {
-                        followerId: requesterId,
-                        followingId: targetUserId,
-                    },
-                    {
-                        followerId: targetUserId,
-                        followingId: requesterId,
-                    },
-                ],
-            },
-            select: {
-                id: true,
-            },
-        });
-
-        return follow !== null;
-    },
-
     // 오늘(KST) 알림 배치용(PLB-038). SINGLE은 startDate가 곧 그 날짜다.
     findSingleDueToday(today: Date) {
         return prisma.task.findMany({
