@@ -100,15 +100,17 @@ export const updateMilestoneSchema = z
     isCompleted: z.boolean().optional(),
     // 값 형태만 여기서 검사한다. "MULTIPLE가 아니면 지정 불가" 판정은 service의 도메인 규칙.
     editScope: z.enum(['THIS_ONLY', 'ALL']).optional(),
-    // 카테고리 이동은 미지원. 다만 수정 모달이 폼 전체(변경 없는 카테고리 포함)를 보내는 경우가
-    // 있어 필드 자체는 받아둔다. 현재 카테고리와 같은 값인지 판정은 service가 한다
-    // (기존 row를 조회해야 알 수 있고, 여기서 걸러내면 조용히 무시돼 원인 파악이 어렵다).
+    // 옮길 카테고리(#86). 현재 소속과 같은 값이면 변경 없이 통과한다(수정 모달이 폼 전체를
+    // 보내는 경우). 값 형태만 여기서 보고, 실제 이동 여부·대상 카테고리 소유권은 service가
+    // 판정한다(기존 row와 대상 카테고리를 조회해야 알 수 있다).
     categoryId: z.number().int().positive().optional(),
   })
   .superRefine((val, ctx) => {
     // 태스크 수정과 동일하게, 바꿀 값이 하나도 없는 요청은 거부한다.
+    // categoryId는 카테고리 이동(#86)이므로 단독으로 와도 유효한 수정이다.
     const hasEditableField =
       val.name !== undefined ||
+      val.categoryId !== undefined ||
       val.dateType !== undefined ||
       val.startDate !== undefined ||
       val.endDate !== undefined ||
