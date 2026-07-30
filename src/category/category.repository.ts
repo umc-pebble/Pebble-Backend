@@ -14,6 +14,23 @@ export const categoryRepository = {
     });
   },
 
+  // 친구 프로필 조회(PLB-040·#64)용 공개 카테고리 목록. 남의 것이라도 isPublic=true만 노출한다.
+  // 정렬은 본인 목록과 동일하게 displayOrder(화면 순서) 오름차순.
+  findPublicManyByUserId(userId: number) {
+    return prisma.category.findMany({
+      where: { userId, isPublic: true },
+      orderBy: { displayOrder: 'asc' },
+    });
+  },
+
+  // 유저 존재 확인용(친구 프로필 조회). 없으면 null → 서비스에서 404 판정.
+  findUserById(userId: number) {
+    return prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+  },
+
   // id로 단건 조회. 없으면 null. "내 것 맞나"(소유권)는 서비스에서 userId를 비교해 판정한다.
   findById(categoryId: number) {
     return prisma.category.findUnique({

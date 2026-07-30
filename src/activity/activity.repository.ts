@@ -20,32 +20,6 @@ export const activityRepository = {
         });
     },
 
-    //친구 관계 확인
-    existsAcceptedFollow: async (
-        requesterId: number,
-        targetUserId: number,
-    ) : Promise<boolean> => {
-        const follow = await prisma.follow.findFirst({
-            where: {
-                status: 'ACCEPTED',
-                OR: [
-                    {
-                    followerId: requesterId,
-                    followingId: targetUserId,
-                    },
-                    {
-                    followerId: targetUserId,
-                    followingId: requesterId,
-                    },
-                ],
-            },
-            select:{
-                id: true,
-            },
-        });
-        return follow !== null;
-    },
-
     //7일 logs 조회
     findActivityLogsByDateRange: async(
         userId: number,

@@ -49,6 +49,14 @@ export const milestoneService = {
     return milestoneRepository.findManyByCategoryId(categoryId);
   },
 
+  // 친구 프로필 조회(#64): 친구(또는 본인)의 공개 카테고리 하위 마일스톤 목록.
+  // 친구 접근 판정 + 공개 카테고리 검증은 categoryService에 위임한다(마일스톤은 카테고리로 소유·공개를 판정).
+  // 비공개 카테고리는 categoryService가 404로 막으므로 여기서 별도 처리는 필요 없다.
+  async getFriendMilestones(requesterId: number, targetUserId: number, categoryId: number) {
+    await categoryService.getFriendPublicCategory(requesterId, targetUserId, categoryId);
+    return milestoneRepository.findManyByCategoryId(categoryId);
+  },
+
   // 생성. 날짜 조합 검증(dateType별 필수/금지 필드)은 controller(zod)에서 1차 처리된 값을 받는다.
   // displayOrder는 repository가 startDate 기준 위치로 채번한다(PLB-016 D-Day 오름차순).
   async createMilestone(
