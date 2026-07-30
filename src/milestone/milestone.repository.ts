@@ -252,15 +252,6 @@ export const milestoneRepository = {
     );
   },
 
-  // 같은 시리즈(MULTIPLE)에 속한 회차 전체의 id. 날짜 타입 재지정의 교체 대상 범위로 쓰인다.
-  async findIdsBySeriesId(seriesId: number) {
-    const rows = await prisma.milestone.findMany({
-      where: { seriesId },
-      select: { id: true },
-    });
-    return rows.map((r) => r.id);
-  },
-
   // 날짜 타입 변경(#84). 수정 대상 row(앵커)를 지우지 않고 그대로 갱신해 milestoneId를 유지한다
   // (태스크 도메인이 taskId를 유지한 채 자식 TaskDate만 교체하는 것과 같은 방식).
   // 앵커가 살아남으므로 그 하위 태스크는 손댈 필요가 없고, 정리되는 형제 회차의 태스크만
@@ -272,9 +263,11 @@ export const milestoneRepository = {
   // 반환 배열의 0번은 항상 앵커다.
   // moveToCategoryId가 있으면 같은 트랜잭션 안에서 카테고리 이동까지 끝낸다(#86).
   // 별도 트랜잭션으로 나누면 날짜만 바뀌고 이동은 안 된 상태가 남을 수 있다.
+  // seriesId는 기존 시리즈 키다(MULTIPLE이 아니면 null). 정리 대상 회차 목록을 트랜잭션 밖에서
+  // 확정하면 그 사이 시리즈 구성이 바뀌었을 때 고아 회차가 남으므로, 조회를 트랜잭션 안에서 한다.
   changeDateType(input: {
     anchorId: number;
-    siblingIds: number[]; // 정리할 같은 시리즈의 나머지 회차 (앵커 제외)
+    seriesId: number | null;
     categoryId: number;
     name: string;
     dateType: 'SINGLE' | 'RANGE' | 'MULTIPLE';
@@ -285,12 +278,22 @@ export const milestoneRepository = {
   }) {
     return withDeadlockRetry(() =>
       prisma.$transaction(async (tx) => {
-        if (input.siblingIds.length > 0) {
-          await tx.task.updateMany({
-            where: { milestoneId: { in: input.siblingIds } },
-            data: { milestoneId: input.anchorId },
+        if (input.seriesId !== null) {
+          const siblings = await tx.milestone.findMany({
+            where: { seriesId: input.seriesId, id: { not: input.anchorId } },
+            select: { id: true },
           });
-          await tx.milestone.deleteMany({ where: { id: { in: input.siblingIds } } });
+          if (siblings.length > 0) {
+            await tx.task.updateMany({
+              where: { milestoneId: { in: siblings.map((row) => row.id) } },
+              data: { milestoneId: input.anchorId },
+            });
+          }
+          // 삭제는 id 목록이 아니라 seriesId 조건으로 건다. 조회 직후 회차가 늘어나도
+          // 함께 정리되어 고아 회차가 남지 않는다(갓 생긴 회차에는 하위 태스크가 없다).
+          await tx.milestone.deleteMany({
+            where: { seriesId: input.seriesId, id: { not: input.anchorId } },
+          });
         }
 
         // 형제 회차는 위에서 지워져 잠금 대상에 없고, 앵커는 날짜가 바뀌므로 제외해
@@ -371,24 +374,40 @@ export const milestoneRepository = {
     data: Prisma.MilestoneUncheckedUpdateInput,
     series: SeriesNameSpread,
   ) {
-    return prisma.$transaction((tx) => applyUpdate(tx, milestoneId, data, series));
+    return withDeadlockRetry(() =>
+      prisma.$transaction((tx) => applyUpdate(tx, milestoneId, data, series), TX_OPTIONS),
+    );
   },
 
   // 이름·날짜 수정과 카테고리 이동을 한 트랜잭션으로 처리한다(#86).
   // 수정을 먼저 반영해야 바뀐 startDate 기준으로 대상 카테고리의 순번이 잡히고,
   // 이동에서 실패하면 수정까지 함께 롤백되어 "이름만 바뀐" 상태가 남지 않는다.
-  // moveIds는 이동 대상 전체다(MULTIPLE이면 시리즈 회차 전부).
+  //
+  // seriesId가 있으면(MULTIPLE) 시리즈 회차 전체가 이동 대상이다. 대상 목록을 트랜잭션 밖에서
+  // 확정하면 그 사이 늘어난 회차가 원본 카테고리에 남아 시리즈가 두 카테고리로 흩어지므로,
+  // 조회를 트랜잭션 안에서 한다.
   updateWithMove(input: {
     milestoneId: number;
+    seriesId: number | null;
     data: Prisma.MilestoneUncheckedUpdateInput;
     series?: SeriesNameSpread; // editScope=ALL일 때만
-    moveIds: number[];
     targetCategoryId: number;
   }) {
     return withDeadlockRetry(() =>
       prisma.$transaction(async (tx) => {
         await applyUpdate(tx, input.milestoneId, input.data, input.series);
-        const moved = await applyMove(tx, input.moveIds, input.targetCategoryId);
+
+        const moveIds =
+          input.seriesId !== null
+            ? (
+                await tx.milestone.findMany({
+                  where: { seriesId: input.seriesId },
+                  select: { id: true },
+                })
+              ).map((row) => row.id)
+            : [input.milestoneId];
+
+        const moved = await applyMove(tx, moveIds, input.targetCategoryId);
         // 이동 후 다시 읽은 row라 방금 반영한 이름·날짜도 함께 담겨 있다.
         return moved.find((row) => row.id === input.milestoneId) ?? moved[0];
       }, TX_OPTIONS),

@@ -84,16 +84,10 @@ async function changeDateType(
   input: UpdateMilestoneInput,
   moveToCategoryId?: number, // 함께 요청된 카테고리 이동(#86). 같은 트랜잭션에서 처리된다.
 ) {
-  const siblingIds =
-    existing.dateType === 'MULTIPLE' && existing.seriesId !== null
-      ? (await milestoneRepository.findIdsBySeriesId(existing.seriesId)).filter(
-          (id) => id !== existing.id,
-        )
-      : [];
-
   return milestoneRepository.changeDateType({
     anchorId: existing.id,
-    siblingIds,
+    // 정리 대상 회차는 repository가 트랜잭션 안에서 이 키로 조회한다(경합 시 고아 회차 방지).
+    seriesId: seriesKey(existing),
     categoryId: existing.categoryId,
     name: input.name ?? existing.name, // 이름을 안 보내면 기존 이름 유지
     dateType: input.dateType!, // 호출 전 분기에서 존재가 보장된다
@@ -104,15 +98,13 @@ async function changeDateType(
   });
 }
 
-// 카테고리 이동(#86)의 대상 id 목록.
-// MULTIPLE는 같은 seriesId 회차 전체가 함께 움직여야 한다. 회차가 여러 카테고리로 흩어지면
-// "마일스톤이 이 카테고리에 속하는지"를 보는 태스크 생성 검증과 목록 조회의 전제가 깨진다.
+// 시리즈 회차를 한 덩어리로 다뤄야 하는 작업(전환 시 정리, 이동)에 넘길 시리즈 키.
+// MULTIPLE가 아니면 null이고, 그때는 해당 row 하나만 대상이 된다.
+// 실제 회차 목록은 repository가 트랜잭션 안에서 이 키로 조회한다. 목록을 밖에서 확정하면
+// 그 사이 회차가 늘어났을 때 고아 회차(전환)나 두 카테고리로 흩어진 시리즈(이동)가 남는다.
 // editScope(이름 전파 범위)와는 무관하게 항상 시리즈 전체가 대상이다.
-function movingIds(row: { id: number; dateType: string; seriesId: number | null }) {
-  if (row.dateType !== 'MULTIPLE' || row.seriesId === null) {
-    return Promise.resolve([row.id]);
-  }
-  return milestoneRepository.findIdsBySeriesId(row.seriesId);
+function seriesKey(row: { dateType: string; seriesId: number | null }) {
+  return row.dateType === 'MULTIPLE' ? row.seriesId : null;
 }
 
 export const milestoneService = {
@@ -284,9 +276,10 @@ export const milestoneService = {
     if (moveTo !== undefined) {
       const moved = await milestoneRepository.updateWithMove({
         milestoneId,
+        // 이동 대상 회차는 repository가 트랜잭션 안에서 이 키로 조회한다.
+        seriesId: seriesKey(existing),
         data,
         series,
-        moveIds: await movingIds(existing),
         targetCategoryId: moveTo,
       });
       return toMilestoneResponse(moved);
