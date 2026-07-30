@@ -131,7 +131,7 @@ router.get('/users/me', getMe);
  *             type: object
  *             properties:
  *               nickname: { type: string, maxLength: 100, description: 중복 가능, 변경 시 15일 쿨다운 적용, example: 큰바위 }
- *               bio: { type: string, nullable: true, example: 매일 한 걸음 }
+ *               bio: { type: string, nullable: true, maxLength: 500, example: 매일 한 걸음 }
  *               profileImageUrl: { type: string, nullable: true, description: POST /uploads/image로 먼저 업로드 후 받은 URL. null이면 기본 이미지, example: null }
  *     responses:
  *       200:
