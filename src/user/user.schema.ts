@@ -43,7 +43,10 @@ export const updateSettingsSchema = z.object({
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'currentPassword는 비어 있을 수 없습니다.'),
-  newPassword: z.string().min(8, 'newPassword는 8자 이상이어야 합니다.'),
+  // 디자인 규칙(설정 페이지 비밀번호 변경): 8자 이상, 영문·숫자 포함. 최대 길이/특수문자 요구는 없음.
+  newPassword: z
+    .string()
+    .regex(/^(?=.*[A-Za-z])(?=.*\d).{8,}$/, 'newPassword는 영문과 숫자를 포함해 8자 이상이어야 합니다.'),
 });
 
 export const requestEmailChangeSchema = z.object({
