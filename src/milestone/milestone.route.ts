@@ -288,7 +288,8 @@ router.post('/categories/:categoryId/milestones', validateBody(createMilestoneSc
  *   patch:
  *     summary: 마일스톤 순서 변경 (PLB-016)
  *     description: >
- *       같은 카테고리 내에서 마일스톤 순서를 변경합니다. 카테고리 간 이동은 불가합니다.
+ *       같은 카테고리 내에서 마일스톤 순서를 변경합니다.
+ *       이 엔드포인트로는 카테고리를 넘나들 수 없습니다 — 카테고리 이동은 PATCH /milestones/{milestoneId}에 categoryId를 보내는 방식입니다(#86).
  *       기본 정렬은 D-Day 가까운 순(오름차순)이며, 드래그 앤 드롭 결과를 orderedIds로 전달합니다.
  *     tags: [Milestone]
  *     security:
@@ -368,6 +369,19 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *       MULTIPLE로 바꾸면 지정한 마일스톤이 가장 이른 날짜의 첫 회차가 되고 나머지 날짜의 회차가 추가 생성됩니다.
  *       이 모드에서는 editScope·isCompleted를 함께 보낼 수 없고, 날짜 필드 조합은 생성과 동일한 규칙을 따릅니다
  *       (SINGLE=startDate / RANGE=startDate+endDate / MULTIPLE=dates).
+ *
+ *
+ *
+ *
+ *       현재 소속과 다른 categoryId를 보내면 카테고리 이동으로 동작합니다(#86). 이름·날짜 수정과 함께 보낼 수 있으며,
+ *       이름·날짜를 먼저 반영한 뒤 이동하므로 바뀐 날짜 기준으로 대상 카테고리의 표시 순서가 정해집니다.
+ *       대상 카테고리는 본인 소유여야 하고(없으면 404, 남의 것이면 403), 검증은 수정 전에 이루어지므로
+ *       실패하면 이름·날짜도 바뀌지 않습니다.
+ *       하위 태스크도 같은 카테고리로 함께 이동하며(태스크 생성이 "마일스톤이 그 카테고리에 속하는지"를 검증하기 때문),
+ *       taskId·milestoneId·태스크 날짜는 그대로 유지됩니다.
+ *       MULTIPLE는 회차가 흩어지면 안 되므로 editScope와 무관하게 같은 seriesId의 회차 전체가 함께 이동합니다.
+ *       표시 순서(displayOrder)는 대상 카테고리 안에서 D-Day 순 위치로 다시 부여됩니다.
+ *       숨김 카테고리로 옮기면 하위 태스크도 캘린더에서 함께 숨겨지고, 태스크 색상은 새 카테고리 색상으로 표시됩니다.
  *     tags: [Milestone]
  *     security:
  *       - bearerAuth: []
@@ -387,9 +401,9 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *               categoryId:
  *                 type: integer
  *                 description: >
- *                   카테고리 이동은 이 엔드포인트에서 아직 지원하지 않습니다(별도 이슈로 진행 예정).
- *                   수정 모달이 폼 전체를 보내는 경우를 위해 필드는 받지만, 현재 소속 카테고리와 같은 값일 때만
- *                   통과하고 다른 값이면 400을 반환합니다. 조용히 무시되지 않으므로 이동 시도는 즉시 드러납니다.
+ *                   옮길 카테고리 ID(#86). 현재 소속과 다르면 카테고리 이동이 수행되고, 같은 값이면 변경 없이 통과합니다
+ *                   (수정 모달이 폼 전체를 보내는 경우). 이 필드만 단독으로 보내도 유효한 수정 요청입니다.
+ *                   본인 소유가 아니면 403, 존재하지 않으면 404.
  *               dateType:
  *                 type: string
  *                 enum: [SINGLE, RANGE, MULTIPLE]
@@ -449,6 +463,15 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *               value:
  *                 dateType: MULTIPLE
  *                 dates: ['2026-07-06', '2026-07-13', '2026-07-20']
+ *             moveCategory:
+ *               summary: 카테고리 이동 (하위 태스크 동반, MULTIPLE은 회차 전체)
+ *               value:
+ *                 categoryId: 7
+ *             moveWithRename:
+ *               summary: 카테고리 이동 + 이름 변경 (수정 모달 폼 전체 전송)
+ *               value:
+ *                 categoryId: 7
+ *                 name: 굿즈 제작
  *     responses:
  *       200:
  *         description: >
@@ -456,6 +479,7 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *           editScope=ALL이어도 URL로 지정한 회차 기준으로 응답하며 나머지 회차에 이름은 반영됩니다.
  *           MULTIPLE로 날짜 타입을 바꾼 경우에만 series 필드에 회차 전체가 날짜 오름차순으로 함께 담깁니다
  *           (태스크 수정 응답의 taskDates에 대응).
+ *           카테고리를 이동한 경우 categoryId와 displayOrder가 새 카테고리 기준 값으로 반영됩니다.
  *         content:
  *           application/json:
  *             schema:
@@ -510,7 +534,7 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *                         dateType: MULTIPLE
  *                         startDate: '2026-07-13'
  *       400:
- *         description: MULTIPLE 이름 수정인데 editScope 누락, 이름 변경 없이 editScope 지정, SINGLE/RANGE에 editScope 지정, dateType과 날짜 필드 조합 불일치, 날짜 타입 변경에 editScope·isCompleted 동반, 현재와 다른 categoryId 지정(카테고리 이동 미지원), 또는 수정할 값이 하나도 없음
+ *         description: MULTIPLE 이름 수정인데 editScope 누락, 이름 변경 없이 editScope 지정, SINGLE/RANGE에 editScope 지정, dateType과 날짜 필드 조합 불일치, 날짜 타입 변경에 editScope·isCompleted 동반, 또는 수정할 값이 하나도 없음
  *         content:
  *           application/json:
  *             schema:
@@ -524,8 +548,28 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *                 code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 남의 마일스톤을 수정하거나, 남의 카테고리로 이동을 시도한 경우
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 해당 카테고리에 접근할 권한이 없습니다.
+ *               error:
+ *                 code: COMMON_FORBIDDEN
  *       404:
- *         $ref: '#/components/responses/NotFound'
+ *         description: 마일스톤 또는 이동할 대상 카테고리를 찾을 수 없음
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               message: 카테고리를 찾을 수 없습니다.
+ *               error:
+ *                 code: COMMON_NOT_FOUND
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
