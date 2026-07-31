@@ -625,9 +625,12 @@ router.post('/tasks', authMiddleware, validateBody(createTaskSchema), createTask
  *       categoryId와 milestoneId가 모두 null이면 독립 태스크,
  *       categoryId만 있으면 카테고리 직속 태스크,
  *       둘 다 있으면 해당 마일스톤 하위 태스크로 변경합니다.
- *       완료 이력이 없는 경우 기존 Task ID와 displayOrder를 유지한 채 교체합니다.
+ *       날짜 구성이 변경되지 않으면 같은 Task에서 메타데이터만 갱신합니다(METADATA_ONLY).
+ *       완료 이력이 없는 일정 변경은 기존 Task ID와 displayOrder를 유지한 채 교체합니다(REPLACED_IN_PLACE).
+ *       MULTIPLE에서 완료 회차와 겹치지 않는 일정 변경은 같은 Task에서
+ *       완료 회차를 보존하고 미완료 회차만 교체합니다(KEPT_COMPLETED_DATES).
  *       완료 이력을 같은 Task에서 보존할 수 없는 경우 기존 완료 일정은 보존하고
- *       요청 일정은 새 미완료 Task로 생성합니다.
+ *       요청 일정은 새 미완료 Task로 생성합니다(CREATED_NEW_TASK_GROUP).
  *     tags: [Task]
  *     security:
  *       - bearerAuth: []
@@ -755,23 +758,138 @@ router.post('/tasks', authMiddleware, validateBody(createTaskSchema), createTask
  *                         preservedTaskId:
  *                           type: integer
  *                           nullable: true
- *             example:
- *               success: true
- *               message: 태스크 수정 성공
- *               data:
- *                 updateMode: REPLACED_IN_PLACE
- *                 preservedTaskId: null
- *                 id: 12
- *                 categoryId: null
- *                 milestoneId: null
- *                 name: 여행 준비
- *                 dateType: RANGE
- *                 startDate: '2026-08-20'
- *                 endDate: '2026-08-23'
- *                 color: '#A5B4FC'
- *                 isCompleted: false
- *                 completedAt: null
- *                 displayOrder: 1
+ *             examples:
+ *               metadataOnly:
+ *                 summary: 날짜 구성 유지 - 메타데이터만 수정
+ *                 value:
+ *                   success: true
+ *                   message: 태스크 수정 성공
+ *                   data:
+ *                     updateMode: METADATA_ONLY
+ *                     preservedTaskId: null
+ *                     id: 30
+ *                     userId: 1
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 아침 운동
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *                     taskDates:
+ *                       - taskDateId: 201
+ *                         date: '2026-08-10'
+ *                         isCompleted: true
+ *                         completedAt: '2026-07-30T12:55:34.559Z'
+ *                         name: 아침 운동
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 202
+ *                         date: '2026-08-11'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 아침 운동
+ *                         color: '#A5B4FC'
+ *               replacedInPlace:
+ *                 summary: 완료 이력 없이 일정 교체
+ *                 value:
+ *                   success: true
+ *                   message: 태스크 수정 성공
+ *                   data:
+ *                     updateMode: REPLACED_IN_PLACE
+ *                     preservedTaskId: null
+ *                     id: 12
+ *                     userId: 1
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 여행 준비
+ *                     dateType: RANGE
+ *                     startDate: '2026-08-20'
+ *                     endDate: '2026-08-23'
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *               keptCompletedDates:
+ *                 summary: 완료 회차 보존 후 미완료 회차 교체
+ *                 value:
+ *                   success: true
+ *                   message: 태스크 수정 성공
+ *                   data:
+ *                     updateMode: KEPT_COMPLETED_DATES
+ *                     preservedTaskId: null
+ *                     id: 30
+ *                     userId: 1
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 운동 일정
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *                     taskDates:
+ *                       - taskDateId: 201
+ *                         date: '2026-08-10'
+ *                         isCompleted: true
+ *                         completedAt: '2026-07-30T12:55:34.559Z'
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 203
+ *                         date: '2026-08-12'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 204
+ *                         date: '2026-08-15'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *               createdNewTaskGroup:
+ *                 summary: 완료 이력 보존 후 새 Task 그룹 생성
+ *                 value:
+ *                   success: true
+ *                   message: 태스크 수정 성공
+ *                   data:
+ *                     updateMode: CREATED_NEW_TASK_GROUP
+ *                     preservedTaskId: 30
+ *                     id: 31
+ *                     userId: 1
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 운동 일정
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *                     taskDates:
+ *                       - taskDateId: 205
+ *                         date: '2026-08-10'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 206
+ *                         date: '2026-08-11'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 207
+ *                         date: '2026-08-15'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
  *       400:
  *         description: 소속 또는 날짜 필드 조합 오류
  *         content:

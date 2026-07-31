@@ -96,6 +96,99 @@ const getNextTaskDisplayOrder = async (
     return (maxOrder._max.displayOrder ?? 0) + 1;
 };
 
+
+type TaskDateCompletionState = {
+    isCompleted: boolean;
+    completedAt: Date | null;
+};
+
+const getTaskCompletionState = (
+    taskDates: TaskDateCompletionState[],
+) => {
+    const isCompleted =
+        taskDates.length > 0 &&
+        taskDates.every(
+            (taskDate) => taskDate.isCompleted,
+        );
+
+    if (!isCompleted) {
+        return {
+            isCompleted: false,
+            completedAt: null,
+        };
+    }
+
+    const completedAt =
+        taskDates.reduce<Date | null>(
+            (latest, taskDate) => {
+                if (!taskDate.completedAt) {
+                    return latest;
+                }
+
+                if (
+                    !latest ||
+                    taskDate.completedAt > latest
+                ) {
+                    return taskDate.completedAt;
+                }
+
+                return latest;
+            },
+            null,
+        ) ?? new Date();
+
+    return {
+        isCompleted: true,
+        completedAt,
+    };
+};
+
+const lockTaskForCompletionState = async (
+    tx: Prisma.TransactionClient,
+    taskId: number,
+    userId: number,
+) => {
+    const lockedTasks =
+        await tx.$queryRaw<Array<{ id: number }>>`
+            SELECT id
+            FROM \`Task\`
+            WHERE id = ${taskId}
+              AND userId = ${userId}
+            FOR UPDATE
+        `;
+
+    if (lockedTasks.length === 0) {
+        throw new Error(
+            '완료 상태를 갱신할 태스크를 찾을 수 없습니다.',
+        );
+    }
+};
+
+const lockTaskByTaskDateIdForCompletion = async (
+    tx: Prisma.TransactionClient,
+    taskDateId: number,
+    userId: number,
+) => {
+    const lockedTasks =
+        await tx.$queryRaw<Array<{ id: number }>>`
+            SELECT task.id
+            FROM \`Task\` AS task
+            INNER JOIN \`TaskDate\` AS taskDate
+                ON taskDate.taskId = task.id
+            WHERE taskDate.id = ${taskDateId}
+              AND task.userId = ${userId}
+            FOR UPDATE
+        `;
+
+    if (lockedTasks.length === 0) {
+        throw new Error(
+            '완료 상태를 갱신할 태스크 회차를 찾을 수 없습니다.',
+        );
+    }
+
+    return lockedTasks[0].id;
+};
+
 export const taskRepository = {
     findCategoryByIdAndUserId: async (
         categoryId: number,
@@ -597,6 +690,11 @@ export const taskRepository = {
             };
 
             await lockTaskDisplayOrder(tx, data.userId);
+            await lockTaskForCompletionState(
+                tx,
+                currentTaskId,
+                data.userId,
+            );
 
             if (currentDateType === DateType.MULTIPLE) {
                 await tx.taskDate.deleteMany({
@@ -620,33 +718,10 @@ export const taskRepository = {
                     })
                     : [];
 
-            const allRemainingCompleted =
-                currentDateType === DateType.MULTIPLE &&
-                remainingTaskDates.length > 0 &&
-                remainingTaskDates.every(
-                    (taskDate) => taskDate.isCompleted,
+            const preservedCompletionState =
+                getTaskCompletionState(
+                    remainingTaskDates,
                 );
-
-            const preservedCompletedAt =
-                allRemainingCompleted
-                    ? remainingTaskDates.reduce<Date | null>(
-                        (latest, taskDate) => {
-                            if (!taskDate.completedAt) {
-                                return latest;
-                            }
-
-                            if (
-                                !latest ||
-                                taskDate.completedAt > latest
-                            ) {
-                                return taskDate.completedAt;
-                            }
-
-                            return latest;
-                        },
-                        null,
-                    ) ?? new Date()
-                    : null;
 
             const preservedTask = await tx.task.update({
                 where: {
@@ -663,9 +738,9 @@ export const taskRepository = {
                     ...(currentDateType === DateType.MULTIPLE
                         ? {
                             isCompleted:
-                                allRemainingCompleted,
+                                preservedCompletionState.isCompleted,
                             completedAt:
-                                preservedCompletedAt,
+                                preservedCompletionState.completedAt,
                         }
                         : {}),
                 },
@@ -733,10 +808,18 @@ export const taskRepository = {
         isCompleted: boolean,
     ) => {
         return runWithP2002Retry(() => prisma.$transaction(async (tx) => {
+            const taskId =
+                await lockTaskByTaskDateIdForCompletion(
+                    tx,
+                    taskDateId,
+                    userId,
+                );
+
             const updatedTaskDate =
                 await tx.taskDate.update({
                     where: {
                         id: taskDateId,
+                        taskId,
                     },
                     data: {
                         isCompleted,
@@ -764,32 +847,10 @@ export const taskRepository = {
                     },
                 });
 
-            const allTaskDatesCompleted =
-                siblingTaskDates.length > 0 &&
-                siblingTaskDates.every(
-                    (taskDate) => taskDate.isCompleted,
+            const taskCompletionState =
+                getTaskCompletionState(
+                    siblingTaskDates,
                 );
-
-            const taskCompletedAt =
-                allTaskDatesCompleted
-                    ? siblingTaskDates.reduce<Date | null>(
-                        (latest, taskDate) => {
-                            if (!taskDate.completedAt) {
-                                return latest;
-                            }
-
-                            if (
-                                !latest ||
-                                taskDate.completedAt > latest
-                            ) {
-                                return taskDate.completedAt;
-                            }
-
-                            return latest;
-                        },
-                        null,
-                    ) ?? new Date()
-                    : null;
 
             await tx.task.update({
                 where: {
@@ -797,8 +858,10 @@ export const taskRepository = {
                     userId,
                 },
                 data: {
-                    isCompleted: allTaskDatesCompleted,
-                    completedAt: taskCompletedAt,
+                    isCompleted:
+                        taskCompletionState.isCompleted,
+                    completedAt:
+                        taskCompletionState.completedAt,
                 },
             });
 
