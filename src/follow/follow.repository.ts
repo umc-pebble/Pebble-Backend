@@ -7,7 +7,7 @@ import prisma from '../config/database';
 
 // 목록·검색 응답에 필요한 상대 유저 최소 정보
 const userSummary = {
-  select: { id: true, nickname: true, uniqueTag: true, profileImageUrl: true },
+  select: { id: true, nickname: true, uniqueTag: true, profileImageUrl: true, bio: true },
 } as const;
 
 // 알림 보관 기간 30일 (PLB-038)
