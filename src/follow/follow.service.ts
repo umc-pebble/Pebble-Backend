@@ -44,6 +44,7 @@ export const followService = {
       nickname: user.nickname,
       uniqueTag: user.uniqueTag,
       profileImageUrl: user.profileImageUrl,
+      bio: user.bio,
       followStatus: statusByUserId.get(user.id) ?? 'NONE',
     }));
 
@@ -128,6 +129,7 @@ export const followService = {
         nickname: other.nickname,
         uniqueTag: other.uniqueTag,
         profileImageUrl: other.profileImageUrl,
+        bio: other.bio,
         // TODO(일정 도메인 연동): 금일 일정 유무는 마일스톤·태스크 조회가 필요하고
         // 비공개 카테고리 제외 규칙(PLB-040)과도 얽혀 있어 협의 후 계산 예정
         hasTodaySchedule: false,

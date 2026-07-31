@@ -73,6 +73,7 @@ const router = Router();
  *                           nickname: { type: string, example: 큰바위 }
  *                           uniqueTag: { type: string, example: '0417' }
  *                           profileImageUrl: { type: string, nullable: true, example: null }
+ *                           bio: { type: string, nullable: true, example: 하루가 빙글빙글 돌아감 }
  *                           followStatus:
  *                             type: string
  *                             enum: [NONE, PENDING, ACCEPTED]
@@ -204,6 +205,7 @@ router.post('/follows', authMiddleware, validateBody(requestFollowSchema), reque
  *                           nickname: { type: string, example: 페블친구 }
  *                           uniqueTag: { type: string, example: '1234' }
  *                           profileImageUrl: { type: string, nullable: true, example: 'https://...' }
+ *                           bio: { type: string, nullable: true, example: 하루가 빙글빙글 돌아감 }
  *                           hasTodaySchedule: { type: boolean, description: 프로필 테두리 활성화용, example: true }
  *                     page:
  *                       type: object
