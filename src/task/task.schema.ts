@@ -22,6 +22,119 @@ const nameField = z
     '태스크 이름은 공백만으로 지정할 수 없습니다.',
   );
 
+type DateTypeShape = {
+  dateType: 'SINGLE' | 'RANGE' | 'MULTIPLE';
+  startDate?: string | null;
+  endDate?: string | null;
+  dates?: string[] | null;
+};
+
+const validateDateTypeShape = (
+  value: DateTypeShape,
+  ctx: z.RefinementCtx,
+) => {
+  if (value.dateType === 'SINGLE') {
+    if (!value.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['startDate'],
+        message: 'SINGLE에는 startDate가 필요합니다.',
+      });
+    }
+
+    if (value.endDate != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endDate'],
+        message: 'SINGLE에는 endDate를 지정할 수 없습니다.',
+      });
+    }
+
+    if (value.dates?.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dates'],
+        message: 'SINGLE에는 dates를 지정할 수 없습니다.',
+      });
+    }
+  }
+
+  if (value.dateType === 'RANGE') {
+    if (!value.startDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['startDate'],
+        message: 'RANGE에는 startDate가 필요합니다.',
+      });
+    }
+
+    if (!value.endDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endDate'],
+        message: 'RANGE에는 endDate가 필요합니다.',
+      });
+    }
+
+    if (
+      value.startDate &&
+      value.endDate &&
+      value.endDate < value.startDate
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endDate'],
+        message: '종료일은 시작일 이후여야 합니다.',
+      });
+    }
+
+    if (value.dates?.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dates'],
+        message: 'RANGE에는 dates를 지정할 수 없습니다.',
+      });
+    }
+  }
+
+  if (value.dateType === 'MULTIPLE') {
+    if (!value.dates || value.dates.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dates'],
+        message: 'MULTIPLE에는 하나 이상의 dates가 필요합니다.',
+      });
+    }
+
+    if (value.startDate != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['startDate'],
+        message: 'MULTIPLE에는 startDate를 지정할 수 없습니다.',
+      });
+    }
+
+    if (value.endDate != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endDate'],
+        message: 'MULTIPLE에는 endDate를 지정할 수 없습니다.',
+      });
+    }
+
+    if (
+      value.dates &&
+      new Set(value.dates).size !== value.dates.length
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dates'],
+        message: 'dates에는 중복된 날짜를 지정할 수 없습니다.',
+      });
+    }
+  }
+};
+
 export const createTaskSchema = z
   .object({
     categoryId: z.number().int().positive().nullable().optional(),
@@ -38,247 +151,42 @@ export const createTaskSchema = z
     dates: z.array(dateString).nullable().optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.dateType === 'SINGLE') {
-      if (!value.startDate) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['startDate'],
-          message: 'SINGLE에는 startDate가 필요합니다.',
-        });
-      }
-
-      if (value.endDate) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['endDate'],
-          message: 'SINGLE에는 endDate를 지정할 수 없습니다.',
-        });
-      }
-
-      if (value.dates?.length) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['dates'],
-          message: 'SINGLE에는 dates를 지정할 수 없습니다.',
-        });
-      }
-    }
-
-    if (value.dateType === 'RANGE') {
-      if (!value.startDate) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['startDate'],
-          message: 'RANGE에는 startDate가 필요합니다.',
-        });
-      }
-
-      if (!value.endDate) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['endDate'],
-          message: 'RANGE에는 endDate가 필요합니다.',
-        });
-      }
-
-      if (
-        value.startDate &&
-        value.endDate &&
-        value.endDate < value.startDate
-      ) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['endDate'],
-          message: '종료일은 시작일 이후여야 합니다.',
-        });
-      }
-
-      if (value.dates?.length) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['dates'],
-          message: 'RANGE에는 dates를 지정할 수 없습니다.',
-        });
-      }
-    }
-
-    if (value.dateType === 'MULTIPLE') {
-      if (!value.dates || value.dates.length === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['dates'],
-          message: 'MULTIPLE에는 하나 이상의 dates가 필요합니다.',
-        });
-      }
-
-      if (value.startDate) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['startDate'],
-          message: 'MULTIPLE에는 startDate를 지정할 수 없습니다.',
-        });
-      }
-
-      if (value.endDate) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['endDate'],
-          message: 'MULTIPLE에는 endDate를 지정할 수 없습니다.',
-        });
-      }
-
-      if (
-        value.dates &&
-        new Set(value.dates).size !== value.dates.length
-      ) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['dates'],
-          message: 'dates에는 중복된 날짜를 지정할 수 없습니다.',
-        });
-      }
-    }
+    validateDateTypeShape(value, ctx);
   });
-  
+
 export const updateTaskSchema = z
   .object({
-    name: nameField.optional(),
+    categoryId: z.number().int().positive().nullable(),
+    milestoneId: z.number().int().positive().nullable(),
 
-    startDate: dateString.nullable().optional(),
-    endDate: dateString.nullable().optional(),
+    name: nameField,
+    dateType: z.enum(['SINGLE', 'RANGE', 'MULTIPLE']),
 
+    startDate: dateString.nullable(),
+    endDate: dateString.nullable(),
+    dates: z.array(dateString).nullable(),
+
+    // 독립 태스크에서만 사용합니다. 하위 태스크는 null 또는 생략합니다.
     color: z.string().nullable().optional(),
-
-    dates: z.array(dateString).nullable().optional(),
-
-    editScope: z.enum(['THIS_ONLY', 'ALL']).optional(),
-    taskDateId: z.number().int().positive().optional(),
-
-    // 생성 이후 변경할 수 없는 필드
-    dateType: z.unknown().optional(),
-    categoryId: z.unknown().optional(),
-    milestoneId: z.unknown().optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.dateType !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['dateType'],
-        message: 'dateType은 수정할 수 없습니다.',
-      });
-    }
-
-    if (value.categoryId !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['categoryId'],
-        message: '태스크의 소속 카테고리는 수정할 수 없습니다.',
-      });
-    }
-
-    if (value.milestoneId !== undefined) {
+    if (value.categoryId === null && value.milestoneId !== null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['milestoneId'],
-        message: '태스크의 소속 마일스톤은 수정할 수 없습니다.',
+        message: 'milestoneId를 지정하려면 categoryId가 필요합니다.',
       });
     }
 
-    const hasEditableField =
-      value.name !== undefined ||
-      value.startDate !== undefined ||
-      value.endDate !== undefined ||
-      value.color !== undefined ||
-      value.dates !== undefined;
-
-    if (!hasEditableField) {
+    if (value.categoryId !== null && value.color != null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: [],
-        message: '수정할 값을 하나 이상 입력해야 합니다.',
+        path: ['color'],
+        message: '하위 태스크에는 color를 지정할 수 없습니다.',
       });
     }
 
-    if (
-      value.dates &&
-      new Set(value.dates).size !== value.dates.length
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['dates'],
-        message: 'dates에는 중복된 날짜를 지정할 수 없습니다.',
-      });
-    }
-
-    if (
-      value.dates !== undefined &&
-      (
-        value.name !== undefined ||
-        value.startDate !== undefined ||
-        value.endDate !== undefined ||
-        value.color !== undefined ||
-        value.editScope !== undefined ||
-        value.taskDateId !== undefined
-      )
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['dates'],
-        message: '다중 날짜 수정은 다른 수정 필드와 함께 요청할 수 없습니다.',
-      });
-    }
-
-    if (
-      (value.name !== undefined || value.color !== undefined) &&
-      value.editScope === undefined
-    ) {
-      return;
-    }
-
-    if (
-      value.editScope !== undefined &&
-      value.name === undefined &&
-      value.color === undefined
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['editScope'],
-        message: 'editScope는 이름 또는 색상 수정 시에만 사용할 수 있습니다.',
-      });
-    }
-
-    if (
-      value.editScope === 'THIS_ONLY' &&
-      value.taskDateId == null
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['taskDateId'],
-        message: '이 항목만 수정하려면 taskDateId가 필요합니다.',
-      });
-    }
-
-    if (
-      value.editScope === 'ALL' &&
-      value.taskDateId !== undefined
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['taskDateId'],
-        message: '전체 수정에는 taskDateId를 지정할 수 없습니다.',
-      });
-    }
-
-    if (
-      value.taskDateId !== undefined &&
-      value.editScope !== 'THIS_ONLY'
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['taskDateId'],
-        message: 'taskDateId는 THIS_ONLY 수정에서만 사용할 수 있습니다.',
-      });
-    }
+    validateDateTypeShape(value, ctx);
   });
 
 export const reorderTasksSchema = z.object({
