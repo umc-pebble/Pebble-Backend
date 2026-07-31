@@ -159,6 +159,12 @@ export const userRepository = {
     });
   },
 
+  // 이메일 변경 확정 조회: confirm은 비로그인 상태에서도 호출되므로(토큰 자체가 본인 확인 수단)
+  // userId가 아니라 토큰 해시로 대상 유저를 찾는다.
+  findByEmailChangeTokenHash(tokenHash: string) {
+    return prisma.user.findFirst({ where: { emailChangeTokenHash: tokenHash } });
+  },
+
   // 이메일 변경 확정: email을 교체하고 pending* 필드를 모두 파기한다.
   // pendingEmail·토큰 해시·만료 조건을 where에 포함해 조건부로 갱신함으로써, 서비스의 토큰 검증 이후
   // 다른 요청이 pending 정보를 교체하는 경쟁 상황에서도 이전 상태 기준으로만 확정되도록 한다.
