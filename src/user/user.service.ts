@@ -300,10 +300,13 @@ export const userService = {
     }
   },
 
-  async confirmEmailChange(userId: number, token: string) {
-    const user = await getUserOrThrow(userId);
+  // 토큰 자체가 본인 확인 수단이라(비밀번호 재설정 링크와 동일 패턴) 로그인 여부와 무관하게 호출된다.
+  // 그래서 userId가 아니라 토큰 해시로 대상 유저를 먼저 찾는다.
+  async confirmEmailChange(token: string) {
     const tokenHash = sha256(token);
+    const user = await userRepository.findByEmailChangeTokenHash(tokenHash);
     const isValid =
+      user &&
       user.pendingEmail &&
       user.emailChangeTokenHash === tokenHash &&
       user.emailChangeTokenExpiresAt &&
@@ -318,7 +321,7 @@ export const userService = {
     let result: Awaited<ReturnType<typeof userRepository.confirmEmailChange>>;
     try {
       result = await userRepository.confirmEmailChange(
-        userId,
+        user.id,
         user.pendingEmail as string,
         tokenHash,
       );

@@ -365,7 +365,7 @@ router.patch('/tasks/order', authMiddleware, validateBody(reorderTasksSchema), r
  *               dateType:
  *                 type: string
  *                 enum: [SINGLE, RANGE, MULTIPLE]
- *                 description: 날짜 유형. 생성 이후 변경할 수 없습니다.
+ *                 description: 태스크의 날짜 유형
  *                 example: SINGLE
  *               startDate:
  *                 type: string
@@ -621,10 +621,16 @@ router.post('/tasks', authMiddleware, validateBody(createTaskSchema), createTask
  *   patch:
  *     summary: 태스크 수정 (PLB-018)
  *     description: >
- *       태스크 정보를 수정합니다. dateType, categoryId, milestoneId는 변경할 수 없습니다.
- *       다중 태스크의 이름/색상 수정은 editScope로 이 항목만 수정할지 전체 수정할지 지정합니다.
- *       날짜 수정은 editScope를 사용하지 않고 현재 dateType에 맞는 날짜 필드를 직접 수정합니다.
- *       editScope=ALL인 경우 오늘 이후 미완료 회차에만 적용되며, 과거 또는 완료 회차의 기존 이름/색상은 서버에서 보존합니다.
+ *       수정 모달의 최종 값을 기준으로 태스크의 이름, 소속, 날짜 유형과 날짜 정보를 교체합니다.
+ *       categoryId와 milestoneId가 모두 null이면 독립 태스크,
+ *       categoryId만 있으면 카테고리 직속 태스크,
+ *       둘 다 있으면 해당 마일스톤 하위 태스크로 변경합니다.
+ *       날짜 구성이 변경되지 않으면 같은 Task에서 메타데이터만 갱신합니다(METADATA_ONLY).
+ *       완료 이력이 없는 일정 변경은 기존 Task ID와 displayOrder를 유지한 채 교체합니다(REPLACED_IN_PLACE).
+ *       MULTIPLE에서 완료 회차와 겹치지 않는 일정 변경은 같은 Task에서
+ *       완료 회차를 보존하고 미완료 회차만 교체합니다(KEPT_COMPLETED_DATES).
+ *       완료 이력을 같은 Task에서 보존할 수 없는 경우 기존 완료 일정은 보존하고
+ *       요청 일정은 새 미완료 Task로 생성합니다(CREATED_NEW_TASK_GROUP).
  *     tags: [Task]
  *     security:
  *       - bearerAuth: []
@@ -636,93 +642,99 @@ router.post('/tasks', authMiddleware, validateBody(createTaskSchema), createTask
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - categoryId
+ *               - milestoneId
+ *               - name
+ *               - dateType
+ *               - startDate
+ *               - endDate
+ *               - dates
  *             properties:
+ *               categoryId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: null이면 독립 태스크로 변경합니다.
+ *                 example: 3
+ *               milestoneId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: >
+ *                   null이면 독립 또는 카테고리 직속 태스크입니다.
+ *                   값이 있으면 해당 마일스톤이 categoryId에 속하는지 검증합니다.
+ *                 example: 10
  *               name:
  *                 type: string
  *                 maxLength: 100
- *                 nullable: true
- *                 description: 변경할 태스크 이름. 중복 허용
+ *                 description: 수정 후 태스크 이름
  *                 example: 기획서 최종본 작성
+ *               dateType:
+ *                 type: string
+ *                 enum: [SINGLE, RANGE, MULTIPLE]
+ *                 description: 수정 후 날짜 유형
+ *                 example: MULTIPLE
  *               startDate:
  *                 type: string
  *                 format: date
  *                 nullable: true
- *                 description: 일반/기간 태스크에서 수정 가능한 시작 날짜
- *                 example: '2026-07-11'
+ *                 description: SINGLE/RANGE에서 사용하며 MULTIPLE이면 null
+ *                 example: null
  *               endDate:
  *                 type: string
  *                 format: date
  *                 nullable: true
- *                 description: 기간 태스크에서 수정 가능한 종료 날짜
- *                 example: '2026-07-20'
+ *                 description: RANGE에서 사용하며 SINGLE/MULTIPLE이면 null
+ *                 example: null
  *               dates:
  *                 type: array
  *                 nullable: true
- *                 description: 다중 태스크의 날짜 배열 수정. 날짜 수정은 TaskDate.date를 직접 수정하며 editScope를 사용하지 않습니다.
+ *                 description: >
+ *                   MULTIPLE에서 사용하는 전체 날짜 배열입니다.
+ *                   SINGLE/RANGE에서는 null 또는 빈 배열을 전달할 수 있습니다.
  *                 items:
  *                   type: string
  *                   format: date
- *                 example: ['2026-07-11', '2026-07-15', '2026-07-20']
+ *                 example: ['2026-08-10', '2026-08-11', '2026-08-15']
  *               color:
  *                 type: string
  *                 maxLength: 20
  *                 nullable: true
- *                 description: 독립 태스크만 수정 가능
+ *                 description: 독립 태스크만 사용하며 하위 태스크는 null 또는 생략
  *                 example: '#A5B4FC'
- *               editScope:
- *                 type: string
- *                 enum: [THIS_ONLY, ALL]
- *                 nullable: true
- *                 description: >
- *                   다중 태스크의 이름/색상 수정 범위입니다.
- *                   기본값은 없으며, 다중 태스크에서 name 또는 color 수정 시 필수입니다.
- *                   THIS_ONLY는 taskDateId에 해당하는 회차만 TaskException에 저장합니다.
- *                   ALL은 오늘 이후 미완료 회차에만 적용됩니다.
- *                 example: THIS_ONLY
- *               taskDateId:
- *                 type: integer
- *                 nullable: true
- *                 description: 다중 태스크에서 THIS_ONLY 수정 시 대상 회차의 TaskDate ID
- *                 example: 101
  *           examples:
- *             normalSingleEdit:
- *               summary: 일반 태스크 수정
+ *             singleToRange:
+ *               summary: 독립 SINGLE을 RANGE로 변경
  *               value:
- *                 name: 장보기 수정
- *                 startDate: '2026-07-11'
+ *                 categoryId: null
+ *                 milestoneId: null
+ *                 name: 여행 준비
+ *                 dateType: RANGE
+ *                 startDate: '2026-08-20'
+ *                 endDate: '2026-08-23'
+ *                 dates: null
  *                 color: '#A5B4FC'
- *             normalRangeEdit:
- *               summary: 기간 태스크 수정
+ *             rangeToMultiple:
+ *               summary: 완료 RANGE를 MULTIPLE로 변경
  *               value:
+ *                 categoryId: null
+ *                 milestoneId: null
+ *                 name: 운동하기
+ *                 dateType: MULTIPLE
+ *                 startDate: null
+ *                 endDate: null
+ *                 dates: ['2026-08-10', '2026-08-11', '2026-08-15']
+ *                 color: '#A5B4FC'
+ *             moveToMilestone:
+ *               summary: 카테고리·마일스톤 소속 변경
+ *               value:
+ *                 categoryId: 3
+ *                 milestoneId: 10
  *                 name: 기획서 작성
- *                 startDate: '2026-07-11'
- *                 endDate: '2026-07-20'
- *             multiDateEdit:
- *               summary: 다중 태스크 날짜 수정
- *               value:
- *                 dates: ['2026-07-11', '2026-07-15', '2026-07-20']
- *             multiThisOnlyName:
- *               summary: 다중 이 항목만 이름 수정
- *               value:
- *                 editScope: THIS_ONLY
- *                 taskDateId: 101
- *                 name: 이번 회차만 병원 가기
- *             multiAllName:
- *               summary: 다중 전체 이름 수정
- *               value:
- *                 editScope: ALL
- *                 name: 아침 운동
- *             independentMultiThisOnlyColor:
- *               summary: 독립 다중 이 항목만 색상 수정
- *               value:
- *                 editScope: THIS_ONLY
- *                 taskDateId: 101
- *                 color: '#A5B4FC'
- *             independentMultiAllColor:
- *               summary: 독립 다중 전체 색상 수정
- *               value:
- *                 editScope: ALL
- *                 color: '#A5B4FC'
+ *                 dateType: SINGLE
+ *                 startDate: '2026-08-20'
+ *                 endDate: null
+ *                 dates: null
+ *                 color: null
  *     responses:
  *       200:
  *         description: 수정 성공
@@ -735,93 +747,161 @@ router.post('/tasks', authMiddleware, validateBody(createTaskSchema), createTask
  *                   properties:
  *                     data:
  *                       type: object
+ *                       properties:
+ *                         updateMode:
+ *                           type: string
+ *                           enum:
+ *                             - METADATA_ONLY
+ *                             - REPLACED_IN_PLACE
+ *                             - KEPT_COMPLETED_DATES
+ *                             - CREATED_NEW_TASK_GROUP
+ *                         preservedTaskId:
+ *                           type: integer
+ *                           nullable: true
  *             examples:
- *               normal:
- *                 summary: 일반/기간 태스크 수정 성공
+ *               metadataOnly:
+ *                 summary: 날짜 구성 유지 - 메타데이터만 수정
  *                 value:
  *                   success: true
  *                   message: 태스크 수정 성공
  *                   data:
- *                     id: 12
- *                     dateType: SINGLE
- *                     name: 기획서 최종본 작성
- *                     startDate: '2026-07-11'
+ *                     updateMode: METADATA_ONLY
+ *                     preservedTaskId: null
+ *                     id: 30
+ *                     userId: 1
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 아침 운동
+ *                     dateType: MULTIPLE
+ *                     startDate: null
  *                     endDate: null
  *                     color: '#A5B4FC'
  *                     isCompleted: false
  *                     completedAt: null
- *               multiThisOnly:
- *                 summary: 다중 이 항목만 수정 성공
+ *                     displayOrder: 1
+ *                     taskDates:
+ *                       - taskDateId: 201
+ *                         date: '2026-08-10'
+ *                         isCompleted: true
+ *                         completedAt: '2026-07-30T12:55:34.559Z'
+ *                         name: 아침 운동
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 202
+ *                         date: '2026-08-11'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 아침 운동
+ *                         color: '#A5B4FC'
+ *               replacedInPlace:
+ *                 summary: 완료 이력 없이 일정 교체
  *                 value:
  *                   success: true
  *                   message: 태스크 수정 성공
  *                   data:
- *                     editScope: THIS_ONLY
- *                     taskId: 30
- *                     taskDateId: 101
- *                     date: '2026-07-10'
- *                     name: 이번 회차만 병원 가기
+ *                     updateMode: REPLACED_IN_PLACE
+ *                     preservedTaskId: null
+ *                     id: 12
+ *                     userId: 1
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 여행 준비
+ *                     dateType: RANGE
+ *                     startDate: '2026-08-20'
+ *                     endDate: '2026-08-23'
  *                     color: '#A5B4FC'
  *                     isCompleted: false
  *                     completedAt: null
- *               multiAll:
- *                 summary: 다중 전체 수정 성공
+ *                     displayOrder: 1
+ *               keptCompletedDates:
+ *                 summary: 완료 회차 보존 후 미완료 회차 교체
  *                 value:
  *                   success: true
  *                   message: 태스크 수정 성공
  *                   data:
- *                     editScope: ALL
+ *                     updateMode: KEPT_COMPLETED_DATES
+ *                     preservedTaskId: null
  *                     id: 30
+ *                     userId: 1
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 운동 일정
  *                     dateType: MULTIPLE
- *                     name: 아침 운동
+ *                     startDate: null
+ *                     endDate: null
  *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 1
+ *                     taskDates:
+ *                       - taskDateId: 201
+ *                         date: '2026-08-10'
+ *                         isCompleted: true
+ *                         completedAt: '2026-07-30T12:55:34.559Z'
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 203
+ *                         date: '2026-08-12'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 204
+ *                         date: '2026-08-15'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *               createdNewTaskGroup:
+ *                 summary: 완료 이력 보존 후 새 Task 그룹 생성
+ *                 value:
+ *                   success: true
+ *                   message: 태스크 수정 성공
+ *                   data:
+ *                     updateMode: CREATED_NEW_TASK_GROUP
+ *                     preservedTaskId: 30
+ *                     id: 31
+ *                     userId: 1
+ *                     categoryId: null
+ *                     milestoneId: null
+ *                     name: 운동 일정
+ *                     dateType: MULTIPLE
+ *                     startDate: null
+ *                     endDate: null
+ *                     color: '#A5B4FC'
+ *                     isCompleted: false
+ *                     completedAt: null
+ *                     displayOrder: 2
+ *                     taskDates:
+ *                       - taskDateId: 205
+ *                         date: '2026-08-10'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 206
+ *                         date: '2026-08-11'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
+ *                       - taskDateId: 207
+ *                         date: '2026-08-15'
+ *                         isCompleted: false
+ *                         completedAt: null
+ *                         name: 운동 일정
+ *                         color: '#A5B4FC'
  *       400:
- *         description: 입력값 오류 또는 수정 범위 오류
+ *         description: 소속 또는 날짜 필드 조합 오류
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             examples:
- *               invalidInput:
- *                 summary: 입력값 오류
+ *               milestoneWithoutCategory:
+ *                 summary: categoryId 없이 milestoneId 전달
  *                 value:
  *                   success: false
- *                   message: 요청 값이 올바르지 않습니다.
- *                   error:
- *                     code: COMMON_INVALID_INPUT
- *               invalidDateTypeChange:
- *                 summary: dateType 변경 시도
- *                 value:
- *                   success: false
- *                   message: dateType은 수정할 수 없습니다.
- *                   error:
- *                     code: COMMON_INVALID_INPUT
- *               invalidCategoryChange:
- *                 summary: categoryId 변경 시도
- *                 value:
- *                   success: false
- *                   message: 태스크의 소속 카테고리는 수정할 수 없습니다.
- *                   error:
- *                     code: COMMON_INVALID_INPUT
- *               invalidMilestoneChange:
- *                 summary: milestoneId 변경 시도
- *                 value:
- *                   success: false
- *                   message: 태스크의 소속 마일스톤은 수정할 수 없습니다.
- *                   error:
- *                     code: COMMON_INVALID_INPUT
- *               missingEditScope:
- *                 summary: 다중 이름/색상 수정 시 editScope 누락
- *                 value:
- *                   success: false
- *                   message: 다중 태스크의 이름/색상 수정 시 editScope가 필요합니다.
- *                   error:
- *                     code: COMMON_INVALID_INPUT
- *               missingTaskDateId:
- *                 summary: THIS_ONLY 수정 시 taskDateId 누락
- *                 value:
- *                   success: false
- *                   message: 이 항목만 수정하려면 taskDateId가 필요합니다.
+ *                   message: milestoneId를 지정하려면 categoryId가 필요합니다.
  *                   error:
  *                     code: COMMON_INVALID_INPUT
  *               childTaskWithColor:
@@ -835,7 +915,7 @@ router.post('/tasks', authMiddleware, validateBody(createTaskSchema), createTask
  *                 summary: dateType과 날짜 필드 조합 오류
  *                 value:
  *                   success: false
- *                   message: 현재 dateType과 날짜 필드 조합이 올바르지 않습니다.
+ *                   message: dateType과 날짜 필드 조합이 올바르지 않습니다.
  *                   error:
  *                     code: COMMON_INVALID_INPUT
  *       401:

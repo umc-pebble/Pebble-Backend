@@ -1,4 +1,4 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { sendSuccess } from '../utils/response';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { userService } from './user.service';
@@ -93,10 +93,11 @@ export const requestEmailChange = async (req: AuthRequest, res: Response, next: 
   }
 };
 
-export const confirmEmailChange = async (req: AuthRequest, res: Response, next: NextFunction) => {
+// 로그인 여부와 무관하게 호출된다 (토큰 자체가 본인 확인 수단) — req.userId를 쓰지 않는다.
+export const confirmEmailChange = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token } = req.body as ConfirmEmailChangeBody;
-    const profile = await userService.confirmEmailChange(req.userId!, token);
+    const profile = await userService.confirmEmailChange(token);
     sendSuccess(res, profile, '이메일이 변경되었습니다.');
   } catch (err) {
     next(err);

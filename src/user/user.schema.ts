@@ -4,10 +4,17 @@ import { z } from 'zod';
 // 컨트롤러/서비스는 여기서 파싱된 타입(z.infer)을 그대로 신뢰한다.
 
 export const updateMeSchema = z.object({
+  // signupSchema(auth.schema.ts)와 동일한 규칙·메시지로 통일 — 닉네임을 빈 문자열/공백으로 지울 수 없다.
   // 100자 제한은 기능명세서(PLB-003)엔 없는 값이지만, 합의된 ERD의 nickname VarChar(100) 컬럼 폭에서
-  // 파생된 기술적 가드다(원시 DB 오류 대신 400을 주기 위함). 커스텀 메시지는 넣지 않는다.
-  nickname: z.string().max(100).optional(),
-  bio: z.string().nullable().optional(),
+  // 파생된 기술적 가드다(원시 DB 오류 대신 400을 주기 위함).
+  nickname: z
+    .string()
+    .trim()
+    .min(1, '닉네임을 입력해주세요.')
+    .max(100, '닉네임은 100자 이하여야 합니다.')
+    .optional(),
+  // signupSchema와 동일하게 500자로 통일.
+  bio: z.string().max(500, '소개글은 500자 이하여야 합니다.').nullable().optional(),
   // 실제 파일이 아니라 POST /uploads/image로 먼저 업로드한 뒤 받은 URL을 전달한다.
   // auth.schema.ts와 동일하게 형식(.url())만 검증하며, 업로드 API가 준 URL인지(origin)는
   // 제한하지 않는다 — 스토리지 도메인이 바뀔 수 있고 명세에도 없는 제약이라 의도적으로 안 건다.
@@ -36,7 +43,10 @@ export const updateSettingsSchema = z.object({
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'currentPassword는 비어 있을 수 없습니다.'),
-  newPassword: z.string().min(8, 'newPassword는 8자 이상이어야 합니다.'),
+  // 디자인 규칙(설정 페이지 비밀번호 변경): 8자 이상, 영문·숫자 포함. 최대 길이/특수문자 요구는 없음.
+  newPassword: z
+    .string()
+    .regex(/^(?=.*[A-Za-z])(?=.*\d).{8,}$/, 'newPassword는 영문과 숫자를 포함해 8자 이상이어야 합니다.'),
 });
 
 export const requestEmailChangeSchema = z.object({
