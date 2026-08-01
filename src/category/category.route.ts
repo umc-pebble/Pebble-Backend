@@ -257,7 +257,7 @@ router.get('/users/:userId/categories', authMiddleware, getFriendCategories);
  *       카테고리 기간은 설정하지 않습니다. 생성 시 기본 상태는 "미완료"이나,
  *       이미 끝난 일정을 소급 기입하는 경우 isCompleted=true로 완료 상태로도 생성할 수 있습니다(PLB-007).
  *       이름은 텍스트·특수문자·이모티콘(단일) 지정이 가능하지만 공백 단일은 불가능합니다.
- *       inviteUserIds를 함께 지정하면 생성과 동시에 공유 카테고리로 전환됩니다 (PLB-044) — 요청자는
+ *       inviteUserIds를 1명 이상 지정하면 생성과 동시에 공유 카테고리로 전환됩니다 (PLB-044) — 요청자는
  *       OWNER(ACCEPTED), 초대 대상은 MEMBER(PENDING)로 등록되고 isShared=true가 됩니다.
  *       팔로잉 관계가 아닌 유저가 포함되어 있는 등 초대 검증에 하나라도 실패하면 카테고리 생성 자체가
  *       롤백됩니다(all-or-nothing, POST /categories/{categoryId}/share와 동일한 방식). 한 번에 최대
@@ -302,13 +302,13 @@ router.get('/users/:userId/categories', authMiddleware, getFriendCategories);
  *                 nullable: true
  *                 items:
  *                   type: integer
- *                 description: '함께 초대할 팔로잉 친구 id 목록 (최대 50명), 예: [7, 8]. 지정 시 공유 카테고리로 생성됩니다.'
+ *                 description: '함께 초대할 팔로잉 친구 id 목록 (최대 50명), 예: [7, 8]. 1명 이상 지정 시 공유 카테고리로 생성됩니다. 빈 배열([])은 무시되고 일반 카테고리로 생성됩니다.'
  *                 example: null
  *     responses:
  *       201:
  *         description: >
  *           카테고리 생성 성공. data.category에 생성된 카테고리가 담깁니다.
- *           inviteUserIds를 지정한 경우 data.members에 생성된 SharedCategoryMember 목록(오너 1 + 초대 멤버 N)이 함께 담깁니다.
+ *           inviteUserIds를 1명 이상 지정한 경우 data.members에 생성된 SharedCategoryMember 목록(오너 1 + 초대 멤버 N)이 함께 담깁니다.
  *         content:
  *           application/json:
  *             schema:
@@ -323,7 +323,7 @@ router.get('/users/:userId/categories', authMiddleware, getFriendCategories);
  *                           $ref: '#/components/schemas/Category'
  *                         members:
  *                           type: array
- *                           description: inviteUserIds를 지정했을 때만 포함됩니다.
+ *                           description: inviteUserIds를 1명 이상 지정했을 때만 포함됩니다.
  *                           items:
  *                             $ref: '#/components/schemas/SharedCategoryMember'
  *             example:
