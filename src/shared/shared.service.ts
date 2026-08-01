@@ -2,7 +2,7 @@
 // 비즈니스 로직 계층. 공유 전환/멤버 초대/수락·거절/탈퇴/강퇴/삭제 규칙 담당 (PLB-044~048).
 // DB 쿼리는 sharedRepository에 위임하고, 규칙 위반 시 AppError를 던진다.
 
-import { NotificationType } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 import { isFriend } from '../follow/follow.service';
 import { AppError } from '../utils/app-error';
 import { logger } from '../utils/logger';
@@ -39,18 +39,16 @@ async function getCategoryOrThrow(categoryId: number) {
 // 카테고리 "생성과 동시에 초대"(PLB-044)에서 categoryService가 재사용한다. Category 도메인의
 // 생성 요청은 이미 userId로 확정된 대상 목록(inviteUserIds)을 받으므로 nickname/email 조회 없이
 // 바로 검증한다. shareCategory(POST /categories/{id}/share)와 동일하게 all-or-nothing이다.
+// 존재 확인은 findUsersByIds로 한 번에 조회한다(대상마다 findUserById를 부르는 N+1 방지).
 export async function shareCategoryWithUserIds(
   ownerId: number,
   categoryId: number,
   inviteeUserIds: number[],
 ) {
-  const users = [];
-  for (const targetUserId of inviteeUserIds) {
-    const user = await sharedRepository.findUserById(targetUserId);
-    if (!user) {
-      throw new AppError('COMMON_NOT_FOUND', '대상 유저를 찾을 수 없습니다.');
-    }
-    users.push(user);
+  const uniqueIds = [...new Set(inviteeUserIds)];
+  const users = await sharedRepository.findUsersByIds(uniqueIds);
+  if (users.length !== uniqueIds.length) {
+    throw new AppError('COMMON_NOT_FOUND', '대상 유저를 찾을 수 없습니다.');
   }
   return shareCategoryWithResolvedUsers(ownerId, categoryId, users);
 }
@@ -100,27 +98,61 @@ async function assertInvitable(ownerId: number, categoryId: number, targetUserId
 // shareCategory(닉네임/이메일 기반)와 shareCategoryWithUserIds(userId 기반, PLB-044 카테고리
 // 생성과 동시에 초대)가 공유하는 핵심 로직. 대상을 전부 먼저 검증한 뒤 트랜잭션으로 한꺼번에
 // 반영한다 — 일부만 성공하는 상태를 만들지 않는다(all-or-nothing).
+//
+// 자기자신 필터링 + 기존 멤버십 확인은 대상 전체를 한 번에 처리한다(최대 50명 기준 대상마다
+// 순차 쿼리를 날리면 요청 하나에서 DB 왕복이 과도하게 늘어난다). 친구 관계만은 follow 도메인에
+// 배치 조회가 없어 대상별로 확인한다.
 async function shareCategoryWithResolvedUsers(
   ownerId: number,
   categoryId: number,
   users: { id: number }[],
 ) {
-  const targets = [];
   const seenUserIds = new Set<number>();
-  for (const user of users) {
+  const targets = users.filter((user) => {
     if (seenUserIds.has(user.id)) {
-      continue;
+      return false;
     }
     seenUserIds.add(user.id);
-    await assertInvitable(ownerId, categoryId, user.id);
-    targets.push(user);
+    return true;
+  });
+
+  if (targets.some((t) => t.id === ownerId)) {
+    throw new AppError('COMMON_INVALID_INPUT', '자기 자신은 초대할 수 없습니다.');
   }
 
-  const members = await sharedRepository.shareCategoryTransaction(
-    categoryId,
-    ownerId,
-    targets.map((t) => t.id),
-  );
+  if (targets.length > 0) {
+    const existingMemberships = await sharedRepository.findMemberships(
+      categoryId,
+      targets.map((t) => t.id),
+    );
+    if (existingMemberships.length > 0) {
+      throw new AppError('CATEGORY_MEMBER_DUPLICATED', '이미 초대되었거나 멤버인 유저입니다.');
+    }
+  }
+
+  for (const target of targets) {
+    const areFriends = await isFriend(ownerId, target.id);
+    if (!areFriends) {
+      throw new AppError('CATEGORY_NOT_FRIEND', '팔로잉 관계가 아닌 유저는 초대할 수 없습니다.');
+    }
+  }
+
+  // 위 사전 검증 이후에도 동시 요청이 같은 대상을 먼저 등록하면 createMany가
+  // 유니크 제약(P2002)에 걸린다 — shareCategoryTransaction의 isShared 레이스 가드와
+  // 같은 이유로, 사전 체크는 빠른 경로일 뿐이고 이게 최후 방어선이다.
+  let members;
+  try {
+    members = await sharedRepository.shareCategoryTransaction(
+      categoryId,
+      ownerId,
+      targets.map((t) => t.id),
+    );
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new AppError('CATEGORY_MEMBER_DUPLICATED', '이미 초대되었거나 멤버인 유저입니다.');
+    }
+    throw err;
+  }
 
   if (members === null) {
     throw new AppError(

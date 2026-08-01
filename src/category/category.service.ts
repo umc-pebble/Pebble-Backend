@@ -5,6 +5,7 @@
 import { AppError } from '../utils/app-error';
 import { isFriend } from '../follow/follow.service';
 import { isAcceptedSharedMember, shareCategoryWithUserIds } from '../shared/shared.service';
+import { logger } from '../utils/logger';
 import { categoryRepository } from './category.repository';
 
 // 참고: 개수 제한(CATEGORY_LIMIT_EXCEEDED) 생략
@@ -131,11 +132,25 @@ export const categoryService = {
       // 그대로 두면 "초대는 실패했는데 카테고리만 남는" 반쪽 상태가 된다. 실패 시 방금 만든
       // 카테고리를 함께 지워서(하위 마일스톤/태스크가 없는 시점이라 CASCADE 걱정 없음)
       // 요청 전체를 all-or-nothing으로 되돌린다.
+      //
+      // 카테고리 생성과 초대를 완전히 하나의 트랜잭션으로 묶지 않은 절충안이다 — 초대는
+      // shared 도메인의 별도 트랜잭션(shareCategoryTransaction)에서 처리되므로, 진짜로
+      // 하나로 묶으려면 두 도메인 repository가 같은 tx 클라이언트를 주고받아야 해서
+      // 리팩터링 범위가 크다. 대신 실패 시 보상 삭제로 all-or-nothing을 흉내낸다.
       try {
         const members = await shareCategoryWithUserIds(userId, category.id, input.inviteUserIds);
         return { category: { ...category, isShared: true }, members };
       } catch (err) {
-        await categoryRepository.delete(category.id);
+        // 보상 삭제 자체가 실패해도(방금 만든 빈 카테고리가 고아로 남을 뿐, 다른 데이터에
+        // 영향 없음) 원래 실패 원인(err)을 덮어써서 클라이언트에게 엉뚱한 에러가 가면 안 된다.
+        try {
+          await categoryRepository.delete(category.id);
+        } catch (deleteErr) {
+          logger.error('[category] 생성 롤백(카테고리 삭제) 실패', {
+            categoryId: category.id,
+            deleteErr,
+          });
+        }
         throw err;
       }
     }
