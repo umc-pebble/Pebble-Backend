@@ -109,6 +109,24 @@ export const sharedRepository = {
     return prisma.user.findFirst({ where: { nickname } });
   },
 
+  // 카테고리 생성과 동시에 초대(PLB-044)처럼 이미 userId로 확정된 대상을 검증할 때 쓴다.
+  findUserById(userId: number) {
+    return prisma.user.findUnique({ where: { id: userId } });
+  },
+
+  // findUserById의 배치 버전. 초대 대상이 여러 명일 때 한 번의 쿼리로 존재 여부를 확인한다.
+  findUsersByIds(userIds: number[]) {
+    return prisma.user.findMany({ where: { id: { in: userIds } } });
+  },
+
+  // 여러 대상의 기존 멤버십 여부를 한 번에 확인한다(중복 초대 검증용 배치 조회).
+  findMemberships(categoryId: number, userIds: number[]) {
+    return prisma.sharedCategoryMember.findMany({
+      where: { categoryId, userId: { in: userIds } },
+      select: { userId: true },
+    });
+  },
+
   // 알림은 최대 30일 보관 (PLB-038).
   createNotification(userId: number, type: NotificationType, relatedId: number) {
     const expiresAt = new Date();

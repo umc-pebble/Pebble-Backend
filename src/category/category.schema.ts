@@ -20,7 +20,11 @@ export const createCategorySchema = z.object({
   imageUrl: z.string().max(500).nullable().optional(),
   isPublic: z.boolean().optional(),
   isCompleted: z.boolean().optional(),
-  inviteUserIds: z.array(z.number().int().positive()).nullable().optional(),
+  inviteUserIds: z
+    .array(z.number().int().positive())
+    .max(50, '한 번에 최대 50명까지 초대할 수 있습니다.')
+    .nullable()
+    .optional(),
 });
 
 export const updateCategorySchema = z.object({

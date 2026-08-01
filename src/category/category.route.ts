@@ -257,9 +257,11 @@ router.get('/users/:userId/categories', authMiddleware, getFriendCategories);
  *       카테고리 기간은 설정하지 않습니다. 생성 시 기본 상태는 "미완료"이나,
  *       이미 끝난 일정을 소급 기입하는 경우 isCompleted=true로 완료 상태로도 생성할 수 있습니다(PLB-007).
  *       이름은 텍스트·특수문자·이모티콘(단일) 지정이 가능하지만 공백 단일은 불가능합니다.
- *       ※ 친구 초대(inviteUserIds)는 준비 중입니다 — 현재 지정 시 400을 반환합니다.
- *       (구현 예정: 지정 시 공유 카테고리로 생성 — 요청자 OWNER, 초대자 PENDING, isShared=true,
- *       초대 일부 실패해도 생성은 성공하고 결과를 data.invites로 반환하는 부분 성공 방식)
+ *       inviteUserIds를 1명 이상 지정하면 생성과 동시에 공유 카테고리로 전환됩니다 (PLB-044) — 요청자는
+ *       OWNER(ACCEPTED), 초대 대상은 MEMBER(PENDING)로 등록되고 isShared=true가 됩니다.
+ *       팔로잉 관계가 아닌 유저가 포함되어 있는 등 초대 검증에 하나라도 실패하면 카테고리 생성 자체가
+ *       롤백됩니다(all-or-nothing, POST /categories/{categoryId}/share와 동일한 방식). 한 번에 최대
+ *       50명까지 초대할 수 있습니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
@@ -300,13 +302,13 @@ router.get('/users/:userId/categories', authMiddleware, getFriendCategories);
  *                 nullable: true
  *                 items:
  *                   type: integer
- *                 description: '준비 중 — 현재 지정 시 400을 반환합니다. (구현 예정: 함께 초대할 팔로잉 친구 id 목록, 예: [7, 8])'
+ *                 description: '함께 초대할 팔로잉 친구 id 목록 (최대 50명), 예: [7, 8]. 1명 이상 지정 시 공유 카테고리로 생성됩니다. 빈 배열([])은 무시되고 일반 카테고리로 생성됩니다.'
  *                 example: null
  *     responses:
  *       201:
  *         description: >
  *           카테고리 생성 성공. data.category에 생성된 카테고리가 담깁니다.
- *           (초대 기능 구현 시 data.invites에 부분 성공 결과가 추가될 예정)
+ *           inviteUserIds를 1명 이상 지정한 경우 data.members에 생성된 SharedCategoryMember 목록(오너 1 + 초대 멤버 N)이 함께 담깁니다.
  *         content:
  *           application/json:
  *             schema:
@@ -319,6 +321,11 @@ router.get('/users/:userId/categories', authMiddleware, getFriendCategories);
  *                       properties:
  *                         category:
  *                           $ref: '#/components/schemas/Category'
+ *                         members:
+ *                           type: array
+ *                           description: inviteUserIds를 1명 이상 지정했을 때만 포함됩니다.
+ *                           items:
+ *                             $ref: '#/components/schemas/SharedCategoryMember'
  *             example:
  *               success: true
  *               message: 카테고리 생성 성공
@@ -332,20 +339,31 @@ router.get('/users/:userId/categories', authMiddleware, getFriendCategories);
  *                   isShared: false
  *                   displayOrder: 3
  *       400:
- *         description: 입력값 오류 (이름 공백 단일, 필수 필드 누락 등)
+ *         description: 입력값 오류(이름 공백 단일, 필수 필드 누락 등), 또는 초대 대상 중 팔로잉 관계가 아닌 유저 포함
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *             examples:
+ *               invalidInput:
+ *                 summary: 이름 공백 단일
+ *                 value: { success: false, message: 카테고리 이름은 공백만으로 지정할 수 없습니다., error: { code: "COMMON_INVALID_INPUT" } }
+ *               notFriend:
+ *                 summary: 팔로잉 관계가 아닌 유저 포함
+ *                 value: { success: false, message: 팔로잉 관계가 아닌 유저는 초대할 수 없습니다., error: { code: "CATEGORY_NOT_FRIEND" } }
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: inviteUserIds에 존재하지 않는 유저 id 포함
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
  *             example:
  *               success: false
- *               message: 카테고리 이름은 공백만으로 지정할 수 없습니다.
-
+ *               message: 대상 유저를 찾을 수 없습니다.
  *               error:
-
- *                 code: COMMON_INVALID_INPUT
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
+ *                 code: COMMON_NOT_FOUND
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
@@ -361,6 +379,7 @@ router.post('/categories', validateBody(createCategorySchema), createCategory);
  *       색상 변경 시 하위 마일스톤·태스크의 계열 색상에도 영향을 줍니다.
  *       imageUrl에 null을 보내면 대표 이미지가 삭제되고 기본 이미지로 대체됩니다.
  *       비공개(isPublic=false)로 설정하면 팔로잉 유저 화면에서 카테고리-마일스톤-태스크가 모두 노출되지 않습니다.
+ *       공유 카테고리의 경우 오너뿐 아니라 초대를 수락(ACCEPTED)한 멤버도 동등하게 수정할 수 있습니다 (PLB-045).
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
