@@ -938,6 +938,10 @@ router.patch('/tasks/:taskId', authMiddleware, validateBody(updateTaskSchema), u
  *       태스크의 완료 상태를 토글합니다.
  *       일반(SINGLE)은 태스크 하나에 체크박스 하나가 있으며, 기간(RANGE)은 시작일~종료일 전체에 체크박스 하나가 있습니다.
  *       일반/기간은 Task의 완료 상태를 변경하고, 다중(MULTIPLE)은 날짜별 TaskDate의 완료 상태를 변경합니다.
+ *       공유 카테고리의 ACCEPTED 멤버는 누구나 미완료 태스크를 완료할 수 있습니다.
+ *       완료 체크 해제는 해당 완료 체크를 수행한 사용자만 가능하며,
+ *       해제된 이후에는 다시 모든 ACCEPTED 멤버가 완료 체크할 수 있습니다.
+ *       활동기록은 완료 체크를 수행한 사용자의 기록만 증가·감소합니다.
  *     tags: [Task]
  *     security:
  *       - bearerAuth: []
@@ -972,6 +976,7 @@ router.patch('/tasks/:taskId', authMiddleware, validateBody(updateTaskSchema), u
  *                     id: 12
  *                     isCompleted: true
  *                     completedAt: '2026-07-10T14:20:00+09:00'
+ *                     completedByUserId: 3
  *               multi:
  *                 summary: 다중 날짜별 완료 토글
  *                 value:
@@ -983,6 +988,7 @@ router.patch('/tasks/:taskId', authMiddleware, validateBody(updateTaskSchema), u
  *                     date: '2026-07-10'
  *                     isCompleted: true
  *                     completedAt: '2026-07-10T09:10:00+09:00'
+ *                     completedByUserId: 3
  *       400:
  *         description: 다중 태스크인데 taskDateId 누락
  *         content:
@@ -997,7 +1003,16 @@ router.patch('/tasks/:taskId', authMiddleware, validateBody(updateTaskSchema), u
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
- *         $ref: '#/components/responses/Forbidden'
+ *         description: 완료 체크를 수행하지 않은 사용자가 체크 해제를 요청한 경우
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *             example:
+ *               success: false
+ *               message: 완료 체크한 사용자만 체크를 해제할 수 있습니다.
+ *               error:
+ *                 code: COMMON_FORBIDDEN
  *       404:
  *         $ref: '#/components/responses/NotFound'
  *       500:

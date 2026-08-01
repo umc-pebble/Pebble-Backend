@@ -292,6 +292,7 @@ export const taskRepository = {
                 color: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
                 displayOrder: true,
                 taskDates: {
                     select: {
@@ -300,6 +301,7 @@ export const taskRepository = {
                         date: true,
                         isCompleted: true,
                         completedAt: true,
+                        completedByUserId: true,
                         exception: {
                             select: {
                                 id: true,
@@ -366,6 +368,7 @@ export const taskRepository = {
                 date: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
             },
         });
     },
@@ -457,11 +460,15 @@ export const taskRepository = {
                         completedAt: isCompleted
                             ? new Date()
                             : null,
+                        completedByUserId: isCompleted
+                            ? userId
+                            : null,
                     },
                     select: {
                         id: true,
                         isCompleted: true,
                         completedAt: true,
+                        completedByUserId: true,
                     },
                 });
 
@@ -531,6 +538,7 @@ export const taskRepository = {
                 color: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
                 displayOrder: true,
             },
         });
@@ -594,6 +602,7 @@ export const taskRepository = {
                     color: data.color,
                     isCompleted: false,
                     completedAt: null,
+                    completedByUserId: null,
                     taskDates:
                         data.dateType === DateType.MULTIPLE
                             ? {
@@ -645,6 +654,7 @@ export const taskRepository = {
                     color: data.color,
                     isCompleted: false,
                     completedAt: null,
+                    completedByUserId: null,
                 },
             });
 
@@ -767,6 +777,7 @@ export const taskRepository = {
                     color: data.color,
                     isCompleted: false,
                     completedAt: null,
+                    completedByUserId: null,
                     displayOrder,
                     taskDates:
                         data.dateType === DateType.MULTIPLE
@@ -821,6 +832,9 @@ export const taskRepository = {
                         completedAt: isCompleted
                             ? new Date()
                             : null,
+                        completedByUserId: isCompleted
+                            ? userId
+                            : null,
                     },
                     select: {
                         id: true,
@@ -828,6 +842,7 @@ export const taskRepository = {
                         date: true,
                         isCompleted: true,
                         completedAt: true,
+                        completedByUserId: true,
                     },
                 });
 
@@ -839,6 +854,7 @@ export const taskRepository = {
                     select: {
                         isCompleted: true,
                         completedAt: true,
+                        completedByUserId: true,
                     },
                 });
 
@@ -856,6 +872,7 @@ export const taskRepository = {
                         taskCompletionState.isCompleted,
                     completedAt:
                         taskCompletionState.completedAt,
+                    completedByUserId: null,
                 },
             });
 
@@ -996,6 +1013,7 @@ export const taskRepository = {
                 color: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
                 displayOrder: true,
 
                 category: {
@@ -1016,6 +1034,7 @@ export const taskRepository = {
                         date: true,
                         isCompleted: true,
                         completedAt: true,
+                        completedByUserId: true,
                         exception: {
                             select: {
                                 name: true,
@@ -1084,6 +1103,7 @@ export const taskRepository = {
                 date: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
                 exception: {
                     select: {
                         id: true,
