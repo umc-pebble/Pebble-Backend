@@ -38,6 +38,7 @@ router.use('/categories', authMiddleware);
  *     description: >
  *       로그인한 회원의 카테고리 목록을 생성순(displayOrder 오름차순)으로 조회합니다.
  *       userId는 JWT에서 추출하며 별도 파라미터가 없습니다.
+ *       본인 소유 카테고리뿐 아니라, 초대를 수락(ACCEPTED)한 공유 카테고리도 함께 포함됩니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []

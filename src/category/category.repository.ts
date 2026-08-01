@@ -7,9 +7,22 @@ import prisma from '../config/database';
 
 export const categoryRepository = {
   // 특정 유저의 카테고리 목록. displayOrder 오름차순 = 화면에 보이는 순서.
+  // reorderCategories가 "본인 소유 전체"라는 전제로 재사용하므로 소유 카테고리만 반환한다
+  // (공유돼서 초대 수락한 카테고리를 섞으면 reorder의 소유권 검증이 깨진다).
   findManyByUserId(userId: number) {
     return prisma.category.findMany({
       where: { userId },
+      orderBy: { displayOrder: 'asc' },
+    });
+  },
+
+  // GET /categories 목록용. 본인 소유 카테고리 + 초대를 수락(ACCEPTED)한 공유 카테고리를 함께 반환한다.
+  // findManyByUserId와 달리 reorder 등 "소유"를 전제하는 로직에서는 쓰면 안 된다.
+  findVisibleByUserId(userId: number) {
+    return prisma.category.findMany({
+      where: {
+        OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' } } }],
+      },
       orderBy: { displayOrder: 'asc' },
     });
   },
