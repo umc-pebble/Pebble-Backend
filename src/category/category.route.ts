@@ -46,9 +46,9 @@ router.use('/categories', authMiddleware);
  *
  *       각 카테고리에는 월과 무관한 일정 집계(milestoneCount·taskCount·sharedTaskCount·hasSchedules)가
  *       함께 내려갑니다. 월별 조회(GET /tasks, GET /milestones)는 해당 월로 걸러진 결과만 주기 때문에
- *       "이번 달에만 일정이 없는 카테고리"와 "아직 아무 일정도 없는 새 카테고리"가 똑같이 빈 결과로 보이는데,
- *       이 값들로 두 경우를 구분할 수 있습니다.
- *       사이드바 노출 판정 예시 — hasSchedules=false면 빈 카테고리이므로 표시,
+ *       "이번 달에만 일정이 없는 카테고리"와 "월별 조회에 아예 나타나지 않는 카테고리"가 똑같이
+ *       빈 결과로 보이는데, 이 값들로 두 경우를 구분할 수 있습니다.
+ *       사이드바 노출 판정 예시 — hasSchedules=false면 표시,
  *       hasSchedules=true인데 해당 월 일정이 없으면 숨김.
  *
  *
@@ -57,6 +57,13 @@ router.use('/categories', authMiddleware);
  *       카테고리가 영구히 숨겨집니다). 공유 카테고리에서 다른 멤버가 만든 태스크는 아직 월별 조회에
  *       포함되지 않으므로 sharedTaskCount로 분리해 두었고, hasSchedules에도 합산되지 않습니다.
  *       마일스톤은 userId 없이 카테고리로 권한이 정해져 milestoneCount가 곧 접근 가능한 전체 개수입니다.
+ *
+ *
+ *       주의 — hasSchedules=false는 "이 카테고리에 일정이 전혀 없다"가 아니라
+ *       "요청자의 월별 조회에는 어느 달에도 나타나지 않는다"는 뜻입니다.
+ *       공유 카테고리에서 다른 멤버가 만든 태스크만 있는 경우(sharedTaskCount > 0)가 여기에 해당하며,
+ *       이때도 hasSchedules는 false입니다. 사이드바에서는 빈 카테고리와 동일하게 표시되는데,
+ *       어차피 요청자의 월별 화면에는 아무것도 뜨지 않으므로 화면상 모순은 없습니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []

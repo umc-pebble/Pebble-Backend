@@ -161,16 +161,26 @@ router.get('/categories/:categoryId/milestones', getMilestones);
  *                     endDate: '2026-08-14'
  *                     isCompleted: false
  *       400:
- *         description: baseDate 형식 오류
+ *         description: baseDate 형식 오류 또는 존재하지 않는 날짜
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ApiResponse'
- *             example:
- *               success: false
- *               message: baseDate는 YYYY-MM-DD 형식이어야 합니다.
- *               error:
- *                 code: COMMON_INVALID_INPUT
+ *             examples:
+ *               invalidFormat:
+ *                 summary: YYYY-MM-DD 형식이 아님 (예 - '2026-08')
+ *                 value:
+ *                   success: false
+ *                   message: baseDate는 YYYY-MM-DD 형식이어야 합니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
+ *               invalidDate:
+ *                 summary: 형식은 맞지만 존재하지 않는 날짜 (예 - '2026-02-30')
+ *                 value:
+ *                   success: false
+ *                   message: 유효하지 않은 baseDate입니다.
+ *                   error:
+ *                     code: COMMON_INVALID_INPUT
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:

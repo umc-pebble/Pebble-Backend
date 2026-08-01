@@ -44,41 +44,47 @@ export const categoryRepository = {
   // 태스크는 관계 카운트(_count)로 전체 개수만 받고, 요청자 몫은 groupBy로 따로 센 뒤 뺀다.
   // _count.select의 키는 관계 이름이라 같은 tasks 관계를 서로 다른 두 조건으로 두 번 셀 수 없다.
   // 카테고리 수와 무관하게 쿼리는 항상 2번이라 N+1이 되지 않는다.
+  //
+  // 두 집계는 반드시 한 트랜잭션(= 동일 읽기 스냅샷) 안에서 읽어야 한다. 따로 실행하면 그 사이
+  // 태스크가 생성·삭제될 때 "전체 개수"와 "내 개수"가 서로 다른 시점을 가리켜,
+  // sharedTaskCount(= 전체 - 내 것)가 음수가 되는 등 앞뒤가 맞지 않는 응답이 나갈 수 있다.
   async findVisibleByUserId(userId: number) {
-    const categories = await prisma.category.findMany({
-      where: {
-        OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' } } }],
-      },
-      include: {
-        _count: { select: { milestones: true, tasks: true } },
-      },
-      orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
-    });
-
-    // 카테고리가 없으면 in: [] 로 의미 없는 쿼리를 날리지 않는다.
-    const myTaskCounts = new Map<number, number>();
-    if (categories.length > 0) {
-      const grouped = await prisma.task.groupBy({
-        by: ['categoryId'],
-        where: { categoryId: { in: categories.map((c) => c.id) }, userId },
-        _count: { _all: true },
+    const withCounts = await prisma.$transaction(async (tx) => {
+      const categories = await tx.category.findMany({
+        where: {
+          OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' } } }],
+        },
+        include: {
+          _count: { select: { milestones: true, tasks: true } },
+        },
+        orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
       });
-      for (const row of grouped) {
-        // by에 넣은 categoryId는 위 where에서 non-null만 걸렀지만 타입상 nullable이다.
-        if (row.categoryId !== null) {
-          myTaskCounts.set(row.categoryId, row._count._all);
+
+      // 카테고리가 없으면 in: [] 로 의미 없는 쿼리를 날리지 않는다.
+      const myTaskCounts = new Map<number, number>();
+      if (categories.length > 0) {
+        const grouped = await tx.task.groupBy({
+          by: ['categoryId'],
+          where: { categoryId: { in: categories.map((c) => c.id) }, userId },
+          _count: { _all: true },
+        });
+        for (const row of grouped) {
+          // by에 넣은 categoryId는 위 where에서 non-null만 걸렀지만 타입상 nullable이다.
+          if (row.categoryId !== null) {
+            myTaskCounts.set(row.categoryId, row._count._all);
+          }
         }
       }
-    }
 
-    const withCounts = categories.map(({ _count, ...category }) => {
-      const taskCount = myTaskCounts.get(category.id) ?? 0;
-      return {
-        ...category,
-        milestoneCount: _count.milestones,
-        taskCount,
-        sharedTaskCount: _count.tasks - taskCount,
-      };
+      return categories.map(({ _count, ...category }) => {
+        const taskCount = myTaskCounts.get(category.id) ?? 0;
+        return {
+          ...category,
+          milestoneCount: _count.milestones,
+          taskCount,
+          sharedTaskCount: _count.tasks - taskCount,
+        };
+      });
     });
 
     return [

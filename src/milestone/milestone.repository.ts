@@ -229,10 +229,14 @@ export const milestoneRepository = {
   // 월별 마일스톤 목록(사이드바 조립용). 카테고리를 가리지 않고 "조회 월에 걸치는" 마일스톤만
   // 한 번에 반환한다 — 카테고리마다 findManyByCategoryId를 부르면 N번 왕복이 되기 때문이다.
   //
-  // 대상 범위는 GET /categories(findVisibleByUserId)와 같다: 내 카테고리 + 초대를 수락(ACCEPTED)한
+  // 접근 판정은 GET /categories(findVisibleByUserId)와 같다: 내 카테고리 + 초대를 수락(ACCEPTED)한
   // 공유 카테고리. 마일스톤은 userId 컬럼이 없어 카테고리 접근 권한이 곧 마일스톤 접근 권한이므로,
   // 이 범위가 그대로 "현재 로그인 사용자가 접근 가능한 마일스톤"이 된다.
-  // 숨김 카테고리 제외는 태스크 월별 조회(findTasksByMonth)와 동일하게 맞춘다.
+  //
+  // 다만 숨김(isHidden) 처리는 두 조회가 의도적으로 다르다. 카테고리 목록은 숨긴 카테고리도
+  // 그대로 반환한다 — 사용자가 숨김을 해제하려면 목록에 보여야 하기 때문이다. 반면 여기는
+  // "달력에 그릴 일정"을 주는 조회라 숨긴 카테고리의 마일스톤을 빼야 하고, 이는 태스크 월별
+  // 조회(findTasksByMonth)가 같은 이유로 isHidden을 거르는 것과 맞춘 것이다.
   //
   // 월 판정이 태스크쪽과 다른 점: MULTIPLE(다중)이 회차마다 Milestone row로 저장되고 각자
   // startDate를 가지므로, 태스크의 taskDates 자식 탐색(`some`)에 해당하는 절이 필요 없고

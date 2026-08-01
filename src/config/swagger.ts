@@ -93,7 +93,7 @@ const options: swaggerJSDoc.Options = {
             hasSchedules: {
               type: 'boolean',
               description:
-                '월과 무관하게 이 카테고리에 일정이 하나라도 있는지 여부(= milestoneCount + taskCount > 0). false면 아직 아무 일정도 없는 빈 카테고리입니다. 목록 조회(GET /categories)에서만 내려갑니다.',
+                '월과 무관하게, 요청자의 월별 조회(GET /tasks, GET /milestones)에 나타날 수 있는 일정이 이 카테고리에 하나라도 있는지 여부(= milestoneCount + taskCount > 0). sharedTaskCount는 합산되지 않습니다. 따라서 false는 "이 카테고리에 일정이 전혀 없다"가 아니라 "요청자의 월별 조회에는 어느 달에도 나타나지 않는다"는 뜻이며, 공유 카테고리에서 다른 멤버가 만든 태스크만 있는 경우가 여기에 해당합니다. 목록 조회(GET /categories)에서만 내려갑니다.',
               example: true,
             },
             createdAt: {
