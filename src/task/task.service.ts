@@ -4,6 +4,7 @@ import { taskRepository, CreateTaskData, ReplaceTaskData } from './task.reposito
 import { CreateTaskBody, ReorderTasksBody, UpdateTaskBody } from './task.schema';
 import { isFriend } from '../follow/follow.service';
 import { categoryService } from '../category/category.service';
+import { sharedRepository } from '../shared/shared.repository';
 
 const toDate = (value: string): Date => {
     const [year, month, day] = value.split('-').map(Number);
@@ -733,7 +734,7 @@ export const taskService = {
         const acceptedSharedCategoryIds =
             includeSharedCategories
                 ? (
-                    await taskRepository
+                    await sharedRepository
                         .findAcceptedSharedCategoryIds(
                             userId,
                         )

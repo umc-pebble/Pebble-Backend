@@ -213,22 +213,6 @@ const lockTaskByTaskDateIdForCompletion = async (
 };
 
 export const taskRepository = {
-    findCategoryById: async (
-        categoryId: number,
-    ) => {
-        return prisma.category.findUnique({
-            where: {
-                id: categoryId,
-            },
-            select: {
-                id: true,
-                userId: true,
-                isShared: true,
-                isHidden: true,
-                color: true,
-            },
-        });
-    },
 
     findMilestoneByIdAndCategoryId: async (
         milestoneId: number,
@@ -241,20 +225,6 @@ export const taskRepository = {
             },
             select: {
                 id: true,
-                categoryId: true,
-            },
-        });
-    },
-
-    findAcceptedSharedCategoryIds: async (
-        userId: number,
-    ) => {
-        return prisma.sharedCategoryMember.findMany({
-            where: {
-                userId,
-                status: 'ACCEPTED',
-            },
-            select: {
                 categoryId: true,
             },
         });

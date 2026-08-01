@@ -133,4 +133,16 @@ export const sharedRepository = {
     expiresAt.setDate(expiresAt.getDate() + 30);
     return prisma.notification.create({ data: { userId, type, relatedId, expiresAt } });
   },
+
+  findAcceptedSharedCategoryIds(userId: number) {
+    return prisma.sharedCategoryMember.findMany({
+      where: {
+        userId,
+        status: SharedCategoryStatus.ACCEPTED,
+      },
+      select: {
+        categoryId: true,
+      },
+    });
+  },
 };
