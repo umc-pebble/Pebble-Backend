@@ -164,6 +164,88 @@ const assertTaskAccess = async (
     );
 };
 
+
+const formatTaskList = <
+    T extends {
+        id: number;
+        userId: number;
+        categoryId: number | null;
+        milestoneId: number | null;
+        name: string;
+        dateType: DateType;
+        startDate: Date | null;
+        endDate: Date | null;
+        color: string | null;
+        isCompleted: boolean;
+        completedAt: Date | null;
+        completedByUserId: number | null;
+        displayOrder: number;
+        category: {
+            color: string;
+        } | null;
+        taskDates: Array<{
+            id: number;
+            date: Date;
+            isCompleted: boolean;
+            completedAt: Date | null;
+            completedByUserId: number | null;
+            exception: {
+                name: string | null;
+                color: string | null;
+            } | null;
+        }>;
+    },
+>(
+    tasks: T[],
+) => ({
+    tasks: tasks.map((task) => {
+        const effectiveColor =
+            task.categoryId === null
+                ? task.color
+                : task.category?.color ?? null;
+
+        return {
+            id: task.id,
+            userId: task.userId,
+            categoryId: task.categoryId,
+            milestoneId: task.milestoneId,
+            name: task.name,
+            dateType: task.dateType,
+            startDate: toDateString(task.startDate),
+            endDate: toDateString(task.endDate),
+            color: effectiveColor,
+            isCompleted: task.isCompleted,
+            completedAt: task.completedAt,
+            completedByUserId: task.completedByUserId,
+            displayOrder: task.displayOrder,
+            ...(task.dateType === DateType.MULTIPLE
+                ? {
+                    taskDates: task.taskDates.map(
+                        (taskDate) => ({
+                            taskDateId: taskDate.id,
+                            date: toDateString(
+                                taskDate.date,
+                            ),
+                            isCompleted:
+                                taskDate.isCompleted,
+                            completedAt:
+                                taskDate.completedAt,
+                            completedByUserId:
+                                taskDate.completedByUserId,
+                            name:
+                                taskDate.exception?.name
+                                ?? task.name,
+                            color:
+                                taskDate.exception?.color
+                                ?? effectiveColor,
+                        }),
+                    ),
+                }
+                : {}),
+        };
+    }),
+});
+
 export const taskService = {
     createTask: async (userId: number, body: CreateTaskBody) => {
         const {categoryId, milestoneId}=body;
@@ -721,53 +803,7 @@ export const taskService = {
                 nextMonthStart,
             );
 
-        return {
-            tasks: tasks.map((task) => {
-                const effectiveColor =
-                    task.categoryId === null
-                        ? task.color
-                        : task.category?.color ?? null;
-
-                return {
-                    id: task.id,
-                    userId: task.userId,
-                    categoryId: task.categoryId,
-                    milestoneId: task.milestoneId,
-                    name: task.name,
-                    dateType: task.dateType,
-                    startDate: toDateString(task.startDate),
-                    endDate: toDateString(task.endDate),
-                    color: effectiveColor,
-                    isCompleted: task.isCompleted,
-                    completedAt: task.completedAt,
-                    completedByUserId: task.completedByUserId,
-                    displayOrder: task.displayOrder,
-
-                    ...(task.dateType === DateType.MULTIPLE ? {
-                            taskDates: task.taskDates.map(
-                                (taskDate) => ({
-                                    taskDateId: taskDate.id,
-                                    date: toDateString(
-                                        taskDate.date,
-                                    ),
-                                    isCompleted:
-                                        taskDate.isCompleted,
-                                    completedAt:
-                                        taskDate.completedAt,
-                                    completedByUserId:
-                                        taskDate.completedByUserId,
-                                    name:
-                                        taskDate.exception?.name
-                                        ?? task.name,
-                                    color:
-                                        taskDate.exception?.color
-                                        ?? effectiveColor,
-                                }),
-                        ),
-                    } : {}),
-                };
-            }),
-        };
+        return formatTaskList(tasks);
     },
 
     reorderTasks: async (
@@ -877,10 +913,23 @@ export const taskService = {
             );
         }
 
-        return taskService.getTasks(
-            targetUserId,
-            baseDate,
-            false,
+        const resolvedBaseDate = parseBaseDate(baseDate);
+        const [year, month] =
+            resolvedBaseDate.split('-').map(Number);
+        const monthStart = new Date(
+            Date.UTC(year, month - 1, 1),
         );
+        const nextMonthStart = new Date(
+            Date.UTC(year, month, 1),
+        );
+
+        const tasks =
+            await taskRepository.findFriendTasksByMonth(
+                targetUserId,
+                monthStart,
+                nextMonthStart,
+            );
+
+        return formatTaskList(tasks);
     },
 };
