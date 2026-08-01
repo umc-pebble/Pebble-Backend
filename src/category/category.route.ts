@@ -36,9 +36,12 @@ router.use('/categories', authMiddleware);
  *   get:
  *     summary: 카테고리 목록 조회 (PLB-010·011)
  *     description: >
- *       로그인한 회원의 카테고리 목록을 생성순(displayOrder 오름차순)으로 조회합니다.
+ *       로그인한 회원의 카테고리 목록을 조회합니다.
  *       userId는 JWT에서 추출하며 별도 파라미터가 없습니다.
  *       본인 소유 카테고리뿐 아니라, 초대를 수락(ACCEPTED)한 공유 카테고리도 함께 포함됩니다.
+ *       정렬은 본인 소유 카테고리(displayOrder 오름차순)가 먼저 오고, 공유받은 카테고리가 그 뒤에 옵니다.
+ *       displayOrder는 카테고리 오너 기준으로 채번되는 순번이라 오너가 다르면 값이 겹칠 수 있어,
+ *       두 구간을 나눠 정렬합니다. 순서 변경(PATCH /categories/order)의 대상도 본인 소유 카테고리뿐입니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
@@ -380,6 +383,9 @@ router.post('/categories', validateBody(createCategorySchema), createCategory);
  *       imageUrl에 null을 보내면 대표 이미지가 삭제되고 기본 이미지로 대체됩니다.
  *       비공개(isPublic=false)로 설정하면 팔로잉 유저 화면에서 카테고리-마일스톤-태스크가 모두 노출되지 않습니다.
  *       공유 카테고리의 경우 오너뿐 아니라 초대를 수락(ACCEPTED)한 멤버도 동등하게 수정할 수 있습니다 (PLB-045).
+ *       단 isPublic(팔로워 공개 여부)과 isHidden(화면 숨김)은 오너만 변경할 수 있습니다(멤버가 보내면 403) —
+ *       카테고리 내용이 아니라 오너 개인의 설정이고, 값이 카테고리에 하나만 저장되어 멤버가 바꾸면
+ *       오너의 공개 범위·화면에 그대로 반영되기 때문입니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
