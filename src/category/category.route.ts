@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { validateBody } from '../middlewares/validate.middleware';
+import { validateBody, validateQuery } from '../middlewares/validate.middleware';
 import {
   createCategorySchema,
   updateCategorySchema,
   reorderCategoriesSchema,
+  listCategoriesQuerySchema,
 } from './category.schema';
 import {
   getCategories,
@@ -64,9 +65,30 @@ router.use('/categories', authMiddleware);
  *       공유 카테고리에서 다른 멤버가 만든 태스크만 있는 경우(sharedTaskCount > 0)가 여기에 해당하며,
  *       이때도 hasSchedules는 false입니다. 사이드바에서는 빈 카테고리와 동일하게 표시되는데,
  *       어차피 요청자의 월별 화면에는 아무것도 뜨지 않으므로 화면상 모순은 없습니다.
+ *
+ *
+ *       owned·isCompleted 쿼리로 조회 범위를 좁힐 수 있습니다. 둘 다 생략하면 위 설명대로
+ *       소유 카테고리와 수락한 공유 카테고리를 모두 반환합니다(사이드바 용도).
+ *       마이페이지의 "완료한 카테고리"는 오너 본인에게만 노출되어야 하므로
+ *       owned=true&isCompleted=true로 조회하세요. 공유 멤버로 참여 중인 카테고리는 제외됩니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: owned
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: >
+ *           true면 본인이 오너인 카테고리만, false면 공유받은 카테고리만 반환합니다.
+ *           생략하면 둘 다 반환합니다.
+ *       - in: query
+ *         name: isCompleted
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: 완료 여부로 거릅니다. 생략하면 완료·미완료를 모두 반환합니다.
  *     responses:
  *       200:
  *         description: 조회 성공
@@ -120,7 +142,7 @@ router.use('/categories', authMiddleware);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/categories', getCategories);
+router.get('/categories', validateQuery(listCategoriesQuerySchema), getCategories);
 
 /**
  * @swagger

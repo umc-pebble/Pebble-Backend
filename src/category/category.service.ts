@@ -18,6 +18,12 @@ interface CreateCategoryInput {
   inviteUserIds?: number[] | null;
 }
 
+// 목록 조회 필터. 라우트의 validateQuery(listCategoriesQuerySchema)가 파싱한 값이 그대로 온다.
+interface ListCategoriesFilter {
+  owned?: boolean;
+  isCompleted?: boolean;
+}
+
 interface UpdateCategoryInput {
   name?: string;
   color?: string;
@@ -84,8 +90,12 @@ export const categoryService = {
   // 프론트는 "이번 달 일정이 있으면 표시 / 전체 일정이 없으면(=빈 카테고리) 표시 /
   // 다른 달에만 있으면 숨김"으로 3분기하는데, 월별 조회만으로는 뒤의 두 경우가 똑같이
   // 빈 결과로 보여 구분되지 않기 때문이다.
-  async getCategories(userId: number) {
-    const categories = await categoryRepository.findVisibleByUserId(userId);
+  //
+  // filters는 화면별 노출 규칙을 서버에서 보장하기 위한 것이다. 대표적으로 마이페이지의
+  // "완료한 카테고리"는 오너 본인에게만 보여야 해서(공유 멤버 화면에는 뜨면 안 됨)
+  // owned=true·isCompleted=true로 조회한다. 사이드바는 필터 없이 기존대로 전부 받는다.
+  async getCategories(userId: number, filters: ListCategoriesFilter = {}) {
+    const categories = await categoryRepository.findVisibleByUserId(userId, filters);
     return categories.map((category) => ({
       ...category,
       // sharedTaskCount는 의도적으로 뺀다. 공유 카테고리에서 다른 멤버가 만든 태스크는

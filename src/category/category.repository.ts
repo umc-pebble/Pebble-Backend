@@ -48,11 +48,33 @@ export const categoryRepository = {
   // 두 집계는 반드시 한 트랜잭션(= 동일 읽기 스냅샷) 안에서 읽어야 한다. 따로 실행하면 그 사이
   // 태스크가 생성·삭제될 때 "전체 개수"와 "내 개수"가 서로 다른 시점을 가리켜,
   // sharedTaskCount(= 전체 - 내 것)가 음수가 되는 등 앞뒤가 맞지 않는 응답이 나갈 수 있다.
-  async findVisibleByUserId(userId: number) {
+  //
+  // filters로 조회 범위를 좁힐 수 있다(둘 다 생략하면 기존 동작 그대로).
+  // - owned=true: 본인이 오너인 카테고리만. 마이페이지의 "완료한 카테고리"처럼 공유받은 항목을
+  //   노출하면 안 되는 화면에서 쓴다. 응답에 userId가 있어 클라이언트가 거를 수도 있지만,
+  //   화면마다 필터를 다시 구현하면 빠뜨리기 쉬워 서버에서 보장한다.
+  // - owned=false: 반대로 공유받은 카테고리만.
+  // - isCompleted: 완료 여부로 거른다. owned와 조합해 "내가 만든 완료 카테고리"를 한 번에 얻는다.
+  async findVisibleByUserId(
+    userId: number,
+    filters: { owned?: boolean; isCompleted?: boolean } = {},
+  ) {
+    // 접근 범위. owned를 안 주면 소유 + 수락한 공유를 모두 본다.
+    const accessScope =
+      filters.owned === undefined
+        ? { OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' as const } } }] }
+        : filters.owned
+          ? { userId }
+          : {
+              userId: { not: userId },
+              members: { some: { userId, status: 'ACCEPTED' as const } },
+            };
+
     const withCounts = await prisma.$transaction(async (tx) => {
       const categories = await tx.category.findMany({
         where: {
-          OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' } } }],
+          ...accessScope,
+          ...(filters.isCompleted === undefined ? {} : { isCompleted: filters.isCompleted }),
         },
         include: {
           _count: { select: { milestones: true, tasks: true } },
