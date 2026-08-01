@@ -4,6 +4,7 @@
 
 import { AppError } from '../utils/app-error';
 import { isFriend } from '../follow/follow.service';
+import { isAcceptedSharedMember, shareCategoryWithUserIds } from '../shared/shared.service';
 import { categoryRepository } from './category.repository';
 
 // 참고: 개수 제한(CATEGORY_LIMIT_EXCEEDED) 생략
@@ -26,13 +27,31 @@ interface UpdateCategoryInput {
 }
 
 // 소유 카테고리 조회 + 소유권 검증. 없으면 404, 본인 소유가 아니면 403.
-// 소유권 판정을 이 한 곳에 모아 조회/수정/삭제가 동일하게 재사용한다.
+// PLB-045: 카테고리 삭제·순서변경은 오너(최초 생성자) 전용이라 공유 멤버를 허용하지 않는다.
+// (편집은 멤버도 동등하게 가능 — updateCategory는 아래 getAccessibleCategoryOrThrow를 쓴다.)
 async function getOwnedCategoryOrThrow(userId: number, categoryId: number) {
   const category = await categoryRepository.findById(categoryId);
   if (!category) {
     throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
   }
   if (category.userId !== userId) {
+    throw new AppError('COMMON_FORBIDDEN', '해당 카테고리에 접근할 권한이 없습니다.');
+  }
+  return category;
+}
+
+// 조회 + 접근 검증. 없으면 404, 오너도 아니고 초대 수락(ACCEPTED)한 공유 멤버도 아니면 403.
+// PLB-045: 카테고리 편집은 오너·멤버가 동등하게 가능. 카테고리 자체 조회 및 하위 마일스톤/태스크
+// 생성·조회 판정(milestoneService.getCategory 재사용)에도 쓰인다.
+async function getAccessibleCategoryOrThrow(userId: number, categoryId: number) {
+  const category = await categoryRepository.findById(categoryId);
+  if (!category) {
+    throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
+  }
+  if (category.userId === userId) {
+    return category;
+  }
+  if (!(await isAcceptedSharedMember(userId, categoryId))) {
     throw new AppError('COMMON_FORBIDDEN', '해당 카테고리에 접근할 권한이 없습니다.');
   }
   return category;
@@ -85,24 +104,16 @@ export const categoryService = {
     return category;
   },
 
-  // 단건 조회 (소유권 검증 포함).
+  // 단건 조회 (접근 검증 포함). 오너뿐 아니라 초대를 수락한 공유 멤버도 조회할 수 있다.
+  // milestoneService가 하위 마일스톤 생성/조회/이동 시 이 판정을 그대로 재사용한다.
   getCategory(userId: number, categoryId: number) {
-    return getOwnedCategoryOrThrow(userId, categoryId);
+    return getAccessibleCategoryOrThrow(userId, categoryId);
   },
 
-  // 카테고리 생성.
+  // 카테고리 생성. inviteUserIds가 있으면 생성과 동시에 공유 카테고리로 전환한다 (PLB-044).
+  // 초대는 shareCategory(POST /categories/{id}/share)와 동일하게 all-or-nothing이다 —
+  // 대상 중 하나라도 검증에 실패하면 카테고리 생성 자체를 롤백한다(반쪽 성공 상태를 만들지 않는다).
   async createCategory(userId: number, input: CreateCategoryInput) {
-    // 초대(inviteUserIds)는 준비 중 — 구현 전까지 명시적으로 거부한다.
-    // (조용히 무시하면 클라이언트가 초대가 전달된 것으로 오해하므로, 반쪽 성공 대신 400)
-    // TODO(shared 경계 협의 후): 요청자 OWNER 등록 + 팔로잉 검증 후 초대자 PENDING 등록,
-    //   초대 일부 실패해도 생성은 성공(부분 성공) → { category, invites }로 반환, isShared=true 설정.
-    if (Array.isArray(input.inviteUserIds) && input.inviteUserIds.length > 0) {
-      throw new AppError(
-        'COMMON_INVALID_INPUT',
-        '카테고리 초대 기능은 준비 중입니다. inviteUserIds 없이 생성해주세요.',
-      );
-    }
-
     // displayOrder(맨 뒤 순번)는 repository가 트랜잭션 안에서 원자적으로 채번한다.
     // (개수 제한 검사는 상한 숫자 확정 후 여기에 추가)
     const category = await categoryRepository.create({
@@ -115,16 +126,31 @@ export const categoryService = {
       isCompleted: input.isCompleted ?? false,
     });
 
+    if (Array.isArray(input.inviteUserIds) && input.inviteUserIds.length > 0) {
+      // shareCategoryWithUserIds가 검증에 실패하면 throw하는데, 카테고리는 이미 생성된 뒤라
+      // 그대로 두면 "초대는 실패했는데 카테고리만 남는" 반쪽 상태가 된다. 실패 시 방금 만든
+      // 카테고리를 함께 지워서(하위 마일스톤/태스크가 없는 시점이라 CASCADE 걱정 없음)
+      // 요청 전체를 all-or-nothing으로 되돌린다.
+      try {
+        const members = await shareCategoryWithUserIds(userId, category.id, input.inviteUserIds);
+        return { category: { ...category, isShared: true }, members };
+      } catch (err) {
+        await categoryRepository.delete(category.id);
+        throw err;
+      }
+    }
+
     return { category };
   },
 
-  // 부분 수정 (전달된 필드만 반영). 소유권 검증 후 위임.
+  // 부분 수정 (전달된 필드만 반영). PLB-045: 카테고리 편집은 오너와 ACCEPTED 멤버가 동등하게
+  // 할 수 있다(삭제만 오너 전용) — 접근 검증 후 위임.
   async updateCategory(
     userId: number,
     categoryId: number,
     input: UpdateCategoryInput,
   ) {
-    await getOwnedCategoryOrThrow(userId, categoryId);
+    await getAccessibleCategoryOrThrow(userId, categoryId);
     return categoryRepository.update(categoryId, {
       name: input.name,
       color: input.color,
