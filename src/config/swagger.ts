@@ -72,6 +72,30 @@ const options: swaggerJSDoc.Options = {
             isCompleted: { type: 'boolean', example: false },
             isShared: { type: 'boolean', example: false },
             displayOrder: { type: 'integer', example: 0 },
+            milestoneCount: {
+              type: 'integer',
+              description:
+                '카테고리에 속한 마일스톤 수(월 무관, 전체). 접근 가능한 전체 개수이며 공유 카테고리도 포함합니다. MULTIPLE(다중)은 회차마다 row라 회차 수만큼 카운트됩니다. 목록 조회(GET /categories)에서만 내려갑니다.',
+              example: 2,
+            },
+            taskCount: {
+              type: 'integer',
+              description:
+                '카테고리에 속한 태스크 중 "요청자 본인이 만든" 태스크 수(월 무관, 전체). GET /tasks가 반환하는 집합과 같은 기준입니다. 목록 조회(GET /categories)에서만 내려갑니다.',
+              example: 5,
+            },
+            sharedTaskCount: {
+              type: 'integer',
+              description:
+                '공유 카테고리에서 다른 멤버가 만든 태스크 수. 이 태스크들은 아직 월별 조회(GET /tasks)에 포함되지 않으므로 화면 표시 판정에는 사용하지 마세요(hasSchedules에도 합산되지 않습니다). 목록 조회(GET /categories)에서만 내려갑니다.',
+              example: 0,
+            },
+            hasSchedules: {
+              type: 'boolean',
+              description:
+                '월과 무관하게, 요청자의 월별 조회(GET /tasks, GET /milestones)에 나타날 수 있는 일정이 이 카테고리에 하나라도 있는지 여부(= milestoneCount + taskCount > 0). sharedTaskCount는 합산되지 않습니다. 따라서 false는 "이 카테고리에 일정이 전혀 없다"가 아니라 "요청자의 월별 조회에는 어느 달에도 나타나지 않는다"는 뜻이며, 공유 카테고리에서 다른 멤버가 만든 태스크만 있는 경우가 여기에 해당합니다. 목록 조회(GET /categories)에서만 내려갑니다.',
+              example: true,
+            },
             createdAt: {
               type: 'string',
               format: 'date-time',
