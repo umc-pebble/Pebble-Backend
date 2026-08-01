@@ -3,7 +3,7 @@ import { AppError } from '../utils/app-error';
 import { taskRepository, CreateTaskData, ReplaceTaskData } from './task.repository';
 import { CreateTaskBody, ReorderTasksBody, UpdateTaskBody } from './task.schema';
 import { isFriend } from '../follow/follow.service';
-import { isAcceptedSharedMember } from '../shared/shared.service';
+import { categoryService } from '../category/category.service';
 
 const toDate = (value: string): Date => {
     const [year, month, day] = value.split('-').map(Number);
@@ -138,43 +138,6 @@ type AccessibleTask = NonNullable<
     >
 >;
 
-const assertCategoryAccess = async (
-    userId: number,
-    categoryId: number,
-) => {
-    const category =
-        await taskRepository.findCategoryById(
-            categoryId,
-        );
-
-    if (!category) {
-        throw new AppError(
-            'COMMON_NOT_FOUND',
-            '카테고리를 찾을 수 없습니다.',
-        );
-    }
-
-    if (category.userId === userId) {
-        return category;
-    }
-
-    const isAcceptedMember =
-        category.isShared &&
-        await isAcceptedSharedMember(
-            userId,
-            categoryId,
-        );
-
-    if (!isAcceptedMember) {
-        throw new AppError(
-            'COMMON_FORBIDDEN',
-            '해당 카테고리에 접근할 권한이 없습니다.',
-        );
-    }
-
-    return category;
-};
-
 const assertTaskAccess = async (
     userId: number,
     task: AccessibleTask,
@@ -190,7 +153,7 @@ const assertTaskAccess = async (
         return;
     }
 
-    await assertCategoryAccess(
+    await categoryService.getCategory(
         userId,
         task.categoryId,
     );
@@ -216,25 +179,25 @@ export const taskService = {
 
         // 2. 카테고리 / 마일스톤 검증
         if (categoryId != null) {
-            await assertCategoryAccess(
+            await categoryService.getCategory(
                 userId,
                 categoryId,
             );
-        }
 
-        if (milestoneId != null) {
-            const milestone =
-                await taskRepository
-                    .findMilestoneByIdAndCategoryId(
-                        milestoneId,
-                        categoryId!,
+            if (milestoneId != null) {
+                const milestone =
+                    await taskRepository
+                        .findMilestoneByIdAndCategoryId(
+                            milestoneId,
+                            categoryId,
+                        );
+
+                if (!milestone) {
+                    throw new AppError(
+                        'COMMON_INVALID_INPUT',
+                        '해당 마일스톤이 존재하지 않거나 선택한 카테고리에 속하지 않습니다.',
                     );
-
-            if (!milestone) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '해당 마일스톤이 존재하지 않거나 선택한 카테고리에 속하지 않습니다.',
-                );
+                }
             }
         }
 
@@ -292,7 +255,7 @@ export const taskService = {
 
         if (categoryId !== null) {
             const category =
-                await assertCategoryAccess(
+                await categoryService.getCategory(
                     userId,
                     categoryId,
                 );
@@ -326,7 +289,7 @@ export const taskService = {
                 : null;
 
         const replacementData: ReplaceTaskData = {
-            userId,
+            userId: task.userId,
             categoryId,
             milestoneId,
             name: body.name.trim(),
@@ -544,7 +507,7 @@ export const taskService = {
 
             return taskRepository.deleteTaskById(
                 taskId,
-                userId,
+                task.userId,
                 activityDate,
                 task.isCompleted,
             );
@@ -583,7 +546,7 @@ export const taskService = {
 
             await taskRepository.deleteTaskDateById(
                 taskDateId,
-                userId,
+                task.userId,
                 activityDate,
                 taskDate.isCompleted,
             );
@@ -756,6 +719,7 @@ export const taskService = {
     getTasks: async (
         userId: number,
         baseDate?: string,
+        includeSharedCategories = true,
     ) => {
         const resolvedBaseDate = parseBaseDate(baseDate);
         const [year, month] = resolvedBaseDate.split('-').map(Number);
@@ -766,17 +730,18 @@ export const taskService = {
             Date.UTC(year, month, 1),
         );
 
-        const acceptedSharedCategories =
-            await taskRepository
-                .findAcceptedSharedCategoryIds(
-                    userId,
-                );
-
         const acceptedSharedCategoryIds =
-            acceptedSharedCategories.map(
-                (membership) =>
-                    membership.categoryId,
-            );
+            includeSharedCategories
+                ? (
+                    await taskRepository
+                        .findAcceptedSharedCategoryIds(
+                            userId,
+                        )
+                ).map(
+                    (membership) =>
+                        membership.categoryId,
+                )
+                : [];
 
         const tasks =
             await taskRepository.findTasksByMonth(
@@ -850,7 +815,7 @@ export const taskService = {
             );
         }
 
-        await assertCategoryAccess(
+        await categoryService.getCategory(
             userId,
             milestone.categoryId,
         );
@@ -942,6 +907,7 @@ export const taskService = {
         return taskService.getTasks(
             targetUserId,
             baseDate,
+            false,
         );
     },
 };
