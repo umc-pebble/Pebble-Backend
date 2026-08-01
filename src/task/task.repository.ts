@@ -1220,6 +1220,124 @@ export const taskRepository = {
         });
     },
 
+
+    // 카테고리/마일스톤 하위 태스크는 공개 카테고리만 포함한다.(비공개 제외)
+    // 공유 카테고리는 대상 사용자가 소유한 카테고리가 아니므로 제외된다.
+    findFriendTasksByMonth: async (
+        targetUserId: number,
+        monthStart: Date,
+        nextMonthStart: Date,
+    ) => {
+        return prisma.task.findMany({
+            where: {
+                AND: [
+                    {
+                        OR: [
+                            // 대상 사용자가 만든 독립 태스크
+                            {
+                                userId: targetUserId,
+                                categoryId: null,
+                                milestoneId: null,
+                            },
+                            // 대상 사용자가 소유한 공개 카테고리의 하위 태스크
+                            {
+                                category: {
+                                    is: {
+                                        userId: targetUserId,
+                                        isPublic: true,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                    {
+                        OR: [
+                            {
+                                dateType: DateType.SINGLE,
+                                startDate: {
+                                    gte: monthStart,
+                                    lt: nextMonthStart,
+                                },
+                            },
+                            {
+                                dateType: DateType.RANGE,
+                                startDate: {
+                                    lt: nextMonthStart,
+                                },
+                                endDate: {
+                                    gte: monthStart,
+                                },
+                            },
+                            {
+                                dateType: DateType.MULTIPLE,
+                                taskDates: {
+                                    some: {
+                                        date: {
+                                            gte: monthStart,
+                                            lt: nextMonthStart,
+                                        },
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+            select: {
+                id: true,
+                userId: true,
+                categoryId: true,
+                milestoneId: true,
+                name: true,
+                dateType: true,
+                startDate: true,
+                endDate: true,
+                color: true,
+                isCompleted: true,
+                completedAt: true,
+                completedByUserId: true,
+                displayOrder: true,
+                category: {
+                    select: {
+                        color: true,
+                    },
+                },
+                taskDates: {
+                    where: {
+                        date: {
+                            gte: monthStart,
+                            lt: nextMonthStart,
+                        },
+                    },
+                    select: {
+                        id: true,
+                        date: true,
+                        isCompleted: true,
+                        completedAt: true,
+                        completedByUserId: true,
+                        exception: {
+                            select: {
+                                name: true,
+                                color: true,
+                            },
+                        },
+                    },
+                    orderBy: {
+                        date: 'asc',
+                    },
+                },
+            },
+            orderBy: [
+                {
+                    displayOrder: 'asc',
+                },
+                {
+                    id: 'asc',
+                },
+            ],
+        });
+    },
+
     findMilestoneById: async (
         milestoneId: number,
     ) => {
