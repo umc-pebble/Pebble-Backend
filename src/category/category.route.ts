@@ -383,6 +383,9 @@ router.post('/categories', validateBody(createCategorySchema), createCategory);
  *       imageUrl에 null을 보내면 대표 이미지가 삭제되고 기본 이미지로 대체됩니다.
  *       비공개(isPublic=false)로 설정하면 팔로잉 유저 화면에서 카테고리-마일스톤-태스크가 모두 노출되지 않습니다.
  *       공유 카테고리의 경우 오너뿐 아니라 초대를 수락(ACCEPTED)한 멤버도 동등하게 수정할 수 있습니다 (PLB-045).
+ *       단 isPublic(팔로워 공개 여부)과 isHidden(화면 숨김)은 오너만 변경할 수 있습니다(멤버가 보내면 403) —
+ *       카테고리 내용이 아니라 오너 개인의 설정이고, 값이 카테고리에 하나만 저장되어 멤버가 바꾸면
+ *       오너의 공개 범위·화면에 그대로 반영되기 때문입니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []

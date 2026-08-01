@@ -145,12 +145,28 @@ export const categoryService = {
 
   // 부분 수정 (전달된 필드만 반영). PLB-045: 카테고리 편집은 오너와 ACCEPTED 멤버가 동등하게
   // 할 수 있다(삭제만 오너 전용) — 접근 검증 후 위임.
+  //
+  // 다만 isPublic·isHidden 두 필드는 오너로 제한한다. 나머지 필드가 "카테고리의 내용"인 것과 달리
+  // 이 둘은 오너 개인의 설정이고, 컬럼이 카테고리 row에 하나뿐이라 멤버가 바꾸면 오너에게 그대로 반영된다.
+  // - isPublic: 오너의 팔로워에게 공개할지 여부. 멤버가 남의 공개 범위를 바꾸게 된다.
+  // - isHidden: 스키마 주석대로 "내 화면 숨김"인데 저장 위치가 카테고리라, 멤버가 숨기면
+  //   오너 화면에서도 사라진다. 멤버가 공유 카테고리를 자기 화면에서만 숨기려면
+  //   SharedCategoryMember 쪽에 별도 컬럼이 필요하다(이번 범위 밖).
   async updateCategory(
     userId: number,
     categoryId: number,
     input: UpdateCategoryInput,
   ) {
-    await getAccessibleCategoryOrThrow(userId, categoryId);
+    const category = await getAccessibleCategoryOrThrow(userId, categoryId);
+    if (
+      category.userId !== userId &&
+      (input.isPublic !== undefined || input.isHidden !== undefined)
+    ) {
+      throw new AppError(
+        'COMMON_FORBIDDEN',
+        '카테고리의 공개 여부와 숨김 설정은 오너만 변경할 수 있습니다.',
+      );
+    }
     return categoryRepository.update(categoryId, {
       name: input.name,
       color: input.color,
