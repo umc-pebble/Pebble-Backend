@@ -42,6 +42,22 @@ export const reorderCategoriesSchema = z.object({
     .min(1, 'orderedIds는 비어 있을 수 없습니다.'),
 });
 
+// 쿼리스트링 불리언. z.coerce.boolean()은 비어 있지 않은 문자열을 전부 true로 만들어
+// "false"까지 true가 되므로 쓸 수 없다. 문자열 값을 직접 좁힌 뒤 변환한다.
+const queryBoolean = (field: string) =>
+  z
+    .enum(['true', 'false'], {
+      errorMap: () => ({ message: `${field}는 true 또는 false여야 합니다.` }),
+    })
+    .transform((value) => value === 'true');
+
+// 카테고리 목록 조회 필터. 둘 다 생략하면 기존 동작(소유 + 수락한 공유 카테고리 전부)이다.
+export const listCategoriesQuerySchema = z.object({
+  owned: queryBoolean('owned').optional(),
+  isCompleted: queryBoolean('isCompleted').optional(),
+});
+
 export type CreateCategoryBody = z.infer<typeof createCategorySchema>;
 export type UpdateCategoryBody = z.infer<typeof updateCategorySchema>;
 export type ReorderCategoriesBody = z.infer<typeof reorderCategoriesSchema>;
+export type ListCategoriesQuery = z.infer<typeof listCategoriesQuerySchema>;

@@ -24,6 +24,18 @@ export const getMilestones = async (req: AuthRequest, res: Response, next: NextF
   }
 };
 
+// 월별 마일스톤 목록. baseDate는 쿼리 파라미터이며, 형식 검증은 service가 담당한다
+// (GET /tasks와 같은 계약이라 파싱 규칙을 한 곳에 모아 둔다).
+export const getMonthlyMilestones = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const baseDate = req.query.baseDate !== undefined ? String(req.query.baseDate) : undefined;
+    const milestones = await milestoneService.getMonthlyMilestones(req.userId!, baseDate);
+    sendSuccess(res, { milestones }, '월별 마일스톤 조회 성공');
+  } catch (err) {
+    next(err);
+  }
+};
+
 // 친구 프로필 조회(#64): 친구의 공개 카테고리 하위 마일스톤 목록. userId·categoryId는 경로 파라미터.
 export const getFriendMilestones = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {

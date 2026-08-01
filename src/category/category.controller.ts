@@ -8,6 +8,7 @@ import {
   CreateCategoryBody,
   UpdateCategoryBody,
   ReorderCategoriesBody,
+  ListCategoriesQuery,
 } from './category.schema';
 
 // Category Controller
@@ -26,7 +27,9 @@ function parseCategoryId(raw: string): number {
 
 export const getCategories = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const categories = await categoryService.getCategories(req.userId!);
+    // 필터는 라우트의 validateQuery(listCategoriesQuerySchema)가 이미 파싱·검증했다.
+    const { owned, isCompleted } = req.query as unknown as ListCategoriesQuery;
+    const categories = await categoryService.getCategories(req.userId!, { owned, isCompleted });
     sendSuccess(res, { categories }, '카테고리 목록 조회 성공');
   } catch (err) {
     next(err);

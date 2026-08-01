@@ -25,16 +25,93 @@ export const categoryRepository = {
   // 순서를 바꿀 수 있는 대상도 본인 소유 카테고리뿐이므로(reorderCategories), 공유받은 항목을
   // 뒤로 모아야 순서 변경 API의 계약과도 어긋나지 않는다.
   // 각 구간 안은 displayOrder 오름차순이고, 그것마저 같으면 id(생성 순)로 갈라 순서를 고정한다.
-  async findVisibleByUserId(userId: number) {
-    const categories = await prisma.category.findMany({
-      where: {
-        OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' } } }],
-      },
-      orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+  //
+  // 각 카테고리의 일정 개수를 함께 집계한다. 사이드바가 "이 카테고리에 일정이 아예 없는지"를
+  // 판단하는 데 쓰는데, 월별 조회(GET /tasks, GET /milestones)는 필터 결과만 주므로 "이번 달에 없다"와
+  // "아예 없다"를 구분할 수 없기 때문이다.
+  //
+  // 집계 기준이 마일스톤과 태스크에서 다른데, 각각 대응하는 월별 조회가 실제로 반환하는 집합에
+  // 맞춘 것이다(기준이 어긋나면 "전체로는 있는데 어느 달에도 안 보이는" 카테고리가 생겨 영구 숨김된다).
+  // - milestoneCount: 카테고리 전체. 마일스톤은 userId가 없어 카테고리 접근 권한이 곧 접근 권한이고,
+  //   milestoneRepository.findManyByMonth도 같은 범위를 반환한다.
+  // - taskCount: 요청자가 만든 것만. 태스크 월별 조회(task.repository.findTasksByMonth)가 `userId`로
+  //   거르기 때문이다. 여기서의 userId는 카테고리 오너가 아니라 요청자다.
+  //   태스크 도메인이 공유 카테고리를 지원하게 되어 findTasksByMonth의 필터가 넓어지면
+  //   이 집계도 반드시 같이 넓혀야 한다. 한쪽만 바뀌면 사이드바에서 카테고리가 조용히 사라진다.
+  // - sharedTaskCount: 공유 카테고리에서 다른 멤버가 만든 태스크. 위 이유로 아직 월별 조회에
+  //   잡히지 않아 표시 판정에는 넣지 않고, 존재 사실만 별도로 노출한다.
+  //
+  // 태스크는 관계 카운트(_count)로 전체 개수만 받고, 요청자 몫은 groupBy로 따로 센 뒤 뺀다.
+  // _count.select의 키는 관계 이름이라 같은 tasks 관계를 서로 다른 두 조건으로 두 번 셀 수 없다.
+  // 카테고리 수와 무관하게 쿼리는 항상 2번이라 N+1이 되지 않는다.
+  //
+  // 두 집계는 반드시 한 트랜잭션(= 동일 읽기 스냅샷) 안에서 읽어야 한다. 따로 실행하면 그 사이
+  // 태스크가 생성·삭제될 때 "전체 개수"와 "내 개수"가 서로 다른 시점을 가리켜,
+  // sharedTaskCount(= 전체 - 내 것)가 음수가 되는 등 앞뒤가 맞지 않는 응답이 나갈 수 있다.
+  //
+  // filters로 조회 범위를 좁힐 수 있다(둘 다 생략하면 기존 동작 그대로).
+  // - owned=true: 본인이 오너인 카테고리만. 마이페이지의 "완료한 카테고리"처럼 공유받은 항목을
+  //   노출하면 안 되는 화면에서 쓴다. 응답에 userId가 있어 클라이언트가 거를 수도 있지만,
+  //   화면마다 필터를 다시 구현하면 빠뜨리기 쉬워 서버에서 보장한다.
+  // - owned=false: 반대로 공유받은 카테고리만.
+  // - isCompleted: 완료 여부로 거른다. owned와 조합해 "내가 만든 완료 카테고리"를 한 번에 얻는다.
+  async findVisibleByUserId(
+    userId: number,
+    filters: { owned?: boolean; isCompleted?: boolean } = {},
+  ) {
+    // 접근 범위. owned를 안 주면 소유 + 수락한 공유를 모두 본다.
+    const accessScope =
+      filters.owned === undefined
+        ? { OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' as const } } }] }
+        : filters.owned
+          ? { userId }
+          : {
+              userId: { not: userId },
+              members: { some: { userId, status: 'ACCEPTED' as const } },
+            };
+
+    const withCounts = await prisma.$transaction(async (tx) => {
+      const categories = await tx.category.findMany({
+        where: {
+          ...accessScope,
+          ...(filters.isCompleted === undefined ? {} : { isCompleted: filters.isCompleted }),
+        },
+        include: {
+          _count: { select: { milestones: true, tasks: true } },
+        },
+        orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+      });
+
+      // 카테고리가 없으면 in: [] 로 의미 없는 쿼리를 날리지 않는다.
+      const myTaskCounts = new Map<number, number>();
+      if (categories.length > 0) {
+        const grouped = await tx.task.groupBy({
+          by: ['categoryId'],
+          where: { categoryId: { in: categories.map((c) => c.id) }, userId },
+          _count: { _all: true },
+        });
+        for (const row of grouped) {
+          // by에 넣은 categoryId는 위 where에서 non-null만 걸렀지만 타입상 nullable이다.
+          if (row.categoryId !== null) {
+            myTaskCounts.set(row.categoryId, row._count._all);
+          }
+        }
+      }
+
+      return categories.map(({ _count, ...category }) => {
+        const taskCount = myTaskCounts.get(category.id) ?? 0;
+        return {
+          ...category,
+          milestoneCount: _count.milestones,
+          taskCount,
+          sharedTaskCount: _count.tasks - taskCount,
+        };
+      });
     });
+
     return [
-      ...categories.filter((category) => category.userId === userId),
-      ...categories.filter((category) => category.userId !== userId),
+      ...withCounts.filter((category) => category.userId === userId),
+      ...withCounts.filter((category) => category.userId !== userId),
     ];
   },
 
