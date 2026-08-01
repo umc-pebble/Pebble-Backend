@@ -18,13 +18,24 @@ export const categoryRepository = {
 
   // GET /categories 목록용. 본인 소유 카테고리 + 초대를 수락(ACCEPTED)한 공유 카테고리를 함께 반환한다.
   // findManyByUserId와 달리 reorder 등 "소유"를 전제하는 로직에서는 쓰면 안 된다.
-  findVisibleByUserId(userId: number) {
-    return prisma.category.findMany({
+  //
+  // 정렬은 본인 소유를 먼저, 공유받은 카테고리를 그 뒤에 둔다. displayOrder는 create가
+  // "그 오너의 카테고리 중 최대값 + 1"로 채번하는 오너 기준 순번이라, 남의 카테고리를 한 줄로
+  // 섞으면 순번이 겹치고(내 0,1,2 + 오너의 1) 겹친 항목의 순서가 조회할 때마다 달라진다.
+  // 순서를 바꿀 수 있는 대상도 본인 소유 카테고리뿐이므로(reorderCategories), 공유받은 항목을
+  // 뒤로 모아야 순서 변경 API의 계약과도 어긋나지 않는다.
+  // 각 구간 안은 displayOrder 오름차순이고, 그것마저 같으면 id(생성 순)로 갈라 순서를 고정한다.
+  async findVisibleByUserId(userId: number) {
+    const categories = await prisma.category.findMany({
       where: {
         OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' } } }],
       },
-      orderBy: { displayOrder: 'asc' },
+      orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
     });
+    return [
+      ...categories.filter((category) => category.userId === userId),
+      ...categories.filter((category) => category.userId !== userId),
+    ];
   },
 
   // 친구 프로필 조회(PLB-040·#64)용 공개 카테고리 목록. 남의 것이라도 isPublic=true만 노출한다.

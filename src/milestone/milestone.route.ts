@@ -25,7 +25,7 @@ router.use(['/categories', '/milestones'], authMiddleware);
  * @swagger
  * tags:
  *   name: Milestone
- *   description: 마일스톤 (카테고리 하위 계층, userId 없이 카테고리로 소유 판정)
+ *   description: 마일스톤 (카테고리 하위 계층, userId 없이 상위 카테고리로 권한 판정 — 공유 카테고리에서는 오너와 초대를 수락한 멤버가 동등)
  */
 
 /**
@@ -375,8 +375,11 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *
  *       현재 소속과 다른 categoryId를 보내면 카테고리 이동으로 동작합니다(#86). 이름·날짜 수정과 함께 보낼 수 있으며,
  *       이름·날짜를 먼저 반영한 뒤 이동하므로 바뀐 날짜 기준으로 대상 카테고리의 표시 순서가 정해집니다.
- *       대상 카테고리는 본인 소유여야 하고(없으면 404, 남의 것이면 403), 검증은 수정 전에 이루어지므로
- *       실패하면 이름·날짜도 바뀌지 않습니다.
+ *       대상 카테고리는 본인이 접근할 수 있어야 하고(없으면 404, 권한이 없으면 403), 검증은 수정 전에
+ *       이루어지므로 실패하면 이름·날짜도 바뀌지 않습니다.
+ *       단, 공유 카테고리의 마일스톤을 다른 카테고리로 옮기는 것은 오너만 가능합니다(멤버가 시도하면 403) —
+ *       옮기고 나면 나머지 멤버의 목록에서 사라져 그들에게는 삭제와 같은 효과이기 때문입니다.
+ *       멤버는 공유 카테고리 안에서의 수정은 그대로 할 수 있습니다.
  *       하위 태스크도 같은 카테고리로 함께 이동하며(태스크 생성이 "마일스톤이 그 카테고리에 속하는지"를 검증하기 때문),
  *       taskId·milestoneId·태스크 날짜는 그대로 유지됩니다.
  *       MULTIPLE는 회차가 흩어지면 안 되므로 editScope와 무관하게 같은 seriesId의 회차 전체가 함께 이동합니다.
@@ -403,7 +406,7 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *                 description: >
  *                   옮길 카테고리 ID(#86). 현재 소속과 다르면 카테고리 이동이 수행되고, 같은 값이면 변경 없이 통과합니다
  *                   (수정 모달이 폼 전체를 보내는 경우). 이 필드만 단독으로 보내도 유효한 수정 요청입니다.
- *                   본인 소유가 아니면 403, 존재하지 않으면 404.
+ *                   접근 권한이 없으면 403, 존재하지 않으면 404. 공유 카테고리에서 밖으로 옮기는 것은 오너만 가능합니다.
  *               dateType:
  *                 type: string
  *                 enum: [SINGLE, RANGE, MULTIPLE]
@@ -549,7 +552,7 @@ router.patch('/categories/:categoryId/milestones/order', validateBody(reorderMil
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
- *         description: 남의 마일스톤을 수정하거나, 남의 카테고리로 이동을 시도한 경우
+ *         description: 접근 권한이 없는 마일스톤을 수정하거나 접근 권한이 없는 카테고리로 이동을 시도한 경우, 또는 공유 카테고리의 마일스톤을 오너가 아닌 멤버가 다른 카테고리로 옮기려 한 경우
  *         content:
  *           application/json:
  *             schema:

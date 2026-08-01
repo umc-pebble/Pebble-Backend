@@ -1,8 +1,11 @@
 // Milestone Service
-// 비즈니스 로직 계층. 소유권(2-hop: milestone→category→userId)·날짜 규칙·scope 규칙을 담당한다.
+// 비즈니스 로직 계층. 접근 권한(2-hop: milestone→category)·날짜 규칙·scope 규칙을 담당한다.
+// 마일스톤은 자체 소유자 컬럼이 없어 상위 카테고리로 권한을 판정한다 — 오너뿐 아니라
+// 초대를 수락(ACCEPTED)한 공유 멤버도 동등하게 편집할 수 있다 (PLB-045).
 // MULTIPLE(다중 날짜)는 선택한 날짜마다 실제 row(회차)로 저장되며 같은 seriesId를 공유한다.
 
 import { AppError } from '../utils/app-error';
+import { isAcceptedSharedMember } from '../shared/shared.service';
 import { milestoneRepository } from './milestone.repository';
 import { categoryService } from '../category/category.service';
 
@@ -50,13 +53,20 @@ function toMilestoneResponse<T extends { startDate: Date; endDate: Date | null }
   };
 }
 
-// 마일스톤 단건 소유권 검증(2-hop). 없으면 404, 상위 카테고리가 남의 것이면 403.
-async function getOwnedMilestoneOrThrow(userId: number, milestoneId: number) {
+// 마일스톤 단건 접근 검증(2-hop). 없으면 404, 상위 카테고리의 오너도 아니고
+// 초대를 수락(ACCEPTED)한 공유 멤버도 아니면 403.
+// 공유 멤버 판정은 shared 도메인의 isAcceptedSharedMember를 재사용한다 — categoryService가
+// 카테고리 단건에 쓰는 것과 같은 판정을 마일스톤에도 그대로 적용해 규칙이 갈리지 않게 한다.
+// (목록·생성·순서 변경은 categoryService.getCategory를 재사용하므로 이 함수를 거치지 않는다.)
+async function getAccessibleMilestoneOrThrow(userId: number, milestoneId: number) {
   const milestone = await milestoneRepository.findByIdWithCategory(milestoneId);
   if (!milestone) {
     throw new AppError('COMMON_NOT_FOUND', '마일스톤을 찾을 수 없습니다.');
   }
-  if (milestone.category.userId !== userId) {
+  if (
+    milestone.category.userId !== userId &&
+    !(await isAcceptedSharedMember(userId, milestone.categoryId))
+  ) {
     throw new AppError('COMMON_FORBIDDEN', '해당 마일스톤에 접근할 권한이 없습니다.');
   }
   return milestone;
@@ -175,10 +185,10 @@ export const milestoneService = {
     milestoneId: number,
     input: UpdateMilestoneInput,
   ) {
-    const existing = await getOwnedMilestoneOrThrow(userId, milestoneId);
+    const existing = await getAccessibleMilestoneOrThrow(userId, milestoneId);
 
     // 카테고리 이동(#86). 같은 값이면 변경이 없으므로 이동하지 않는다(수정 모달이 폼 전체를
-    // 보내는 경우가 있다). 대상 카테고리 소유 검증은 여기서 먼저 해서(없으면 404, 남의 것이면 403)
+    // 보내는 경우가 있다). 대상 카테고리 접근 검증은 여기서 먼저 해서(없으면 404, 권한 없으면 403)
     // 이름·날짜가 반영되기 전에 막는다. 실제 이동은 이름·날짜 수정을 마친 뒤 마지막에 수행한다 —
     // 폼 전체 전송이면 날짜도 함께 바뀌는데, 바뀐 startDate 기준으로 대상 카테고리의 순번을
     // 채번해야 목록이 D-Day 순으로 정리되기 때문이다.
@@ -187,6 +197,17 @@ export const milestoneService = {
         ? input.categoryId
         : undefined;
     if (moveTo !== undefined) {
+      // 공유 카테고리 밖으로 옮기면 나머지 멤버의 목록에서 그 마일스톤이 사라진다 —
+      // 그들 입장에서는 삭제와 다르지 않다. 카테고리 삭제를 오너 전용으로 둔 것과 같은 이유로
+      // 반출도 오너만 할 수 있게 한다. 공유 카테고리 "안에서의" 수정은 멤버도 그대로 가능하다.
+      // 정책 미확정 구간이라 보수적으로 막아둔 것이다 — 멤버 반출을 허용하기로 정해지면
+      // 이 분기만 지우면 된다.
+      if (existing.category.isShared && existing.category.userId !== userId) {
+        throw new AppError(
+          'COMMON_FORBIDDEN',
+          '공유 카테고리의 마일스톤은 오너만 다른 카테고리로 옮길 수 있습니다.',
+        );
+      }
       await categoryService.getCategory(userId, moveTo); // 404/403 판정 재사용
     }
 
@@ -296,7 +317,7 @@ export const milestoneService = {
   //   ALL=해당 회차 + 같은 seriesId의 "오늘 이후 + 미완료" 회차 일괄(완료된 과거 회차 보존).
   // - SINGLE/RANGE에는 deleteScope를 지정할 수 없다.
   async deleteMilestone(userId: number, milestoneId: number, deleteScope?: string) {
-    const existing = await getOwnedMilestoneOrThrow(userId, milestoneId);
+    const existing = await getAccessibleMilestoneOrThrow(userId, milestoneId);
 
     if (existing.dateType === 'MULTIPLE') {
       if (deleteScope !== 'THIS_ONLY' && deleteScope !== 'ALL') {
