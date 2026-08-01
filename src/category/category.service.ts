@@ -58,8 +58,9 @@ async function assertFriendProfileAccess(requesterId: number, targetUserId: numb
 
 export const categoryService = {
   // 내 카테고리 목록 (displayOrder 순은 repository가 보장).
+  // 본인 소유 카테고리 + 초대를 수락한 공유 카테고리를 함께 반환한다.
   getCategories(userId: number) {
-    return categoryRepository.findManyByUserId(userId);
+    return categoryRepository.findVisibleByUserId(userId);
   },
 
   // 친구(또는 본인)의 공개 카테고리 목록 (#64·PLB-040). 비공개(isPublic=false)는 노출하지 않는다.
