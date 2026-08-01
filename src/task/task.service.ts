@@ -75,12 +75,14 @@ type TaskMutationResult = {
     color: string | null;
     isCompleted: boolean;
     completedAt: Date | null;
+    completedByUserId: number | null;
     displayOrder: number;
     taskDates: Array<{
         id: number;
         date: Date;
         isCompleted: boolean;
         completedAt: Date | null;
+        completedByUserId: number | null;
         exception?: {
             name: string | null;
             color: string | null;
@@ -103,6 +105,7 @@ const formatTaskMutationResult = (
     color: effectiveColor,
     isCompleted: task.isCompleted,
     completedAt: task.completedAt,
+    completedByUserId: task.completedByUserId,
     displayOrder: task.displayOrder,
     ...(task.dateType === DateType.MULTIPLE
         ? {
@@ -111,6 +114,7 @@ const formatTaskMutationResult = (
                 date: toDateString(taskDate.date),
                 isCompleted: taskDate.isCompleted,
                 completedAt: taskDate.completedAt,
+                completedByUserId: taskDate.completedByUserId,
                 name: taskDate.exception?.name ?? task.name,
                 color: taskDate.exception?.color ?? effectiveColor,
             })),
@@ -508,7 +512,7 @@ export const taskService = {
 
             return taskRepository.deleteTaskById(
                 taskId,
-                task.userId,
+                task.completedByUserId,
                 activityDate,
                 task.isCompleted,
             );
@@ -547,7 +551,7 @@ export const taskService = {
 
             await taskRepository.deleteTaskDateById(
                 taskDateId,
-                task.userId,
+                taskDate.completedByUserId,
                 activityDate,
                 taskDate.isCompleted,
             );
@@ -635,47 +639,27 @@ export const taskService = {
                 );
             }
 
-            const taskDate = await taskRepository.findTaskDateByIdAndTaskId(
-                taskDateId,
-                taskId,
-            );
-
-            if (!taskDate) {
-                throw new AppError(
-                    'COMMON_NOT_FOUND',
-                    '태스크를 찾을 수 없습니다.',
-                );
-            }
-
-            const nextIsCompleted = !taskDate.isCompleted;
-
-            const activityDate = nextIsCompleted
-                ? toKstDate(new Date())
-                : taskDate.completedAt
-                    ? toKstDate(taskDate.completedAt)
-                    : null;
-
-            if (!activityDate) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '완료 기록 날짜를 찾을 수 없습니다.',
-                );
-            }
-
             const updatedTaskDate =
-                await taskRepository.updateTaskDateCompletion(
-                    taskDateId,
-                    userId,
-                    activityDate,
-                    nextIsCompleted,
-                );
+                await taskRepository
+                    .toggleTaskDateCompletion(
+                        taskId,
+                        taskDateId,
+                        userId,
+                    );
 
             return {
                 taskId: updatedTaskDate.taskId,
                 taskDateId: updatedTaskDate.id,
-                date: updatedTaskDate.date.toISOString().slice(0, 10),
-                isCompleted: updatedTaskDate.isCompleted,
-                completedAt: updatedTaskDate.completedAt,
+                date:
+                    updatedTaskDate.date
+                        .toISOString()
+                        .slice(0, 10),
+                isCompleted:
+                    updatedTaskDate.isCompleted,
+                completedAt:
+                    updatedTaskDate.completedAt,
+                completedByUserId:
+                    updatedTaskDate.completedByUserId,
             };
         }
 
@@ -687,33 +671,18 @@ export const taskService = {
             );
         }
 
-        const nextIsCompleted = !task.isCompleted;
-
-        const activityDate = nextIsCompleted
-            ? toKstDate(new Date())
-            : task.completedAt
-                ? toKstDate(task.completedAt)
-                : null;
-
-        if (!activityDate) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                '완료 기록 날짜를 찾을 수 없습니다.',
-            );
-        }
-
         const updatedTask =
-            await taskRepository.updateTaskCompletion(
+            await taskRepository.toggleTaskCompletion(
                 taskId,
                 userId,
-                activityDate,
-                nextIsCompleted,
             );
 
         return {
             id: updatedTask.id,
             isCompleted: updatedTask.isCompleted,
             completedAt: updatedTask.completedAt,
+            completedByUserId:
+                updatedTask.completedByUserId,
         };
     },
 
@@ -771,6 +740,7 @@ export const taskService = {
                     color: effectiveColor,
                     isCompleted: task.isCompleted,
                     completedAt: task.completedAt,
+                    completedByUserId: task.completedByUserId,
                     displayOrder: task.displayOrder,
 
                     ...(task.dateType === DateType.MULTIPLE ? {
@@ -784,6 +754,8 @@ export const taskService = {
                                         taskDate.isCompleted,
                                     completedAt:
                                         taskDate.completedAt,
+                                    completedByUserId:
+                                        taskDate.completedByUserId,
                                     name:
                                         taskDate.exception?.name
                                         ?? task.name,

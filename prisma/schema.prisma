@@ -91,6 +91,8 @@ model User {
   subscriptions         Subscription[]
   categories            Category[]
   tasks                 Task[]
+  completedTasks        Task[]                 @relation("TaskCompletedBy")
+  completedTaskDates    TaskDate[]             @relation("TaskDateCompletedBy")
   activityLogs          ActivityLog[]
   notifications         Notification[]
   sharedCategoryMembers SharedCategoryMember[]
@@ -215,11 +217,13 @@ model Task {
   color        String?   @db.VarChar(20) // 독립 태스크만 사용
   isCompleted  Boolean   @default(false)
   completedAt  DateTime? // KST 일별 집계 기준, 완료 해제 시 NULL
+  completedByUserId Int? // SINGLE/RANGE 완료 체크 사용자. 완료 해제 시 NULL
   displayOrder Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completedByUser User?      @relation("TaskCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
   category  Category?  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
   taskDates TaskDate[]
@@ -227,6 +231,7 @@ model Task {
   @@index([userId, startDate])
   @@index([categoryId, startDate])
   @@index([milestoneId, startDate])
+  @@index([completedByUserId])
 }
 
 model TaskDate {
@@ -235,14 +240,17 @@ model TaskDate {
   date        DateTime  @db.Date
   isCompleted Boolean   @default(false)
   completedAt DateTime?
+  completedByUserId Int? // 해당 회차 완료 체크 사용자. 완료 해제 시 NULL
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  completedByUser User?          @relation("TaskDateCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
   exception TaskException?
 
   @@unique([taskId, date])
   @@index([taskId, date])
+  @@index([completedByUserId])
 }
 
 model TaskException {

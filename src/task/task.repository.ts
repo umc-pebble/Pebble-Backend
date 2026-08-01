@@ -1,5 +1,23 @@
 import { DateType, Prisma } from "@prisma/client";
 import prisma from "../config/database";
+import { AppError } from '../utils/app-error';
+
+const toKstDate = (date: Date): Date => {
+    const dateString =
+        new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).format(date);
+
+    const [year, month, day] =
+        dateString.split('-').map(Number);
+
+    return new Date(
+        Date.UTC(year, month - 1, day),
+    );
+};
 
 const runWithP2002Retry = async <T>(
     operation: () => Promise<T>,
@@ -189,29 +207,6 @@ const lockTaskForCompletionState = async (
     }
 };
 
-const lockTaskByTaskDateIdForCompletion = async (
-    tx: Prisma.TransactionClient,
-    taskDateId: number,
-) => {
-    const lockedTasks =
-        await tx.$queryRaw<Array<{ id: number }>>`
-            SELECT task.id
-            FROM \`Task\` AS task
-            INNER JOIN \`TaskDate\` AS taskDate
-                ON taskDate.taskId = task.id
-            WHERE taskDate.id = ${taskDateId}
-            FOR UPDATE
-        `;
-
-    if (lockedTasks.length === 0) {
-        throw new Error(
-            '완료 상태를 갱신할 태스크 회차를 찾을 수 없습니다.',
-        );
-    }
-
-    return lockedTasks[0].id;
-};
-
 export const taskRepository = {
 
     findMilestoneByIdAndCategoryId: async (
@@ -292,6 +287,7 @@ export const taskRepository = {
                 color: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
                 displayOrder: true,
                 taskDates: {
                     select: {
@@ -300,6 +296,7 @@ export const taskRepository = {
                         date: true,
                         isCompleted: true,
                         completedAt: true,
+                        completedByUserId: true,
                         exception: {
                             select: {
                                 id: true,
@@ -319,7 +316,7 @@ export const taskRepository = {
     // SINGLE/RANGE 태스크 전체 삭제 + 완료된 태스크라면 활동기록 감소
     deleteTaskById: async (
         taskId: number,
-        userId: number,
+        completedByUserId: number | null,
         date: Date | null,
         wasCompleted: boolean,
     ) => {
@@ -330,10 +327,10 @@ export const taskRepository = {
                 },
             });
 
-            if (wasCompleted && date) {
+            if (wasCompleted && completedByUserId !== null && date) {
                 await tx.activityLog.updateMany({
                     where: {
-                        userId,
+                        userId: completedByUserId,
                         date,
                         completedTaskCount: {
                             gt: 0,
@@ -366,6 +363,7 @@ export const taskRepository = {
                 date: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
             },
         });
     },
@@ -373,7 +371,7 @@ export const taskRepository = {
     // THIS_ONLY 삭제 + 완료된 회차라면 활동기록 감소
     deleteTaskDateById: async (
         taskDateId: number,
-        userId: number,
+        completedByUserId: number | null,
         date: Date | null,
         wasCompleted: boolean,
     ) => {
@@ -384,10 +382,10 @@ export const taskRepository = {
                 },
             });
 
-            if (wasCompleted && date) {
+            if (wasCompleted && completedByUserId !== null && date) {
                 await tx.activityLog.updateMany({
                     where: {
-                        userId,
+                        userId: completedByUserId,
                         date,
                         completedTaskCount: {
                             gt: 0,
@@ -440,69 +438,152 @@ export const taskRepository = {
     },
 
     // SINGLE/RANGE 완료 토글 + 활동기록 갱신
-    updateTaskCompletion: async (
+    // SINGLE/RANGE 완료 상태를 트랜잭션 내부에서 토글
+    toggleTaskCompletion: async (
         taskId: number,
         userId: number,
-        date: Date,
-        isCompleted: boolean,
     ) => {
-        return runWithP2002Retry(() => prisma.$transaction(async (tx) => {
-            const updatedTask =
-                await tx.task.update({
-                    where: {
-                        id: taskId,
-                    },
-                    data: {
-                        isCompleted,
-                        completedAt: isCompleted
-                            ? new Date()
-                            : null,
-                    },
-                    select: {
-                        id: true,
-                        isCompleted: true,
-                        completedAt: true,
-                    },
-                });
+        return runWithP2002Retry(() =>
+            prisma.$transaction(async (tx) => {
+                const lockedTasks =
+                    await tx.$queryRaw<
+                        Array<{ id: number }>
+                    >`
+                        SELECT id
+                        FROM \`Task\`
+                        WHERE id = ${taskId}
+                        FOR UPDATE
+                    `;
 
-            if (isCompleted) {
-                await tx.activityLog.upsert({
-                    where: {
-                        userId_date: {
+                if (lockedTasks.length === 0) {
+                    throw new AppError(
+                        'COMMON_NOT_FOUND',
+                        '태스크를 찾을 수 없습니다.',
+                    );
+                }
+
+                // 잠금 획득 후 최신 상태를 다시 조회
+                const currentTask =
+                    await tx.task.findUnique({
+                        where: {
+                            id: taskId,
+                        },
+                        select: {
+                            id: true,
+                            isCompleted: true,
+                            completedAt: true,
+                            completedByUserId: true,
+                        },
+                    });
+
+                if (!currentTask) {
+                    throw new AppError(
+                        'COMMON_NOT_FOUND',
+                        '태스크를 찾을 수 없습니다.',
+                    );
+                }
+
+                const nextIsCompleted =
+                    !currentTask.isCompleted;
+
+                /*
+                * 완료자가 존재하는 완료 기록은
+                * 실제 완료자만 해제할 수 있다.
+                *
+                * completedByUserId가 null인 경우에는
+                * 접근 권한이 확인된 멤버가 해제할 수 있다.
+                */
+                if (
+                    !nextIsCompleted &&
+                    currentTask.completedByUserId !== null &&
+                    currentTask.completedByUserId !== userId
+                ) {
+                    throw new AppError(
+                        'COMMON_FORBIDDEN',
+                        '완료 체크한 사용자만 체크를 해제할 수 있습니다.',
+                    );
+                }
+
+                const now = new Date();
+
+                const updatedTask =
+                    await tx.task.update({
+                        where: {
+                            id: taskId,
+                        },
+                        data: {
+                            isCompleted: nextIsCompleted,
+                            completedAt: nextIsCompleted
+                                ? now
+                                : null,
+                            completedByUserId:
+                                nextIsCompleted
+                                    ? userId
+                                    : null,
+                        },
+                        select: {
+                            id: true,
+                            isCompleted: true,
+                            completedAt: true,
+                            completedByUserId: true,
+                        },
+                    });
+
+                if (nextIsCompleted) {
+                    const activityDate =
+                        toKstDate(now);
+
+                    await tx.activityLog.upsert({
+                        where: {
+                            userId_date: {
+                                userId,
+                                date: activityDate,
+                            },
+                        },
+                        create: {
                             userId,
-                            date,
+                            date: activityDate,
+                            completedTaskCount: 1,
                         },
-                    },
-                    create: {
-                        userId,
-                        date,
-                        completedTaskCount: 1,
-                    },
-                    update: {
-                        completedTaskCount: {
-                            increment: 1,
+                        update: {
+                            completedTaskCount: {
+                                increment: 1,
+                            },
                         },
-                    },
-                });
-            } else {
-                await tx.activityLog.updateMany({
-                    where: {
-                        userId,
-                        date,
-                        completedTaskCount: {
-                            gt: 0,
-                        },
-                    },
-                    data: {
-                        completedTaskCount: {
-                            decrement: 1,
-                        },
-                    },
-                });
-            }
+                    });
+                } else if (
+                    currentTask.completedByUserId !== null &&
+                    currentTask.completedAt !== null
+                ) {
+                    /*
+                    * 해제할 때는 요청자가 아니라
+                    * DB에 저장돼 있던 실제 완료자의 기록을 감소
+                    */
+                    const activityDate =
+                        toKstDate(
+                            currentTask.completedAt,
+                        );
 
-            return updatedTask;
-        }),);
+                    await tx.activityLog.updateMany({
+                        where: {
+                            userId:
+                                currentTask.completedByUserId,
+                            date: activityDate,
+                            completedTaskCount: {
+                                gt: 0,
+                            },
+                        },
+                        data: {
+                            completedTaskCount: {
+                                decrement: 1,
+                            },
+                        },
+                    });
+                }
+
+                return updatedTask;
+            }),
+        );
     },
 
     updateTask: async (
@@ -531,6 +612,7 @@ export const taskRepository = {
                 color: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
                 displayOrder: true,
             },
         });
@@ -594,6 +676,7 @@ export const taskRepository = {
                     color: data.color,
                     isCompleted: false,
                     completedAt: null,
+                    completedByUserId: null,
                     taskDates:
                         data.dateType === DateType.MULTIPLE
                             ? {
@@ -645,6 +728,7 @@ export const taskRepository = {
                     color: data.color,
                     isCompleted: false,
                     completedAt: null,
+                    completedByUserId: null,
                 },
             });
 
@@ -767,6 +851,7 @@ export const taskRepository = {
                     color: data.color,
                     isCompleted: false,
                     completedAt: null,
+                    completedByUserId: null,
                     displayOrder,
                     taskDates:
                         data.dateType === DateType.MULTIPLE
@@ -797,106 +882,199 @@ export const taskRepository = {
     },
 
     // MULTIPLE 회차 완료 토글 + 활동기록 갱신
-    updateTaskDateCompletion: async (
+    // MULTIPLE 회차 완료 상태를 트랜잭션 내부에서 토글
+    toggleTaskDateCompletion: async (
+        taskId: number,
         taskDateId: number,
         userId: number,
-        date: Date,
-        isCompleted: boolean,
     ) => {
-        return runWithP2002Retry(() => prisma.$transaction(async (tx) => {
-            const taskId =
-                await lockTaskByTaskDateIdForCompletion(
-                    tx,
-                    taskDateId,
-                );
+        return runWithP2002Retry(() =>
+            prisma.$transaction(async (tx) => {
+                const lockedTaskDates =
+                    await tx.$queryRaw<
+                        Array<{
+                            id: number;
+                            taskId: number;
+                        }>
+                    >`
+                        SELECT id, taskId
+                        FROM \`TaskDate\`
+                        WHERE id = ${taskDateId}
+                        AND taskId = ${taskId}
+                        FOR UPDATE
+                    `;
 
-            const updatedTaskDate =
-                await tx.taskDate.update({
+                if (lockedTaskDates.length === 0) {
+                    throw new AppError(
+                        'COMMON_NOT_FOUND',
+                        '태스크 회차를 찾을 수 없습니다.',
+                    );
+                }
+
+                // 부모 집계 상태 갱신을 위해 부모 Task도 잠금
+                const lockedTasks =
+                    await tx.$queryRaw<
+                        Array<{ id: number }>
+                    >`
+                        SELECT id
+                        FROM \`Task\`
+                        WHERE id = ${taskId}
+                        FOR UPDATE
+                    `;
+
+                if (lockedTasks.length === 0) {
+                    throw new AppError(
+                        'COMMON_NOT_FOUND',
+                        '태스크를 찾을 수 없습니다.',
+                    );
+                }
+
+                // 잠금 후 최신 회차 상태 재조회
+                const currentTaskDate =
+                    await tx.taskDate.findFirst({
+                        where: {
+                            id: taskDateId,
+                            taskId,
+                        },
+                        select: {
+                            id: true,
+                            taskId: true,
+                            date: true,
+                            isCompleted: true,
+                            completedAt: true,
+                            completedByUserId: true,
+                        },
+                    });
+
+                if (!currentTaskDate) {
+                    throw new AppError(
+                        'COMMON_NOT_FOUND',
+                        '태스크 회차를 찾을 수 없습니다.',
+                    );
+                }
+
+                const nextIsCompleted =
+                    !currentTaskDate.isCompleted;
+
+                if (
+                    !nextIsCompleted &&
+                    currentTaskDate.completedByUserId !== null &&
+                    currentTaskDate.completedByUserId !== userId
+                ) {
+                    throw new AppError(
+                        'COMMON_FORBIDDEN',
+                        '완료 체크한 사용자만 체크를 해제할 수 있습니다.',
+                    );
+                }
+
+                const now = new Date();
+
+                const updatedTaskDate =
+                    await tx.taskDate.update({
+                        where: {
+                            id: taskDateId,
+                        },
+                        data: {
+                            isCompleted: nextIsCompleted,
+                            completedAt: nextIsCompleted
+                                ? now
+                                : null,
+                            completedByUserId:
+                                nextIsCompleted
+                                    ? userId
+                                    : null,
+                        },
+                        select: {
+                            id: true,
+                            taskId: true,
+                            date: true,
+                            isCompleted: true,
+                            completedAt: true,
+                            completedByUserId: true,
+                        },
+                    });
+
+                const siblingTaskDates =
+                    await tx.taskDate.findMany({
+                        where: {
+                            taskId,
+                        },
+                        select: {
+                            isCompleted: true,
+                            completedAt: true,
+                        },
+                    });
+
+                const taskCompletionState =
+                    getTaskCompletionState(
+                        siblingTaskDates,
+                    );
+
+                await tx.task.update({
                     where: {
-                        id: taskDateId,
-                        taskId,
+                        id: taskId,
                     },
                     data: {
-                        isCompleted,
-                        completedAt: isCompleted
-                            ? new Date()
-                            : null,
-                    },
-                    select: {
-                        id: true,
-                        taskId: true,
-                        date: true,
-                        isCompleted: true,
-                        completedAt: true,
+                        isCompleted:
+                            taskCompletionState.isCompleted,
+                        completedAt:
+                            taskCompletionState.completedAt,
+                        // MULTIPLE 완료자는 각 TaskDate에 저장
+                        completedByUserId: null,
                     },
                 });
 
-            const siblingTaskDates =
-                await tx.taskDate.findMany({
-                    where: {
-                        taskId: updatedTaskDate.taskId,
-                    },
-                    select: {
-                        isCompleted: true,
-                        completedAt: true,
-                    },
-                });
+                if (nextIsCompleted) {
+                    const activityDate =
+                        toKstDate(now);
 
-            const taskCompletionState =
-                getTaskCompletionState(
-                    siblingTaskDates,
-                );
-
-            await tx.task.update({
-                where: {
-                    id: updatedTaskDate.taskId,
-                },
-                data: {
-                    isCompleted:
-                        taskCompletionState.isCompleted,
-                    completedAt:
-                        taskCompletionState.completedAt,
-                },
-            });
-
-            if (isCompleted) {
-                await tx.activityLog.upsert({
-                    where: {
-                        userId_date: {
+                    await tx.activityLog.upsert({
+                        where: {
+                            userId_date: {
+                                userId,
+                                date: activityDate,
+                            },
+                        },
+                        create: {
                             userId,
-                            date,
+                            date: activityDate,
+                            completedTaskCount: 1,
                         },
-                    },
-                    create: {
-                        userId,
-                        date,
-                        completedTaskCount: 1,
-                    },
-                    update: {
-                        completedTaskCount: {
-                            increment: 1,
+                        update: {
+                            completedTaskCount: {
+                                increment: 1,
+                            },
                         },
-                    },
-                });
-            } else {
-                await tx.activityLog.updateMany({
-                    where: {
-                        userId,
-                        date,
-                        completedTaskCount: {
-                            gt: 0,
-                        },
-                    },
-                    data: {
-                        completedTaskCount: {
-                            decrement: 1,
-                        },
-                    },
-                });
-            }
+                    });
+                } else if (
+                    currentTaskDate.completedByUserId !== null &&
+                    currentTaskDate.completedAt !== null
+                ) {
+                    const activityDate =
+                        toKstDate(
+                            currentTaskDate.completedAt,
+                        );
 
-            return updatedTaskDate;
-        }),);
+                    await tx.activityLog.updateMany({
+                        where: {
+                            userId:
+                                currentTaskDate.completedByUserId,
+                            date: activityDate,
+                            completedTaskCount: {
+                                gt: 0,
+                            },
+                        },
+                        data: {
+                            completedTaskCount: {
+                                decrement: 1,
+                            },
+                        },
+                    });
+                }
+
+                return updatedTaskDate;
+            }),
+        );
     },
 
     // 월별 전체 태스크 조회
@@ -996,6 +1174,7 @@ export const taskRepository = {
                 color: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
                 displayOrder: true,
 
                 category: {
@@ -1016,6 +1195,7 @@ export const taskRepository = {
                         date: true,
                         isCompleted: true,
                         completedAt: true,
+                        completedByUserId: true,
                         exception: {
                             select: {
                                 name: true,
@@ -1084,6 +1264,7 @@ export const taskRepository = {
                 date: true,
                 isCompleted: true,
                 completedAt: true,
+                completedByUserId: true,
                 exception: {
                     select: {
                         id: true,
