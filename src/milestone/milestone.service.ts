@@ -5,6 +5,7 @@
 // MULTIPLE(다중 날짜)는 선택한 날짜마다 실제 row(회차)로 저장되며 같은 seriesId를 공유한다.
 
 import { AppError } from '../utils/app-error';
+import { getMonthRangeKST } from '../utils/date';
 import { isAcceptedSharedMember } from '../shared/shared.service';
 import { milestoneRepository } from './milestone.repository';
 import { categoryService } from '../category/category.service';
@@ -122,6 +123,25 @@ export const milestoneService = {
   async getMilestones(userId: number, categoryId: number) {
     await categoryService.getCategory(userId, categoryId); // 404/403 판정 재사용
     const milestones = await milestoneRepository.findManyByCategoryId(categoryId);
+    return milestones.map(toMilestoneResponse);
+  },
+
+  // 월별 마일스톤 목록. 카테고리 구분 없이 조회 월에 걸치는 마일스톤을 한 번에 반환한다.
+  //
+  // 사이드바가 월 화면을 조립할 때 GET /tasks와 짝으로 쓰라고 만든 조회다. 기존
+  // GET /categories/{id}/milestones는 월 필터가 없어서, 프론트가 월별 화면을 태스크만으로 조립하면
+  // "7월 마일스톤만 있고 태스크는 없는 카테고리"가 7월에도 빈 카테고리로 보이게 된다.
+  //
+  // 접근 범위 검증을 서비스에서 따로 하지 않는 이유: 대상이 카테고리 전체라 단건 판정
+  // (getCategory)을 걸 지점이 없고, repository의 where가 이미 "내 카테고리 + ACCEPTED 공유
+  // 카테고리"로 범위를 좁힌다. 권한 없는 마일스톤은 애초에 결과에 들어오지 않는다.
+  async getMonthlyMilestones(userId: number, baseDate?: string) {
+    const { monthStart, nextMonthStart } = getMonthRangeKST(baseDate);
+    const milestones = await milestoneRepository.findManyByMonth(
+      userId,
+      monthStart,
+      nextMonthStart,
+    );
     return milestones.map(toMilestoneResponse);
   },
 

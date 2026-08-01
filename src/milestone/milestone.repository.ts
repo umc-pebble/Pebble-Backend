@@ -226,6 +226,59 @@ export const milestoneRepository = {
     });
   },
 
+  // 월별 마일스톤 목록(사이드바 조립용). 카테고리를 가리지 않고 "조회 월에 걸치는" 마일스톤만
+  // 한 번에 반환한다 — 카테고리마다 findManyByCategoryId를 부르면 N번 왕복이 되기 때문이다.
+  //
+  // 대상 범위는 GET /categories(findVisibleByUserId)와 같다: 내 카테고리 + 초대를 수락(ACCEPTED)한
+  // 공유 카테고리. 마일스톤은 userId 컬럼이 없어 카테고리 접근 권한이 곧 마일스톤 접근 권한이므로,
+  // 이 범위가 그대로 "현재 로그인 사용자가 접근 가능한 마일스톤"이 된다.
+  // 숨김 카테고리 제외는 태스크 월별 조회(findTasksByMonth)와 동일하게 맞춘다.
+  //
+  // 월 판정이 태스크쪽과 다른 점: MULTIPLE(다중)이 회차마다 Milestone row로 저장되고 각자
+  // startDate를 가지므로, 태스크의 taskDates 자식 탐색(`some`)에 해당하는 절이 필요 없고
+  // SINGLE과 똑같이 startDate 하나만 보면 된다.
+  findManyByMonth(userId: number, monthStart: Date, nextMonthStart: Date) {
+    return prisma.milestone.findMany({
+      where: {
+        category: {
+          isHidden: false,
+          OR: [{ userId }, { members: { some: { userId, status: 'ACCEPTED' } } }],
+        },
+        OR: [
+          // SINGLE·MULTIPLE: 날짜가 하나뿐이라 그 날짜가 조회 월에 속하는지만 본다.
+          {
+            dateType: { in: ['SINGLE', 'MULTIPLE'] },
+            startDate: { gte: monthStart, lt: nextMonthStart },
+          },
+          // RANGE: 기간이 조회 월과 하루라도 겹치면 포함.
+          {
+            dateType: 'RANGE',
+            startDate: { lt: nextMonthStart },
+            endDate: { gte: monthStart },
+          },
+          // endDate는 스키마상 nullable이라 RANGE인데 비어 있는 행이 있을 수 있다.
+          // 위 겹침 조건은 endDate가 NULL이면 통째로 탈락하므로, 그런 행은 시작일 하루짜리로 본다
+          // (조건을 빼면 해당 마일스톤이 어느 달에서도 조회되지 않아 화면에서 사라진다).
+          {
+            dateType: 'RANGE',
+            endDate: null,
+            startDate: { gte: monthStart, lt: nextMonthStart },
+          },
+        ],
+      },
+      // 카테고리별로 묶어서 내려보낸다(프론트가 categoryId로 그룹핑). 카테고리 안의 순서는
+      // findManyByCategoryId와 동일하게 수동 순서(displayOrder) 우선, 같으면 D-Day 순이라
+      // 월별 화면과 카테고리 상세 화면의 정렬이 어긋나지 않는다.
+      // displayOrder는 카테고리 단위로 채번되므로 categoryId를 먼저 두지 않으면 정렬이 섞인다.
+      orderBy: [
+        { categoryId: 'asc' },
+        { displayOrder: 'asc' },
+        { startDate: 'asc' },
+        { id: 'asc' },
+      ],
+    });
+  },
+
   // 단건 + 상위 카테고리 동봉. 소유권 판정(category.userId)에 쓰인다. 없으면 null.
   findByIdWithCategory(milestoneId: number) {
     return prisma.milestone.findUnique({

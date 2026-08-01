@@ -8,6 +8,7 @@ import {
 } from './milestone.schema';
 import {
   getMilestones,
+  getMonthlyMilestones,
   getFriendMilestones,
   createMilestone,
   updateMilestone,
@@ -88,6 +89,94 @@ router.use(['/categories', '/milestones'], authMiddleware);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/categories/:categoryId/milestones', getMilestones);
+
+/**
+ * @swagger
+ * /milestones:
+ *   get:
+ *     summary: 월별 마일스톤 조회
+ *     description: >
+ *       조회 월에 걸치는 마일스톤을 카테고리 구분 없이 한 번에 조회합니다.
+ *       월별 화면을 조립할 때 `GET /tasks`와 짝으로 사용하며, baseDate 형식·기본값은 동일합니다.
+ *       응답은 평탄한 배열이고, 각 항목의 categoryId로 카테고리별 그룹핑을 하면 됩니다.
+ *
+ *       포함 범위는 `GET /categories`와 같습니다 — 본인 소유 카테고리와 초대를 수락(ACCEPTED)한
+ *       공유 카테고리의 마일스톤이 모두 포함됩니다. 마일스톤은 userId가 없어 카테고리 접근 권한이
+ *       곧 마일스톤 접근 권한이므로, 이 결과가 그대로 "현재 로그인 사용자가 접근 가능한 마일스톤"입니다.
+ *       숨김(isHidden) 카테고리의 마일스톤은 제외됩니다(태스크 월별 조회와 동일).
+ *
+ *       월 판정 기준은 날짜 유형별로 다릅니다.
+ *       SINGLE·MULTIPLE은 해당 날짜가 조회 월에 속하면 포함되고(MULTIPLE은 회차 row마다 개별 판정),
+ *       RANGE는 기간이 조회 월과 하루라도 겹치면 포함됩니다.
+ *     tags: [Milestone]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: baseDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date
+ *           example: '2026-08-01'
+ *         description: >
+ *           조회할 월에 속하는 임의의 날짜(YYYY-MM-DD). 일(day)은 무시하고 해당 월 전체를 조회합니다.
+ *           생략하면 KST 기준 오늘이 속한 달을 조회합니다.
+ *     responses:
+ *       200:
+ *         description: 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         milestones:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/Milestone'
+ *             example:
+ *               success: true
+ *               message: 월별 마일스톤 조회 성공
+ *               data:
+ *                 milestones:
+ *                   - id: 8
+ *                     categoryId: 1
+ *                     seriesId: null
+ *                     name: 공모전 마감
+ *                     dateType: SINGLE
+ *                     startDate: '2026-08-10'
+ *                     endDate: null
+ *                     isCompleted: false
+ *                   - id: 12
+ *                     categoryId: 3
+ *                     seriesId: null
+ *                     name: 개발 기간
+ *                     dateType: RANGE
+ *                     startDate: '2026-07-28'
+ *                     endDate: '2026-08-14'
+ *                     isCompleted: false
+ *       400:
+ *         description: baseDate 형식 오류
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *             example:
+ *               success: false
+ *               message: baseDate는 YYYY-MM-DD 형식이어야 합니다.
+ *               error:
+ *                 code: COMMON_INVALID_INPUT
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get('/milestones', getMonthlyMilestones);
 
 /**
  * @swagger
