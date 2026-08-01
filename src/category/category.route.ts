@@ -42,6 +42,21 @@ router.use('/categories', authMiddleware);
  *       정렬은 본인 소유 카테고리(displayOrder 오름차순)가 먼저 오고, 공유받은 카테고리가 그 뒤에 옵니다.
  *       displayOrder는 카테고리 오너 기준으로 채번되는 순번이라 오너가 다르면 값이 겹칠 수 있어,
  *       두 구간을 나눠 정렬합니다. 순서 변경(PATCH /categories/order)의 대상도 본인 소유 카테고리뿐입니다.
+ *
+ *
+ *       각 카테고리에는 월과 무관한 일정 집계(milestoneCount·taskCount·sharedTaskCount·hasSchedules)가
+ *       함께 내려갑니다. 월별 조회(GET /tasks, GET /milestones)는 해당 월로 걸러진 결과만 주기 때문에
+ *       "이번 달에만 일정이 없는 카테고리"와 "아직 아무 일정도 없는 새 카테고리"가 똑같이 빈 결과로 보이는데,
+ *       이 값들로 두 경우를 구분할 수 있습니다.
+ *       사이드바 노출 판정 예시 — hasSchedules=false면 빈 카테고리이므로 표시,
+ *       hasSchedules=true인데 해당 월 일정이 없으면 숨김.
+ *
+ *
+ *       집계 기준이 필드마다 다릅니다. taskCount는 "요청자 본인이 만든 태스크"만 세는데,
+ *       GET /tasks가 같은 기준으로 거르기 때문입니다(기준이 어긋나면 어느 달에도 보이지 않는
+ *       카테고리가 영구히 숨겨집니다). 공유 카테고리에서 다른 멤버가 만든 태스크는 아직 월별 조회에
+ *       포함되지 않으므로 sharedTaskCount로 분리해 두었고, hasSchedules에도 합산되지 않습니다.
+ *       마일스톤은 userId 없이 카테고리로 권한이 정해져 milestoneCount가 곧 접근 가능한 전체 개수입니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
@@ -76,6 +91,23 @@ router.use('/categories', authMiddleware);
  *                     isPublic: true
  *                     isShared: false
  *                     displayOrder: 0
+ *                     milestoneCount: 2
+ *                     taskCount: 5
+ *                     sharedTaskCount: 0
+ *                     hasSchedules: true
+ *                   - id: 2
+ *                     name: 새 카테고리
+ *                     color: '#4ECDC4'
+ *                     imageUrl: null
+ *                     isCompleted: false
+ *                     isHidden: false
+ *                     isPublic: false
+ *                     isShared: false
+ *                     displayOrder: 1
+ *                     milestoneCount: 0
+ *                     taskCount: 0
+ *                     sharedTaskCount: 0
+ *                     hasSchedules: false
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       500:

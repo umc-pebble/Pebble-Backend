@@ -79,8 +79,21 @@ async function assertFriendProfileAccess(requesterId: number, targetUserId: numb
 export const categoryService = {
   // 내 카테고리 목록 (displayOrder 순은 repository가 보장).
   // 본인 소유 카테고리 + 초대를 수락한 공유 카테고리를 함께 반환한다.
-  getCategories(userId: number) {
-    return categoryRepository.findVisibleByUserId(userId);
+  //
+  // 사이드바 노출 판정을 위해 카테고리별 일정 개수와 hasSchedules를 함께 내린다.
+  // 프론트는 "이번 달 일정이 있으면 표시 / 전체 일정이 없으면(=빈 카테고리) 표시 /
+  // 다른 달에만 있으면 숨김"으로 3분기하는데, 월별 조회만으로는 뒤의 두 경우가 똑같이
+  // 빈 결과로 보여 구분되지 않기 때문이다.
+  async getCategories(userId: number) {
+    const categories = await categoryRepository.findVisibleByUserId(userId);
+    return categories.map((category) => ({
+      ...category,
+      // sharedTaskCount는 의도적으로 뺀다. 공유 카테고리에서 다른 멤버가 만든 태스크는
+      // 아직 월별 조회(GET /tasks)에 잡히지 않아서, 합산하면 "전체로는 일정이 있는데
+      // 어느 달에도 안 보이는" 카테고리가 되어 사이드바에서 영구히 숨겨진다.
+      // 태스크 도메인이 공유 카테고리를 지원하게 되면 여기에 sharedTaskCount를 더하면 된다.
+      hasSchedules: category.milestoneCount + category.taskCount > 0,
+    }));
   },
 
   // 친구(또는 본인)의 공개 카테고리 목록 (#64·PLB-040). 비공개(isPublic=false)는 노출하지 않는다.
