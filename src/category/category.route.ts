@@ -36,9 +36,12 @@ router.use('/categories', authMiddleware);
  *   get:
  *     summary: 카테고리 목록 조회 (PLB-010·011)
  *     description: >
- *       로그인한 회원의 카테고리 목록을 생성순(displayOrder 오름차순)으로 조회합니다.
+ *       로그인한 회원의 카테고리 목록을 조회합니다.
  *       userId는 JWT에서 추출하며 별도 파라미터가 없습니다.
  *       본인 소유 카테고리뿐 아니라, 초대를 수락(ACCEPTED)한 공유 카테고리도 함께 포함됩니다.
+ *       정렬은 본인 소유 카테고리(displayOrder 오름차순)가 먼저 오고, 공유받은 카테고리가 그 뒤에 옵니다.
+ *       displayOrder는 카테고리 오너 기준으로 채번되는 순번이라 오너가 다르면 값이 겹칠 수 있어,
+ *       두 구간을 나눠 정렬합니다. 순서 변경(PATCH /categories/order)의 대상도 본인 소유 카테고리뿐입니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
