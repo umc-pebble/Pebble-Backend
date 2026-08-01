@@ -109,6 +109,11 @@ export const sharedRepository = {
     return prisma.user.findFirst({ where: { nickname } });
   },
 
+  // 카테고리 생성과 동시에 초대(PLB-044)처럼 이미 userId로 확정된 대상을 검증할 때 쓴다.
+  findUserById(userId: number) {
+    return prisma.user.findUnique({ where: { id: userId } });
+  },
+
   // 알림은 최대 30일 보관 (PLB-038).
   createNotification(userId: number, type: NotificationType, relatedId: number) {
     const expiresAt = new Date();
