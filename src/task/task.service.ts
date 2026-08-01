@@ -512,7 +512,7 @@ export const taskService = {
 
             return taskRepository.deleteTaskById(
                 taskId,
-                task.completedByUserId ?? task.userId,
+                task.completedByUserId,
                 activityDate,
                 task.isCompleted,
             );
@@ -551,7 +551,7 @@ export const taskService = {
 
             await taskRepository.deleteTaskDateById(
                 taskDateId,
-                taskDate.completedByUserId ?? task.userId,
+                taskDate.completedByUserId,
                 activityDate,
                 taskDate.isCompleted,
             );
@@ -639,58 +639,27 @@ export const taskService = {
                 );
             }
 
-            const taskDate = await taskRepository.findTaskDateByIdAndTaskId(
-                taskDateId,
-                taskId,
-            );
-
-            if (!taskDate) {
-                throw new AppError(
-                    'COMMON_NOT_FOUND',
-                    '태스크를 찾을 수 없습니다.',
-                );
-            }
-
-            const nextIsCompleted = !taskDate.isCompleted;
-
-            if (
-                !nextIsCompleted &&
-                taskDate.completedByUserId !== userId
-            ) {
-                throw new AppError(
-                    'COMMON_FORBIDDEN',
-                    '완료 체크한 사용자만 체크를 해제할 수 있습니다.',
-                );
-            }
-
-            const activityDate = nextIsCompleted
-                ? toKstDate(new Date())
-                : taskDate.completedAt
-                    ? toKstDate(taskDate.completedAt)
-                    : null;
-
-            if (!activityDate) {
-                throw new AppError(
-                    'COMMON_INVALID_INPUT',
-                    '완료 기록 날짜를 찾을 수 없습니다.',
-                );
-            }
-
             const updatedTaskDate =
-                await taskRepository.updateTaskDateCompletion(
-                    taskDateId,
-                    userId,
-                    activityDate,
-                    nextIsCompleted,
-                );
+                await taskRepository
+                    .toggleTaskDateCompletion(
+                        taskId,
+                        taskDateId,
+                        userId,
+                    );
 
             return {
                 taskId: updatedTaskDate.taskId,
                 taskDateId: updatedTaskDate.id,
-                date: updatedTaskDate.date.toISOString().slice(0, 10),
-                isCompleted: updatedTaskDate.isCompleted,
-                completedAt: updatedTaskDate.completedAt,
-                completedByUserId: updatedTaskDate.completedByUserId,
+                date:
+                    updatedTaskDate.date
+                        .toISOString()
+                        .slice(0, 10),
+                isCompleted:
+                    updatedTaskDate.isCompleted,
+                completedAt:
+                    updatedTaskDate.completedAt,
+                completedByUserId:
+                    updatedTaskDate.completedByUserId,
             };
         }
 
@@ -702,44 +671,18 @@ export const taskService = {
             );
         }
 
-        const nextIsCompleted = !task.isCompleted;
-
-        if (
-            !nextIsCompleted &&
-            task.completedByUserId !== userId
-        ) {
-            throw new AppError(
-                'COMMON_FORBIDDEN',
-                '완료 체크한 사용자만 체크를 해제할 수 있습니다.',
-            );
-        }
-
-        const activityDate = nextIsCompleted
-            ? toKstDate(new Date())
-            : task.completedAt
-                ? toKstDate(task.completedAt)
-                : null;
-
-        if (!activityDate) {
-            throw new AppError(
-                'COMMON_INVALID_INPUT',
-                '완료 기록 날짜를 찾을 수 없습니다.',
-            );
-        }
-
         const updatedTask =
-            await taskRepository.updateTaskCompletion(
+            await taskRepository.toggleTaskCompletion(
                 taskId,
                 userId,
-                activityDate,
-                nextIsCompleted,
             );
 
         return {
             id: updatedTask.id,
             isCompleted: updatedTask.isCompleted,
             completedAt: updatedTask.completedAt,
-            completedByUserId: updatedTask.completedByUserId,
+            completedByUserId:
+                updatedTask.completedByUserId,
         };
     },
 
