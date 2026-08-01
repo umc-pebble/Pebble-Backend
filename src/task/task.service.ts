@@ -3,6 +3,8 @@ import { AppError } from '../utils/app-error';
 import { taskRepository, CreateTaskData, ReplaceTaskData } from './task.repository';
 import { CreateTaskBody, ReorderTasksBody, UpdateTaskBody } from './task.schema';
 import { isFriend } from '../follow/follow.service';
+import { categoryService } from '../category/category.service';
+import { sharedRepository } from '../shared/shared.repository';
 
 const toDate = (value: string): Date => {
     const [year, month, day] = value.split('-').map(Number);
@@ -129,6 +131,35 @@ const sameStringSet = (left: string[], right: string[]) => {
     );
 };
 
+type AccessibleTask = NonNullable<
+    Awaited<
+        ReturnType<
+            typeof taskRepository.findTaskById
+        >
+    >
+>;
+
+const assertTaskAccess = async (
+    userId: number,
+    task: AccessibleTask,
+) => {
+    if (task.categoryId === null) {
+        if (task.userId !== userId) {
+            throw new AppError(
+                'COMMON_FORBIDDEN',
+                '해당 태스크에 접근할 권한이 없습니다.',
+            );
+        }
+
+        return;
+    }
+
+    await categoryService.getCategory(
+        userId,
+        task.categoryId,
+    );
+};
+
 export const taskService = {
     createTask: async (userId: number, body: CreateTaskBody) => {
         const {categoryId, milestoneId}=body;
@@ -148,24 +179,26 @@ export const taskService = {
         }
 
         // 2. 카테고리 / 마일스톤 검증
-        if(categoryId!=null) {
-            const category= await taskRepository.findCategoryByIdAndUserId(categoryId,userId);
-            if(!category){
-                throw new AppError(
-                    'COMMON_NOT_FOUND',
-                    '카테고리를 찾을 수 없습니다.',
-                );
-            }
-        }
+        if (categoryId != null) {
+            await categoryService.getCategory(
+                userId,
+                categoryId,
+            );
 
-        if (milestoneId != null) {
-            const milestone = await taskRepository.findMilestoneByIdAndCategoryIdAndUserId( milestoneId, categoryId!, userId);
+            if (milestoneId != null) {
+                const milestone =
+                    await taskRepository
+                        .findMilestoneByIdAndCategoryId(
+                            milestoneId,
+                            categoryId,
+                        );
 
-            if (!milestone) {
-                throw new AppError(
-                'COMMON_INVALID_INPUT',
-                '해당 마일스톤이 존재하지 않거나 선택한 카테고리에 속하지 않습니다.',
-                );
+                if (!milestone) {
+                    throw new AppError(
+                        'COMMON_INVALID_INPUT',
+                        '해당 마일스톤이 존재하지 않거나 선택한 카테고리에 속하지 않습니다.',
+                    );
+                }
             }
         }
 
@@ -200,9 +233,8 @@ export const taskService = {
         }
 
         const task =
-            await taskRepository.findTaskByIdAndUserId(
+            await taskRepository.findTaskById(
                 taskId,
-                userId,
             );
 
         if (!task) {
@@ -212,6 +244,11 @@ export const taskService = {
             );
         }
 
+        await assertTaskAccess(
+            userId,
+            task,
+        );
+
         const categoryId = body.categoryId;
         const milestoneId = body.milestoneId;
 
@@ -219,27 +256,19 @@ export const taskService = {
 
         if (categoryId !== null) {
             const category =
-                await taskRepository.findCategoryByIdAndUserId(
-                    categoryId,
+                await categoryService.getCategory(
                     userId,
+                    categoryId,
                 );
-
-            if (!category) {
-                throw new AppError(
-                    'COMMON_NOT_FOUND',
-                    '카테고리를 찾을 수 없습니다.',
-                );
-            }
 
             categoryColor = category.color;
 
             if (milestoneId !== null) {
                 const milestone =
                     await taskRepository
-                        .findMilestoneByIdAndCategoryIdAndUserId(
+                        .findMilestoneByIdAndCategoryId(
                             milestoneId,
                             categoryId,
-                            userId,
                         );
 
                 if (!milestone) {
@@ -261,7 +290,7 @@ export const taskService = {
                 : null;
 
         const replacementData: ReplaceTaskData = {
-            userId,
+            userId: task.userId,
             categoryId,
             milestoneId,
             name: body.name.trim(),
@@ -446,14 +475,22 @@ export const taskService = {
             );
         }
 
-        const task = await taskRepository.findTaskByIdAndUserId( taskId, userId );
+        const task =
+            await taskRepository.findTaskById(
+                taskId,
+            );
 
         if (!task) {
             throw new AppError(
-            'COMMON_NOT_FOUND',
-            '태스크를 찾을 수 없습니다.',
+                'COMMON_NOT_FOUND',
+                '태스크를 찾을 수 없습니다.',
             );
         }
+
+        await assertTaskAccess(
+            userId,
+            task,
+        );
 
         // SINGLE / RANGE
         if (task.dateType !== DateType.MULTIPLE) {
@@ -471,7 +508,7 @@ export const taskService = {
 
             return taskRepository.deleteTaskById(
                 taskId,
-                userId,
+                task.userId,
                 activityDate,
                 task.isCompleted,
             );
@@ -510,7 +547,7 @@ export const taskService = {
 
             await taskRepository.deleteTaskDateById(
                 taskDateId,
-                userId,
+                task.userId,
                 activityDate,
                 taskDate.isCompleted,
             );
@@ -572,10 +609,10 @@ export const taskService = {
             );
         }
 
-        const task = await taskRepository.findTaskByIdAndUserId(
-            taskId,
-            userId,
-        );
+        const task =
+            await taskRepository.findTaskById(
+                taskId,
+            );
 
         if (!task) {
             throw new AppError(
@@ -583,6 +620,11 @@ export const taskService = {
                 '태스크를 찾을 수 없습니다.',
             );
         }
+
+        await assertTaskAccess(
+            userId,
+            task,
+        );
 
         // MULTIPLE
         if (task.dateType === DateType.MULTIPLE) {
@@ -678,6 +720,7 @@ export const taskService = {
     getTasks: async (
         userId: number,
         baseDate?: string,
+        includeSharedCategories = true,
     ) => {
         const resolvedBaseDate = parseBaseDate(baseDate);
         const [year, month] = resolvedBaseDate.split('-').map(Number);
@@ -688,9 +731,23 @@ export const taskService = {
             Date.UTC(year, month, 1),
         );
 
+        const acceptedSharedCategoryIds =
+            includeSharedCategories
+                ? (
+                    await sharedRepository
+                        .findAcceptedSharedCategoryIds(
+                            userId,
+                        )
+                ).map(
+                    (membership) =>
+                        membership.categoryId,
+                )
+                : [];
+
         const tasks =
             await taskRepository.findTasksByMonth(
                 userId,
+                acceptedSharedCategoryIds,
                 monthStart,
                 nextMonthStart,
             );
@@ -747,9 +804,10 @@ export const taskService = {
     ) => {
         const { milestoneId, orderedIds } = body;
 
-        // 마일스톤이 사용자의 것인지 확인
         const milestone =
-            await taskRepository.findMilestoneByIdAndUserId( milestoneId, userId );
+            await taskRepository.findMilestoneById(
+                milestoneId,
+            );
 
         if (!milestone) {
             throw new AppError(
@@ -758,11 +816,15 @@ export const taskService = {
             );
         }
 
-        // 해당 마일스톤의 실제 전체 태스크 조회
+        await categoryService.getCategory(
+            userId,
+            milestone.categoryId,
+        );
+
+        // 해당 마일스톤의 실제 전체 공동 태스크 조회
         const milestoneTasks =
             await taskRepository.findTaskIdsByMilestoneId(
                 milestoneId,
-                userId,
             );
 
         const actualIds = milestoneTasks.map((task) => task.id);
@@ -846,6 +908,7 @@ export const taskService = {
         return taskService.getTasks(
             targetUserId,
             baseDate,
+            false,
         );
     },
 };

@@ -64,17 +64,38 @@ type TaskOrderScope = {
 
 const lockTaskDisplayOrder = async (
     tx: Prisma.TransactionClient,
-    userId: number,
+    scope: TaskOrderScope,
 ) => {
-    const lockedUsers = await tx.$queryRaw<Array<{ id: number }>>`
-        SELECT id
-        FROM \`User\`
-        WHERE id = ${userId}
-        FOR UPDATE
-    `;
+    if (scope.categoryId === null) {
+        const lockedUsers =
+            await tx.$queryRaw<Array<{ id: number }>>`
+                SELECT id
+                FROM \`User\`
+                WHERE id = ${scope.userId}
+                FOR UPDATE
+            `;
 
-    if (lockedUsers.length === 0) {
-        throw new Error('displayOrder 채번 대상 사용자를 찾을 수 없습니다.');
+        if (lockedUsers.length === 0) {
+            throw new Error(
+                'displayOrder 채번 대상 사용자를 찾을 수 없습니다.',
+            );
+        }
+
+        return;
+    }
+
+    const lockedCategories =
+        await tx.$queryRaw<Array<{ id: number }>>`
+            SELECT id
+            FROM \`Category\`
+            WHERE id = ${scope.categoryId}
+            FOR UPDATE
+        `;
+
+    if (lockedCategories.length === 0) {
+        throw new Error(
+            'displayOrder 채번 대상 카테고리를 찾을 수 없습니다.',
+        );
     }
 };
 
@@ -83,11 +104,17 @@ const getNextTaskDisplayOrder = async (
     scope: TaskOrderScope,
 ) => {
     const maxOrder = await tx.task.aggregate({
-        where: {
-            userId: scope.userId,
-            categoryId: scope.categoryId,
-            milestoneId: scope.milestoneId,
-        },
+        where:
+            scope.categoryId === null
+                ? {
+                    userId: scope.userId,
+                    categoryId: null,
+                    milestoneId: null,
+                }
+                : {
+                    categoryId: scope.categoryId,
+                    milestoneId: scope.milestoneId,
+                },
         _max: {
             displayOrder: true,
         },
@@ -146,14 +173,12 @@ const getTaskCompletionState = (
 const lockTaskForCompletionState = async (
     tx: Prisma.TransactionClient,
     taskId: number,
-    userId: number,
 ) => {
     const lockedTasks =
         await tx.$queryRaw<Array<{ id: number }>>`
             SELECT id
             FROM \`Task\`
             WHERE id = ${taskId}
-              AND userId = ${userId}
             FOR UPDATE
         `;
 
@@ -167,7 +192,6 @@ const lockTaskForCompletionState = async (
 const lockTaskByTaskDateIdForCompletion = async (
     tx: Prisma.TransactionClient,
     taskDateId: number,
-    userId: number,
 ) => {
     const lockedTasks =
         await tx.$queryRaw<Array<{ id: number }>>`
@@ -176,7 +200,6 @@ const lockTaskByTaskDateIdForCompletion = async (
             INNER JOIN \`TaskDate\` AS taskDate
                 ON taskDate.taskId = task.id
             WHERE taskDate.id = ${taskDateId}
-              AND task.userId = ${userId}
             FOR UPDATE
         `;
 
@@ -190,35 +213,15 @@ const lockTaskByTaskDateIdForCompletion = async (
 };
 
 export const taskRepository = {
-    findCategoryByIdAndUserId: async (
-        categoryId: number,
-        userId: number,
-    ) => {
-        return prisma.category.findFirst({
-            where: {
-                id: categoryId,
-                userId,
-            },
-            select: {
-                id: true,
-                isHidden: true,
-                color: true,
-            },
-        });
-    },
 
-    findMilestoneByIdAndCategoryIdAndUserId: async (
+    findMilestoneByIdAndCategoryId: async (
         milestoneId: number,
         categoryId: number,
-        userId: number,
     ) => {
         return prisma.milestone.findFirst({
             where: {
                 id: milestoneId,
                 categoryId,
-                category: {
-                userId,
-                },
             },
             select: {
                 id: true,
@@ -235,7 +238,7 @@ export const taskRepository = {
                 milestoneId: data.milestoneId ?? null,
             };
 
-            await lockTaskDisplayOrder(tx, data.userId);
+            await lockTaskDisplayOrder(tx, scope);
             const displayOrder =
                 await getNextTaskDisplayOrder(tx, scope);
 
@@ -271,12 +274,11 @@ export const taskRepository = {
         });
     },
 
-    //userId 기준 task 조회 (dateType 확인 위해)
-    findTaskByIdAndUserId: async (taskId: number, userId: number) => {
-        return prisma.task.findFirst({
+    // taskId 기준 태스크 조회 후 service에서 접근 권한 검증
+    findTaskById: async (taskId: number) => {
+        return prisma.task.findUnique({
             where: {
                 id: taskId,
-                userId,
             },
             select: {
                 id: true,
@@ -546,7 +548,6 @@ export const taskRepository = {
         return prisma.task.update({
             where: {
                 id: taskId,
-                userId: data.userId,
             },
             data: {
                 categoryId: data.categoryId,
@@ -582,7 +583,6 @@ export const taskRepository = {
             return tx.task.update({
                 where: {
                     id: taskId,
-                    userId: data.userId,
                 },
                 data: {
                     categoryId: data.categoryId,
@@ -634,7 +634,6 @@ export const taskRepository = {
             await tx.task.update({
                 where: {
                     id: taskId,
-                    userId: data.userId,
                 },
                 data: {
                     categoryId: data.categoryId,
@@ -659,7 +658,6 @@ export const taskRepository = {
             return tx.task.findUniqueOrThrow({
                 where: {
                     id: taskId,
-                    userId: data.userId,
                 },
                 include: {
                     taskDates: {
@@ -689,11 +687,10 @@ export const taskRepository = {
                 milestoneId: data.milestoneId,
             };
 
-            await lockTaskDisplayOrder(tx, data.userId);
+            await lockTaskDisplayOrder(tx, scope);
             await lockTaskForCompletionState(
                 tx,
                 currentTaskId,
-                data.userId,
             );
 
             if (currentDateType === DateType.MULTIPLE) {
@@ -726,7 +723,6 @@ export const taskRepository = {
             const preservedTask = await tx.task.update({
                 where: {
                     id: currentTaskId,
-                    userId: data.userId,
                 },
                 data: {
                     // 완료 기록에도 수정 모달의 이름/소속 변경은 반영하되,
@@ -812,7 +808,6 @@ export const taskRepository = {
                 await lockTaskByTaskDateIdForCompletion(
                     tx,
                     taskDateId,
-                    userId,
                 );
 
             const updatedTaskDate =
@@ -855,7 +850,6 @@ export const taskRepository = {
             await tx.task.update({
                 where: {
                     id: updatedTaskDate.taskId,
-                    userId,
                 },
                 data: {
                     isCompleted:
@@ -908,29 +902,46 @@ export const taskRepository = {
     // 월별 전체 태스크 조회
     findTasksByMonth: async (
         userId: number,
+        acceptedSharedCategoryIds: number[],
         monthStart: Date,
         nextMonthStart: Date,
     ) => {
         return prisma.task.findMany({
             where: {
-                userId,
-
                 AND: [
                     {
                         OR: [
-                            // 독립 태스크
+                            // 본인이 만든 독립 태스크
                             {
+                                userId,
                                 categoryId: null,
                                 milestoneId: null,
                             },
-                            // 숨김이 아닌 카테고리의 하위 태스크
+                            // 본인이 소유한 숨김이 아닌 카테고리의 태스크
                             {
                                 category: {
                                     is: {
+                                        userId,
                                         isHidden: false,
                                     },
                                 },
                             },
+                            // ACCEPTED 멤버로 참여 중인 공유 카테고리의 공동 태스크
+                            ...(acceptedSharedCategoryIds.length > 0
+                                ? [
+                                    {
+                                        categoryId: {
+                                            in: acceptedSharedCategoryIds,
+                                        },
+                                        category: {
+                                            is: {
+                                                isShared: true,
+                                                isHidden: false,
+                                            },
+                                        },
+                                    },
+                                ]
+                                : []),
                         ],
                     },
 
@@ -1029,33 +1040,27 @@ export const taskRepository = {
         });
     },
 
-    // 사용자가 소유한 마일스톤 조회
-    findMilestoneByIdAndUserId: async (
+    findMilestoneById: async (
         milestoneId: number,
-        userId: number,
     ) => {
-        return prisma.milestone.findFirst({
+        return prisma.milestone.findUnique({
             where: {
                 id: milestoneId,
-                category: {
-                    userId,
-                },
             },
             select: {
                 id: true,
+                categoryId: true,
             },
         });
     },
 
-    // 특정 마일스톤의 전체 태스크 ID 조회
+    // 특정 마일스톤의 전체 공동 태스크 ID 조회
     findTaskIdsByMilestoneId: async (
         milestoneId: number,
-        userId: number,
     ) => {
         return prisma.task.findMany({
             where: {
                 milestoneId,
-                userId,
             },
             select: {
                 id: true,
