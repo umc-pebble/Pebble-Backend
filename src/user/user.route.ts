@@ -3,6 +3,7 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 import { validateBody } from '../middlewares/validate.middleware';
 import {
   getMe,
+  getMyStats,
   updateMe,
   deleteMe,
   getUser,
@@ -109,6 +110,45 @@ router.use(authMiddleware);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/users/me', getMe);
+
+/**
+ * @swagger
+ * /users/me/stats:
+ *   get:
+ *     summary: 내 프로필 수 놓은 조약돌 개수 조회
+ *     description: >
+ *       로그인한 회원 본인이 지금까지 완료 처리한 태스크의 총 개수를 조약돌(pebble) 개수로 조회합니다.
+ *       기간 제한 없이 누적 완료 개수이며, 태스크 완료 처리 여부가 바뀔 때마다 값이 달라질 수 있어
+ *       GET /users/me와 별도의 API로 분리되어 있습니다.
+ *       다중 반복 태스크(dateType=MULTIPLE)는 상위 태스크가 아니라 회차(taskDate)별 완료 여부로 집계됩니다.
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/ApiResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         pebble: { type: integer, description: 지금까지 완료한 태스크 총 개수, example: 42 }
+ *             example:
+ *               success: true
+ *               message: 프로필 내 수 놓은 조약돌 개수 조회 성공
+ *               data:
+ *                 pebble: 42
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get('/users/me/stats', getMyStats);
 
 /**
  * @swagger
