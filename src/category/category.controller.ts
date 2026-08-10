@@ -50,7 +50,7 @@ export const getFriendCategories = async (req: AuthRequest, res: Response, next:
 export const getCategory = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const categoryId = parseCategoryId(req.params.categoryId);
-    const category = await categoryService.getCategory(req.userId!, categoryId);
+    const category = await categoryService.getCategoryDetail(req.userId!, categoryId);
     sendSuccess(res, category, '카테고리 조회 성공');
   } catch (err) {
     next(err);

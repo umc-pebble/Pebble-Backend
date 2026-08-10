@@ -82,6 +82,16 @@ async function assertFriendProfileAccess(requesterId: number, targetUserId: numb
   }
 }
 
+// 진행률(%)을 정수로 계산한다. 소수점은 반올림하고, 태스크가 한 건도 없으면 0으로 본다
+// (0으로 나누면 NaN이 그대로 응답에 실려 클라이언트에서 화면이 깨진다).
+// 프론트 확정 정책이라 Math.round를 그대로 쓴다 — 99.6%가 100%로 보이는 경계는 알린 뒤 합의된 사항이다.
+function toProgressRate(completedCount: number, totalCount: number) {
+  if (totalCount === 0) {
+    return 0;
+  }
+  return Math.round((completedCount / totalCount) * 100);
+}
+
 export const categoryService = {
   // 내 카테고리 목록 (displayOrder 순은 repository가 보장).
   // 본인 소유 카테고리 + 초대를 수락한 공유 카테고리를 함께 반환한다.
@@ -132,6 +142,28 @@ export const categoryService = {
   // milestoneService가 하위 마일스톤 생성/조회/이동 시 이 판정을 그대로 재사용한다.
   getCategory(userId: number, categoryId: number) {
     return getAccessibleCategoryOrThrow(userId, categoryId);
+  },
+
+  // GET /categories/{categoryId} 전용. 위 getCategory에 진행률 집계를 얹은 것이다.
+  //
+  // 집계를 getCategory에 직접 넣지 않은 이유: getCategory는 milestone·task 도메인이 404/403
+  // 판정에 재사용하는 접근 게이트라(마일스톤 생성·태스크 조회 등 9곳), 거기에 집계를 붙이면
+  // 진행률과 무관한 요청마다 쿼리가 늘어난다. 화면에 진행률이 필요한 상세 조회에서만 집계한다.
+  //
+  // 진행률은 category.isCompleted와 서로 독립이다(프론트 확정). 완료 처리된 카테고리라도
+  // 실제 태스크 완료 비율을 그대로 내리고 100%로 덮어쓰지 않는다 — 사용자가 카테고리를 먼저
+  // 완료 처리하고 태스크를 남겨둘 수 있는데, 덮어쓰면 화면과 실제 데이터가 어긋난다.
+  async getCategoryDetail(userId: number, categoryId: number) {
+    const category = await getAccessibleCategoryOrThrow(userId, categoryId);
+    const { taskTotalCount, taskCompletedCount } =
+      await categoryRepository.countTaskProgress(categoryId);
+
+    return {
+      ...category,
+      taskTotalCount,
+      taskCompletedCount,
+      progressRate: toProgressRate(taskCompletedCount, taskTotalCount),
+    };
   },
 
   // 카테고리 생성. inviteUserIds가 있으면 생성과 동시에 공유 카테고리로 전환한다 (PLB-044).
