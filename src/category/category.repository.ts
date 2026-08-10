@@ -5,6 +5,18 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 
+// groupBy(['isCompleted']) 결과에서 개수를 합산한다. onlyCompleted면 완료된 행만 센다.
+// 전체와 완료를 각각 세면 쿼리가 두 배가 되므로, 한 번 묶어 읽고 여기서 나눠 쓴다.
+function sumGroupedCounts(
+  rows: { isCompleted: boolean; _count: { _all: number } }[],
+  onlyCompleted = false,
+) {
+  return rows.reduce(
+    (total, row) => (onlyCompleted && !row.isCompleted ? total : total + row._count._all),
+    0,
+  );
+}
+
 export const categoryRepository = {
   // 특정 유저의 카테고리 목록. displayOrder 오름차순 = 화면에 보이는 순서.
   // reorderCategories가 "본인 소유 전체"라는 전제로 재사용하므로 소유 카테고리만 반환한다
@@ -113,6 +125,44 @@ export const categoryRepository = {
       ...withCounts.filter((category) => category.userId === userId),
       ...withCounts.filter((category) => category.userId !== userId),
     ];
+  },
+
+  // 카테고리 상세의 진행률 집계. 태스크만 대상이고 마일스톤은 포함하지 않는다(프론트 정책 확정).
+  //
+  // 세는 단위는 "화면에서 체크할 수 있는 항목 하나"다.
+  // - SINGLE·RANGE 태스크: Task row 1건이 곧 1개이고, isCompleted가 그대로 완료 여부다.
+  // - MULTIPLE 태스크: 회차(TaskDate) 1건이 1개이고, Task row 자체는 세지 않는다.
+  //   MULTIPLE의 Task.isCompleted는 "모든 회차가 끝났을 때만 true"가 되는 파생값이라
+  //   (task.repository의 getTaskCompletionState) 이걸 세면 회차별 집계가 되지 않는다.
+  //   TaskDate는 MULTIPLE일 때만 생성되므로(task.repository의 createTask) 두 집계는 겹치지 않고,
+  //   dateType으로 갈라두면 같은 태스크를 두 번 세는 일도 없다.
+  //
+  // 목록의 taskCount와 달리 요청자(userId)로 거르지 않는다. 진행률은 오너와 공유 멤버에게
+  // 같은 값이 보여야 해서(프론트 확정) 카테고리에 남아 있는 태스크를 전부 센다.
+  // 카테고리 접근 권한은 서비스가 먼저 검증하므로 여기서는 categoryId만 본다.
+  //
+  // 두 집계는 반드시 한 트랜잭션(= 동일 읽기 스냅샷)에서 읽어야 한다. 따로 실행하면 그 사이
+  // 완료 토글이 일어나 완료 개수가 전체 개수를 넘는 값이 나갈 수 있다.
+  // 트랜잭션 안의 쿼리는 같은 커넥션에서 순차 실행되므로 병렬로 묶지 않고 차례로 await 한다.
+  countTaskProgress(categoryId: number) {
+    return prisma.$transaction(async (tx) => {
+      const taskRows = await tx.task.groupBy({
+        by: ['isCompleted'],
+        where: { categoryId, dateType: { not: 'MULTIPLE' } },
+        _count: { _all: true },
+      });
+      const taskDateRows = await tx.taskDate.groupBy({
+        by: ['isCompleted'],
+        where: { task: { categoryId } },
+        _count: { _all: true },
+      });
+
+      return {
+        taskTotalCount: sumGroupedCounts(taskRows) + sumGroupedCounts(taskDateRows),
+        taskCompletedCount:
+          sumGroupedCounts(taskRows, true) + sumGroupedCounts(taskDateRows, true),
+      };
+    });
   },
 
   // 친구 프로필 조회(PLB-040·#64)용 공개 카테고리 목록. 남의 것이라도 isPublic=true만 노출한다.
