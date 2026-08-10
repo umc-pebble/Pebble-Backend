@@ -203,7 +203,13 @@ router.patch('/categories/order', validateBody(reorderCategoriesSchema), reorder
  * /categories/{categoryId}:
  *   get:
  *     summary: 카테고리 단건 조회
- *     description: 카테고리 단건 상세를 조회합니다.
+ *     description: |
+ *       카테고리 단건 상세를 조회합니다. 오너뿐 아니라 초대를 수락한 공유 멤버도 조회할 수 있습니다.
+ *
+ *       상세 화면의 진행률 표시를 위해 taskTotalCount·taskCompletedCount·progressRate를 함께 내려줍니다.
+ *       이 세 필드는 태스크만 집계하며 마일스톤은 포함하지 않습니다. 조회한 달과 무관하게 카테고리 전체가 기준입니다.
+ *       다중(MULTIPLE) 태스크는 날짜별 회차를 각각 1개로 세고, 회차마다 완료 여부를 따로 판단합니다.
+ *       작성자를 가리지 않고 카테고리에 남아 있는 태스크를 모두 세므로 오너와 공유 멤버에게 같은 값이 내려갑니다.
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []

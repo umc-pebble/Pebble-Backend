@@ -96,6 +96,24 @@ const options: swaggerJSDoc.Options = {
                 '월과 무관하게, 요청자의 월별 조회(GET /tasks, GET /milestones)에 나타날 수 있는 일정이 이 카테고리에 하나라도 있는지 여부(= milestoneCount + taskCount > 0). sharedTaskCount는 합산되지 않습니다. 따라서 false는 "이 카테고리에 일정이 전혀 없다"가 아니라 "요청자의 월별 조회에는 어느 달에도 나타나지 않는다"는 뜻이며, 공유 카테고리에서 다른 멤버가 만든 태스크만 있는 경우가 여기에 해당합니다. 목록 조회(GET /categories)에서만 내려갑니다.',
               example: true,
             },
+            taskTotalCount: {
+              type: 'integer',
+              description:
+                '진행률의 분모. 카테고리에 속한 태스크의 총 개수이며 마일스톤은 포함하지 않습니다(태스크만 집계). 조회한 달과 무관한 전체 기준입니다. SINGLE(단일)·RANGE(기간)은 태스크 1건을 1개로, MULTIPLE(다중)은 날짜별 회차 하나하나를 각각 1개로 셉니다. 카테고리 직속 태스크와 마일스톤 하위 태스크를 모두 포함하며, 작성자를 가리지 않으므로 오너와 공유 멤버에게 같은 값이 내려갑니다(목록의 taskCount와 기준이 다릅니다). 상세 조회(GET /categories/{categoryId})에서만 내려갑니다.',
+              example: 10,
+            },
+            taskCompletedCount: {
+              type: 'integer',
+              description:
+                '진행률의 분자. taskTotalCount와 같은 기준으로 센 것 중 완료된 개수입니다. MULTIPLE(다중)은 전체 회차가 끝나야 1개로 세는 방식이 아니라 회차별 완료 상태를 각각 셉니다. 상세 조회(GET /categories/{categoryId})에서만 내려갑니다.',
+              example: 4,
+            },
+            progressRate: {
+              type: 'integer',
+              description:
+                '진행률(%). taskCompletedCount / taskTotalCount * 100을 소수점 반올림한 정수입니다. 태스크가 0건이면 0입니다. isCompleted(카테고리 완료 여부)와는 독립이라 완료된 카테고리라도 100으로 보정하지 않습니다. 상세 조회(GET /categories/{categoryId})에서만 내려갑니다.',
+              example: 40,
+            },
             createdAt: {
               type: 'string',
               format: 'date-time',
