@@ -344,7 +344,9 @@ router.patch(
  *       멤버가 공유 카테고리에서 스스로 나갑니다. 내 목록에서 즉시 제거됩니다.
  *       내가 만든 마일스톤과 완료된 태스크는 카테고리에 그대로 유지되지만, 내가 만든
  *       미완료 태스크는 함께 삭제됩니다(카테고리 진행률이 나간 사람의 미완료 태스크에 영구히
- *       막히지 않도록 하는 정책, TaskDate는 CASCADE로 함께 삭제).
+ *       막히지 않도록 하는 정책). SINGLE/RANGE 태스크는 미완료면 태스크 전체가 삭제되고,
+ *       MULTIPLE 태스크는 미완료 회차(TaskDate)만 개별 삭제됩니다 — 완료된 회차와 회차가
+ *       남아있는 부모 태스크는 그대로 유지됩니다.
  *       오너는 탈퇴할 수 없고, 공유 삭제(DELETE /categories/{id}/share)를 사용해야 합니다.
  *     tags: [SharedCategory]
  *     security:
@@ -385,7 +387,9 @@ router.delete('/categories/:categoryId/members/me', leaveSharedCategory);
  *     description: >
  *       오너가 특정 멤버를 강퇴합니다. 해당 SharedCategoryMember 레코드가 제거됩니다.
  *       강퇴된 멤버가 만든 마일스톤과 완료된 태스크는 유지되지만, 미완료 태스크는 함께
- *       삭제됩니다(자진 탈퇴와 동일한 정책, TaskDate는 CASCADE로 함께 삭제).
+ *       삭제됩니다(자진 탈퇴와 동일한 정책). SINGLE/RANGE 태스크는 미완료면 태스크 전체가
+ *       삭제되고, MULTIPLE 태스크는 미완료 회차(TaskDate)만 개별 삭제됩니다 — 완료된 회차와
+ *       회차가 남아있는 부모 태스크는 그대로 유지됩니다.
  *       강퇴된 멤버에게는 별도 알림을 보내지 않습니다.
  *     tags: [SharedCategory]
  *     security:
