@@ -145,4 +145,43 @@ export const sharedRepository = {
       },
     });
   },
+
+  // 자진 탈퇴/강퇴 전용: 멤버십 삭제 + 그 유저가 이 카테고리에 만든 미완료 태스크 삭제를
+  // 하나의 트랜잭션으로 묶는다(완료 태스크·마일스톤은 프론트 확정 정책상 그대로 유지).
+  // respondInvite의 초대 거절(REJECT)은 이 메서드를 쓰지 않는다 — PENDING 상태에서는
+  // 애초에 태스크를 만들 수 없어 정리할 게 없다(deleteMembership을 그대로 쓴다).
+  //
+  // SINGLE/RANGE와 MULTIPLE을 다르게 처리한다(하경님 확인) — MULTIPLE의 Task.isCompleted는
+  // "전 회차가 끝나야 true"인 파생값이라, 회차 일부만 완료된 MULTIPLE 태스크는 Task 기준으로
+  // 지우면 이미 완료된 회차(TaskDate)까지 통째로 날아가 "완료는 유지" 정책을 어긴다.
+  // - SINGLE/RANGE: Task.isCompleted가 곧 완료 여부라 Task 단위로 미완료면 삭제한다
+  //   (TaskDate가 없는 타입이라 CASCADE 걱정 없음).
+  // - MULTIPLE: TaskDate.isCompleted 기준으로 미완료 회차만 지운다(완료 회차는 보존).
+  //   그 결과 회차가 하나도 안 남은 MULTIPLE 태스크는 빈 부모 row로 고아가 되므로 함께 지운다.
+  //
+  // Task 테이블을 직접 건드리는 건 이 파일의 기존 관례(Category/User/Follow 등 필요한 만큼
+  // 직접 조회)를 그대로 따른 것이다. 원래는 task 도메인 쪽에 위임하는 게 더 일관되지만
+  // (findAcceptedSharedCategoryIds를 반대로 task.service.ts가 이 파일에서 가져다 쓰는 것처럼),
+  // 정책이 급하게 확정돼 우선 여기 넣었다 — 하경님 편하실 때 task 도메인으로 옮겨도 된다.
+  deleteMembershipAndIncompleteTasks(categoryId: number, userId: number) {
+    return prisma.$transaction(async (tx) => {
+      await tx.sharedCategoryMember.delete({ where: { categoryId_userId: { categoryId, userId } } });
+
+      await tx.task.deleteMany({
+        where: { categoryId, userId, isCompleted: false, dateType: { in: ['SINGLE', 'RANGE'] } },
+      });
+
+      await tx.taskDate.deleteMany({
+        where: { isCompleted: false, task: { categoryId, userId, dateType: 'MULTIPLE' } },
+      });
+
+      const orphanedMultipleTasks = await tx.task.findMany({
+        where: { categoryId, userId, dateType: 'MULTIPLE', taskDates: { none: {} } },
+        select: { id: true },
+      });
+      if (orphanedMultipleTasks.length > 0) {
+        await tx.task.deleteMany({ where: { id: { in: orphanedMultipleTasks.map((t) => t.id) } } });
+      }
+    });
+  },
 };
