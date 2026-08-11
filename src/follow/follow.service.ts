@@ -1,6 +1,7 @@
 import { FollowStatus, Prisma } from '@prisma/client';
 
 import { AppError } from '../utils/app-error';
+import { getTodayKST } from '../utils/date';
 
 import { followRepository } from './follow.repository';
 import { SearchUsersQuery, FollowListQuery } from './follow.schema';
@@ -120,6 +121,19 @@ export const followService = {
     const { type, keyword, offset, limit } = query;
     const [follows, total] = await followRepository.findList(userId, type, keyword, offset, limit);
 
+    // 프로필 링(PLB-034)은 맞팔 친구에게만 켠다. 수락 전(pending/sent)은 아직 친구가 아니라
+    // 상대의 일정을 볼 권한이 없으므로(PLB-040) 계산하지 않고 false로 둔다.
+    const others = follows.map((follow) =>
+      follow.followerId === userId ? follow.following : follow.follower,
+    );
+    const todayScheduleIds =
+      type === 'friends'
+        ? await followRepository.findFriendIdsWithTodaySchedule(
+            others.map((other) => other.id),
+            getTodayKST(),
+          )
+        : new Set<number>();
+
     const data = follows.map((follow) => {
       // row 하나로 양방향이므로 내가 아닌 쪽이 상대
       const other = follow.followerId === userId ? follow.following : follow.follower;
@@ -130,9 +144,8 @@ export const followService = {
         uniqueTag: other.uniqueTag,
         profileImageUrl: other.profileImageUrl,
         bio: other.bio,
-        // TODO(일정 도메인 연동): 금일 일정 유무는 마일스톤·태스크 조회가 필요하고
-        // 비공개 카테고리 제외 규칙(PLB-040)과도 얽혀 있어 협의 후 계산 예정
-        hasTodaySchedule: false,
+        // 금일 일정(공개 카테고리 기준)이 있으면 프로필 테두리 활성화 (PLB-034·040)
+        hasTodaySchedule: todayScheduleIds.has(other.id),
       };
     });
 

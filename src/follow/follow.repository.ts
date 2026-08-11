@@ -148,4 +148,74 @@ export const followRepository = {
       prisma.follow.count({ where }),
     ]);
   },
+
+  // 프로필 링(PLB-034)용 — friendIds 중 "오늘(KST) 조회 가능한 일정이 있는" 친구 id 집합.
+  // 가시성은 친구 캘린더(task.findFriendTasksByMonth) + 친구 마일스톤 조회와 동일하게 맞춘다:
+  //   ① 친구의 공개(isPublic) 카테고리 마일스톤
+  //   ② 그 공개 카테고리의 하위 태스크 — 작성자 무관, 카테고리 소유자(친구)에 귀속
+  //   ③ 친구 본인의 독립 태스크 — categoryId·milestoneId 모두 NULL (친구 캘린더가 노출하므로 링에도 포함)
+  // 비공개 카테고리는 제외(PLB-040), 완료 여부는 보지 않는다("금일 일정 존재"가 기준).
+  // 오늘 판정 규칙은 알림 배치(milestone.findDueTodayWithOwner / task.find*DueToday)와 동일.
+  findFriendIdsWithTodaySchedule: async (
+    friendIds: number[],
+    today: Date,
+  ): Promise<Set<number>> => {
+    if (friendIds.length === 0) {
+      return new Set();
+    }
+
+    const [milestones, publicCategoryTasks, independentTasks] = await Promise.all([
+      // ① 마일스톤은 userId 컬럼이 없어 소유를 카테고리(2-hop)로만 안다 — 친구의 공개 카테고리.
+      prisma.milestone.findMany({
+        where: {
+          category: { userId: { in: friendIds }, isPublic: true },
+          OR: [
+            { dateType: { in: ['SINGLE', 'MULTIPLE'] }, startDate: today },
+            { dateType: 'RANGE', startDate: { lte: today }, endDate: { gte: today } },
+          ],
+        },
+        select: { category: { select: { userId: true } } },
+      }),
+      // ② 공개 카테고리 하위 태스크 — 카테고리 소유자(친구)에 귀속(친구 캘린더와 동일 규칙).
+      prisma.task.findMany({
+        where: {
+          category: { is: { userId: { in: friendIds }, isPublic: true } },
+          OR: [
+            { dateType: 'SINGLE', startDate: today },
+            { dateType: 'RANGE', startDate: { lte: today }, endDate: { gte: today } },
+            { dateType: 'MULTIPLE', taskDates: { some: { date: today } } },
+          ],
+        },
+        select: { category: { select: { userId: true } } },
+      }),
+      // ③ 독립 태스크 — 친구 본인 것(카테고리·마일스톤 없음).
+      prisma.task.findMany({
+        where: {
+          userId: { in: friendIds },
+          categoryId: null,
+          milestoneId: null,
+          OR: [
+            { dateType: 'SINGLE', startDate: today },
+            { dateType: 'RANGE', startDate: { lte: today }, endDate: { gte: today } },
+            { dateType: 'MULTIPLE', taskDates: { some: { date: today } } },
+          ],
+        },
+        select: { userId: true },
+      }),
+    ]);
+
+    const result = new Set<number>();
+    for (const milestone of milestones) {
+      result.add(milestone.category.userId);
+    }
+    for (const task of publicCategoryTasks) {
+      if (task.category) {
+        result.add(task.category.userId);
+      }
+    }
+    for (const task of independentTasks) {
+      result.add(task.userId);
+    }
+    return result;
+  },
 };
