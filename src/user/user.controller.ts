@@ -24,6 +24,15 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
   }
 };
 
+export const getMyStats = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const pebble = await userService.getPebble(req.userId!);
+    sendSuccess(res, pebble, '프로필 내 수 놓은 조약돌 개수 조회 성공');
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const updateMe = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const dto = req.body as UpdateMeBody;
