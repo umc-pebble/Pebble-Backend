@@ -87,7 +87,7 @@ async function assertFriendProfileAccess(requesterId: number, targetUserId: numb
 // 대상 유저(친구)가 멤버로 참여 중이라는 사실만으로는 열어줄 수 없다. 그 카테고리의 오너는
 // 제3자이고 isPublic은 오너가 자기 팔로워에게 건 공개 설정이라, 친구의 참여를 이유로 노출하면
 // 오너가 공개한 적 없는 상대에게까지 내용이 흘러간다. 그래서 오너와 요청자 사이에도 친구 관계를
-// 요구한다(2026-08-12 확정).
+// 요구한다.
 //
 // 오너별로 isFriend를 부르는 이유: follow 도메인에 여러 명을 한 번에 판정하는 함수가 없다.
 // shared.service의 초대 검증도 같은 이유로 대상마다 확인한다. 오너 id는 중복 제거해서

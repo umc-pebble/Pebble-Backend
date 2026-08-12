@@ -131,10 +131,17 @@ const options: swaggerJSDoc.Options = {
         Milestone: {
           type: 'object',
           description:
-            'userId 없음 — 카테고리를 통한 2-hop 소유 판정. 날짜 유형(dateType)에 따라 startDate/endDate 사용 여부가 달라집니다. MULTIPLE(다중)는 선택한 날짜마다 실제 row(회차)로 존재하며 같은 seriesId를 공유합니다.',
+            '소유자 개념 없음 — 접근·수정·완료·완료 해제 권한은 모두 상위 카테고리를 통한 2-hop 판정입니다(createdByUserId는 표시 전용이라 권한에 영향을 주지 않습니다). 날짜 유형(dateType)에 따라 startDate/endDate 사용 여부가 달라집니다. MULTIPLE(다중)는 선택한 날짜마다 실제 row(회차)로 존재하며 같은 seriesId를 공유합니다.',
           properties: {
             id: { type: 'integer', example: 10 },
             categoryId: { type: 'integer', example: 1 },
+            createdByUserId: {
+              type: 'integer',
+              nullable: true,
+              description:
+                '마일스톤을 만든 사용자 ID. 화면 표시 전용이며 권한 판정에는 쓰이지 않습니다 — 카테고리 구성원이라면 누구나 수정·완료·완료 해제할 수 있습니다. null인 경우는 두 가지입니다: (1) 이 필드 도입 이전에 만들어진 마일스톤, (2) 작성자가 회원탈퇴한 경우(탈퇴해도 마일스톤 자체는 삭제되지 않고 유지됩니다). null이면 "알 수 없음" 또는 "탈퇴한 사용자"로 표시하면 됩니다. MULTIPLE(다중)은 회차 전체가 같은 값을 가집니다.',
+              example: 42,
+            },
             seriesId: {
               type: 'integer',
               nullable: true,

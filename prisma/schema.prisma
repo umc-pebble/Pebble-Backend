@@ -91,6 +91,7 @@ model User {
   subscriptions         Subscription[]
   categories            Category[]
   tasks                 Task[]
+  createdMilestones     Milestone[]            @relation("MilestoneCreatedBy")
   completedTasks        Task[]                 @relation("TaskCompletedBy")
   completedTaskDates    TaskDate[]             @relation("TaskDateCompletedBy")
   activityLogs          ActivityLog[]
@@ -209,6 +210,13 @@ model Category {
 model Milestone {
   id           Int       @id @default(autoincrement())
   categoryId   Int
+  // 작성자 표시 전용. 권한 판정에는 쓰지 않는다 — 마일스톤은 카테고리에 속한 공동 항목이라
+  // 접근·수정·완료·완료 해제는 모두 카테고리 권한을 그대로 따른다.
+  // NULL인 경우: 이 컬럼 도입 이전에 만들어진 행, 또는 작성자가 회원탈퇴한 행(SetNull).
+  // 탈퇴자가 만든 마일스톤도 삭제하지 않고 유지하는 정책이라 SetNull이어야 한다 —
+  // Cascade면 유저 삭제가 마일스톤 삭제로 번지고, Task.milestoneId도 Cascade라
+  // 다른 멤버가 만든 완료 태스크까지 연쇄로 지워진다.
+  createdByUserId Int?
   name         String    @db.VarChar(100)
   dateType     DateType
   startDate    DateTime  @db.Date
@@ -220,10 +228,12 @@ model Milestone {
   updatedAt    DateTime  @updatedAt
 
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdByUser User? @relation("MilestoneCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   tasks    Task[]
 
   @@index([categoryId, startDate])
   @@index([seriesId])
+  @@index([createdByUserId])
 }
 
 model Task {

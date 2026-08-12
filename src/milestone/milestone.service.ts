@@ -164,9 +164,11 @@ export const milestoneService = {
     await categoryService.getCategory(userId, categoryId);
 
     // MULTIPLE: dates의 날짜마다 회차 row 일괄 생성, 같은 seriesId 부여 (PLB-012)
+    // 회차 전체가 같은 작성자를 갖는다 — 한 번의 생성 요청으로 만들어진 하나의 마일스톤이다.
     if (input.dateType === 'MULTIPLE') {
       const milestones = await milestoneRepository.createMultiple({
         categoryId,
+        createdByUserId: userId,
         name: input.name,
         dates: (input.dates ?? []).map((d) => new Date(d)),
       });
@@ -175,6 +177,7 @@ export const milestoneService = {
 
     const milestone = await milestoneRepository.create({
       categoryId,
+      createdByUserId: userId,
       name: input.name,
       dateType: input.dateType,
       startDate: new Date(input.startDate!), // zod가 SINGLE/RANGE에서 필수 보장

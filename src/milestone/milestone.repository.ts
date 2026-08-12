@@ -9,6 +9,7 @@ type Tx = Prisma.TransactionClient;
 
 interface CreateRowInput {
   categoryId: number;
+  createdByUserId: number;
   name: string;
   dateType: 'SINGLE' | 'RANGE' | 'MULTIPLE';
   startDate: Date;
@@ -111,7 +112,7 @@ async function reserveDateOrderSlots(
 // 반환 배열의 0번은 항상 가장 이른 날짜의 회차다.
 async function createSeriesRows(
   tx: Tx,
-  input: { categoryId: number; name: string; dates: Date[] },
+  input: { categoryId: number; createdByUserId: number; name: string; dates: Date[] },
 ) {
   const sorted = [...input.dates].sort((a, b) => a.getTime() - b.getTime());
   const slots = await reserveDateOrderSlots(tx, input.categoryId, sorted);
@@ -119,6 +120,7 @@ async function createSeriesRows(
   const first = await tx.milestone.create({
     data: {
       categoryId: input.categoryId,
+      createdByUserId: input.createdByUserId,
       name: input.name,
       dateType: 'MULTIPLE',
       startDate: sorted[0],
@@ -133,6 +135,7 @@ async function createSeriesRows(
     await tx.milestone.createMany({
       data: sorted.slice(1).map((date, i) => ({
         categoryId: input.categoryId,
+        createdByUserId: input.createdByUserId,
         name: input.name,
         dateType: 'MULTIPLE' as const,
         startDate: date,
@@ -352,7 +355,12 @@ export const milestoneRepository = {
 
   // 다중(MULTIPLE) 생성: 날짜마다 회차 row를 만들고 같은 seriesId로 묶는다(PLB-012).
   // 전체를 한 트랜잭션으로 묶어 일부 회차만 생성되는 상태를 방지한다.
-  createMultiple(input: { categoryId: number; name: string; dates: Date[] }) {
+  createMultiple(input: {
+    categoryId: number;
+    createdByUserId: number;
+    name: string;
+    dates: Date[];
+  }) {
     return withDeadlockRetry(() =>
       prisma.$transaction((tx) => createSeriesRows(tx, input), TX_OPTIONS),
     );
@@ -431,7 +439,7 @@ export const milestoneRepository = {
 
         // MULTIPLE: 앵커가 가장 이른 날짜의 첫 회차가 되고 seriesId로 자기 id를 쓴다
         // (생성 경로의 "seriesId = 첫 회차 id" 규칙과 동일).
-        await tx.milestone.update({
+        const anchor = await tx.milestone.update({
           where: { id: input.anchorId },
           data: {
             name: input.name,
@@ -445,8 +453,12 @@ export const milestoneRepository = {
 
         if (dates.length > 1) {
           await tx.milestone.createMany({
+            // 새로 생기는 회차의 작성자는 "수정한 사람"이 아니라 앵커의 작성자를 그대로 쓴다.
+            // 날짜 재지정은 같은 마일스톤의 형태를 바꾸는 것이라, 회차마다 작성자가 갈리면
+            // 한 시리즈 안에서 표시가 어긋난다. 앵커가 NULL이면(도입 이전 행·탈퇴자) 그대로 NULL이다.
             data: dates.slice(1).map((date, i) => ({
               categoryId: input.categoryId,
+              createdByUserId: anchor.createdByUserId,
               name: input.name,
               dateType: 'MULTIPLE' as const,
               startDate: date,
