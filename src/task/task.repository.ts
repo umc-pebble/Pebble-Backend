@@ -1225,6 +1225,7 @@ export const taskRepository = {
     // 공유 카테고리는 대상 사용자가 소유한 카테고리가 아니므로 제외된다.
     findFriendTasksByMonth: async (
         targetUserId: number,
+        acceptedSharedCategoryIds: number[],
         monthStart: Date,
         nextMonthStart: Date,
     ) => {
@@ -1245,6 +1246,19 @@ export const taskRepository = {
                                     is: {
                                         userId: targetUserId,
                                         isPublic: true,
+                                    },
+                                },
+                            },
+                            // 친구가 ACCEPTED 멤버로 참여 중인 공개 공유 카테고리에 직접 작성한 태스크
+                            {
+                                userId: targetUserId,
+                                categoryId: {
+                                    in: acceptedSharedCategoryIds,
+                                },
+                                category: {
+                                    is: {
+                                        isPublic: true,
+                                        isShared: true,
                                     },
                                 },
                             },

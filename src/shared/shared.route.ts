@@ -342,7 +342,9 @@ router.patch(
  *     summary: 공유 카테고리 자진 탈퇴 (PLB-045)
  *     description: >
  *       멤버가 공유 카테고리에서 스스로 나갑니다. 내 목록에서 즉시 제거됩니다.
- *       내가 만든 마일스톤과 태스크는 완료 여부와 관계없이 카테고리에 그대로 유지됩니다.
+ *       내가 만든 마일스톤·태스크·회차는 완료 여부와 관계없이 모두 유지됩니다.
+ *       내가 완료 처리한 태스크와 회차는 완료 상태 및 완료 시각을 유지하고,
+ *       completedByUserId만 null로 변경되어 남은 멤버가 완료를 해제할 수 있습니다.
  *       오너는 탈퇴할 수 없고, 공유 삭제(DELETE /categories/{id}/share)를 사용해야 합니다.
  *     tags: [SharedCategory]
  *     security:
@@ -382,7 +384,9 @@ router.delete('/categories/:categoryId/members/me', leaveSharedCategory);
  *     summary: 공유 멤버 관리 — 강퇴 (PLB-045)
  *     description: >
  *       오너가 특정 멤버를 강퇴합니다. 해당 SharedCategoryMember 레코드가 제거됩니다.
- *       강퇴된 멤버가 만든 마일스톤과 태스크는 완료 여부와 관계없이 유지됩니다(자진 탈퇴와 동일한 정책).
+ *       강퇴된 멤버가 만든 마일스톤·태스크·회차는 완료 여부와 관계없이 모두 유지됩니다.
+ *       해당 멤버가 완료 처리한 태스크와 회차는 완료 상태 및 완료 시각을 유지하고,
+ *       completedByUserId만 null로 변경됩니다.
  *       강퇴된 멤버에게는 별도 알림을 보내지 않습니다.
  *     tags: [SharedCategory]
  *     security:

@@ -145,4 +145,25 @@ export const sharedRepository = {
       },
     });
   },
+  // 자진 탈퇴/강퇴 전용: 멤버십을 삭제하되 마일스톤·태스크·회차는 모두 유지한다.
+  // 나가는 멤버가 완료 처리한 항목은 완료 상태와 완료 시각을 보존하고 처리자만 비운다.
+  // respondInvite의 초대 거절(REJECT)은 이 메서드를 쓰지 않는다 — PENDING 상태에서는
+  // 애초에 태스크를 만들 수 없어 정리할 게 없다(deleteMembership을 그대로 쓴다).
+  //
+  // completedByUserId가 null이면 남은 공유 멤버 누구나 완료를 해제할 수 있다.
+  deleteMembershipAndClearCompletionActor(categoryId: number, userId: number) {
+    return prisma.$transaction(async (tx) => {
+      await tx.sharedCategoryMember.delete({ where: { categoryId_userId: { categoryId, userId } } });
+
+      await tx.task.updateMany({
+        where: { categoryId, completedByUserId: userId },
+        data: { completedByUserId: null },
+      });
+
+      await tx.taskDate.updateMany({
+        where: { completedByUserId: userId, task: { categoryId } },
+        data: { completedByUserId: null },
+      });
+    });
+  },
 };

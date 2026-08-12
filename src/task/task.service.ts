@@ -923,9 +923,16 @@ export const taskService = {
             Date.UTC(year, month, 1),
         );
 
+        const acceptedSharedCategoryIds = (
+            await sharedRepository.findAcceptedSharedCategoryIds(
+                targetUserId,
+            )
+        ).map((membership) => membership.categoryId);
+
         const tasks =
             await taskRepository.findFriendTasksByMonth(
                 targetUserId,
+                acceptedSharedCategoryIds,
                 monthStart,
                 nextMonthStart,
             );
