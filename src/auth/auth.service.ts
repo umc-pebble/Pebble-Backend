@@ -255,6 +255,20 @@ export const authService = {
             const tokens = await issueInitialTokens(created.user.id);
             return { user: toPublicUser(created.user), ...tokens, isNewUser: false };
           }
+          // 소셜 연동은 없지만 같은 이메일의 일반 계정이 경쟁으로 먼저 생긴 경우 —
+          // 케이스 2와 동일하게 그 계정에 소셜을 연동해 로그인시킨다(계정 분리 방지).
+          // 단 SIGNUP intent면 기존 계정이므로 rejectSignupOnExisting이 409로 막는다.
+          const existingByEmail = await authRepository.findByEmail(profile.email);
+          if (existingByEmail) {
+            rejectSignupOnExisting();
+            await authRepository.linkSocialAccount(
+              existingByEmail.id,
+              socialProvider,
+              profile.providerAccountId,
+            );
+            const tokens = await issueInitialTokens(existingByEmail.id);
+            return { user: toPublicUser(existingByEmail), ...tokens, isNewUser: false };
+          }
           throw new AppError('AUTH_EMAIL_DUPLICATED', '이미 가입된 이메일입니다.');
         }
         throw err;
