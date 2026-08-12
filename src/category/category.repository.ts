@@ -174,6 +174,29 @@ export const categoryRepository = {
     });
   },
 
+  // 친구 프로필에 함께 노출할 "공유 카테고리" 후보. 대상 유저(친구)가 초대를 수락(ACCEPTED)해
+  // 참여 중인 남의 공개 카테고리를 반환한다. 위 findPublicManyByUserId가 대상 유저 소유만
+  // 반환하는 것과 짝을 이룬다 — 둘을 합쳐야 "친구가 일정을 쓰고 있는 공개 카테고리 전부"가 된다.
+  //
+  // 여기서 걸러지지 않는 조건이 하나 있다: 오너가 요청자와 친구인지. 이 카테고리의 오너는
+  // 대상 유저가 아니라 제3자이고, isPublic은 그 오너가 자기 팔로워에게 건 공개 설정이다.
+  // 친구가 멤버라는 이유만으로 열어주면 오너가 공개한 적 없는 사람에게까지 노출되므로,
+  // 서비스가 오너와 요청자의 친구 관계를 확인해 다시 거른다(팔로우 판정을 이 계층에서
+  // 다시 구현하지 않기 위해 여기서 하지 않는다 — categoryService의 isFriend 재사용 원칙).
+  //
+  // 정렬은 findVisibleByUserId의 공유 구간과 같다. displayOrder가 오너 기준 순번이라
+  // 오너가 제각각인 목록에서는 겹칠 수 있어, 같으면 id(생성 순)로 갈라 순서를 고정한다.
+  findPublicSharedByMemberId(userId: number) {
+    return prisma.category.findMany({
+      where: {
+        userId: { not: userId },
+        isPublic: true,
+        members: { some: { userId, status: 'ACCEPTED' } },
+      },
+      orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+    });
+  },
+
   // 유저 존재 확인용(친구 프로필 조회). 없으면 null → 서비스에서 404 판정.
   findUserById(userId: number) {
     return prisma.user.findUnique({

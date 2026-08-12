@@ -82,6 +82,33 @@ async function assertFriendProfileAccess(requesterId: number, targetUserId: numb
   }
 }
 
+// 친구 프로필에 노출할 공유 카테고리를 "오너도 요청자와 친구인 것"만 남긴다.
+//
+// 대상 유저(친구)가 멤버로 참여 중이라는 사실만으로는 열어줄 수 없다. 그 카테고리의 오너는
+// 제3자이고 isPublic은 오너가 자기 팔로워에게 건 공개 설정이라, 친구의 참여를 이유로 노출하면
+// 오너가 공개한 적 없는 상대에게까지 내용이 흘러간다. 그래서 오너와 요청자 사이에도 친구 관계를
+// 요구한다(2026-08-12 확정).
+//
+// 오너별로 isFriend를 부르는 이유: follow 도메인에 여러 명을 한 번에 판정하는 함수가 없다.
+// shared.service의 초대 검증도 같은 이유로 대상마다 확인한다. 오너 id는 중복 제거해서
+// 카테고리 수가 아니라 "서로 다른 오너 수"만큼만 호출한다.
+async function filterByFriendlyOwner<T extends { userId: number }>(
+  requesterId: number,
+  categories: T[],
+) {
+  const ownerIds = [...new Set(categories.map((category) => category.userId))];
+  const visibleOwnerIds = new Set<number>();
+
+  for (const ownerId of ownerIds) {
+    // 내가 오너인 카테고리는 판정이 필요 없다(isFriend는 자기 자신에 대해 false를 반환한다).
+    if (ownerId === requesterId || (await isFriend(requesterId, ownerId))) {
+      visibleOwnerIds.add(ownerId);
+    }
+  }
+
+  return categories.filter((category) => visibleOwnerIds.has(category.userId));
+}
+
 // 진행률(%)을 정수로 계산한다. 소수점은 반올림하고, 태스크가 한 건도 없으면 0으로 본다
 // (0으로 나누면 NaN이 그대로 응답에 실려 클라이언트에서 화면이 깨진다).
 // 프론트 확정 정책이라 Math.round를 그대로 쓴다 — 99.6%가 100%로 보이는 경계는 알린 뒤 합의된 사항이다.
@@ -117,22 +144,53 @@ export const categoryService = {
   },
 
   // 친구(또는 본인)의 공개 카테고리 목록 (#64·PLB-040). 비공개(isPublic=false)는 노출하지 않는다.
+  // 친구 프로필의 공개 카테고리 목록. 대상 유저가 "오너인" 공개 카테고리와, 대상 유저가
+  // 멤버로 참여 중인 남의 공개 공유 카테고리를 함께 반환한다 — 친구가 공유 카테고리에만
+  // 일정을 쓰고 있으면 소유 카테고리만 보여줄 때 프로필이 비어 보이기 때문이다.
+  //
+  // 공유 쪽은 오너도 요청자와 친구일 때만 노출한다(filterByFriendlyOwner 참고).
+  //
+  // 정렬은 소유를 먼저, 공유받은 것을 뒤에 둔다. displayOrder가 오너 기준 순번이라 오너가
+  // 다른 카테고리를 한 줄로 섞으면 순번이 겹쳐 순서가 조회할 때마다 달라진다
+  // (findVisibleByUserId가 내 목록에서 같은 이유로 쓰는 정렬과 동일하다).
   async getFriendCategories(requesterId: number, targetUserId: number) {
     await assertFriendProfileAccess(requesterId, targetUserId);
-    return categoryRepository.findPublicManyByUserId(targetUserId);
+
+    const owned = await categoryRepository.findPublicManyByUserId(targetUserId);
+    const sharedCandidates =
+      await categoryRepository.findPublicSharedByMemberId(targetUserId);
+
+    return [...owned, ...(await filterByFriendlyOwner(requesterId, sharedCandidates))];
   },
 
   // 친구 프로필에서 특정 카테고리 1건을 검증해 반환한다(하위 마일스톤 조회 등에서 재사용).
-  // 접근 판정 후, 그 카테고리가 대상 유저 소유이면서 공개(isPublic=true)일 때만 반환한다.
-  // 남의 비공개 카테고리는 존재 자체를 숨기기 위해 403이 아닌 404로 처리한다.
+  // 노출 범위는 getFriendCategories(목록)와 반드시 같아야 한다 — 목록에 보이는데 열리지 않거나,
+  // 목록에 없는데 URL로 열리면 두 화면의 규칙이 갈린다. 그래서 두 경로 모두 아래 두 가지를 허용한다.
+  //   1) 대상 유저가 오너인 공개 카테고리
+  //   2) 대상 유저가 ACCEPTED 멤버로 참여 중인 남의 공개 공유 카테고리
+  //      (단 오너도 요청자와 친구여야 한다 — filterByFriendlyOwner와 같은 이유)
+  // 권한 없는 카테고리는 존재 자체를 숨기기 위해 403이 아닌 404로 처리한다.
   async getFriendPublicCategory(
     requesterId: number,
     targetUserId: number,
     categoryId: number,
   ) {
     await assertFriendProfileAccess(requesterId, targetUserId);
+
     const category = await categoryRepository.findById(categoryId);
-    if (!category || category.userId !== targetUserId || !category.isPublic) {
+    if (!category || !category.isPublic) {
+      throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
+    }
+    if (category.userId === targetUserId) {
+      return category;
+    }
+
+    // 여기부터는 제3자 소유 카테고리다. 대상 유저가 실제로 참여 중이어야 하고,
+    // 오너도 요청자와 친구여야 한다(내가 오너면 판정 불필요).
+    const targetIsMember = await isAcceptedSharedMember(targetUserId, categoryId);
+    const ownerIsVisible =
+      category.userId === requesterId || (await isFriend(requesterId, category.userId));
+    if (!targetIsMember || !ownerIsVisible) {
       throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
     }
     return category;
