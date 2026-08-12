@@ -218,4 +218,66 @@ export const followRepository = {
     }
     return result;
   },
+
+  // 친구 일정 열람 기록 upsert (프로필 링 "안 본 일정" — hasUnviewedSchedule).
+  // (viewer, target) 쌍당 1행이며 lastViewedAt을 현재 시각으로 갱신한다. 멱등(중복 호출 안전).
+  upsertScheduleView: (viewerId: number, targetUserId: number) =>
+    prisma.friendScheduleView.upsert({
+      where: { viewerId_targetUserId: { viewerId, targetUserId } },
+      create: { viewerId, targetUserId },
+      update: { lastViewedAt: new Date() },
+    }),
+
+  // 뷰어의 친구별 마지막 열람 시각 조회 (hasUnviewedSchedule 계산용). 열람 기록 없으면 결과에 없다.
+  findScheduleViews: (viewerId: number, targetUserIds: number[]) =>
+    prisma.friendScheduleView.findMany({
+      where: { viewerId, targetUserId: { in: targetUserIds } },
+      select: { targetUserId: true, lastViewedAt: true },
+    }),
+
+  // 친구별 "조회 가능한 공개 일정 중 가장 최근 생성 시각(createdAt)" 맵 — hasUnviewedSchedule 계산용.
+  // 가시성은 hasTodaySchedule과 동일: 공개 카테고리 마일스톤·하위 태스크 + 친구 본인 독립 태스크.
+  // 신규 생성(createdAt)만 본다 — 이름·날짜 수정, 완료 체크는 링을 다시 켜지 않는다(FE 확정 스펙).
+  findFriendsLatestScheduleCreatedAt: async (
+    friendIds: number[],
+  ): Promise<Map<number, Date>> => {
+    if (friendIds.length === 0) {
+      return new Map();
+    }
+
+    const [milestones, publicCategoryTasks, independentTasks] = await Promise.all([
+      prisma.milestone.findMany({
+        where: { category: { userId: { in: friendIds }, isPublic: true } },
+        select: { createdAt: true, category: { select: { userId: true } } },
+      }),
+      prisma.task.findMany({
+        where: { category: { is: { userId: { in: friendIds }, isPublic: true } } },
+        select: { createdAt: true, category: { select: { userId: true } } },
+      }),
+      prisma.task.findMany({
+        where: { userId: { in: friendIds }, categoryId: null, milestoneId: null },
+        select: { createdAt: true, userId: true },
+      }),
+    ]);
+
+    const latest = new Map<number, Date>();
+    const put = (ownerId: number, createdAt: Date) => {
+      const current = latest.get(ownerId);
+      if (!current || createdAt > current) {
+        latest.set(ownerId, createdAt);
+      }
+    };
+    for (const milestone of milestones) {
+      put(milestone.category.userId, milestone.createdAt);
+    }
+    for (const task of publicCategoryTasks) {
+      if (task.category) {
+        put(task.category.userId, task.createdAt);
+      }
+    }
+    for (const task of independentTasks) {
+      put(task.userId, task.createdAt);
+    }
+    return latest;
+  },
 };

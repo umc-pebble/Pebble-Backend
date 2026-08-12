@@ -102,6 +102,10 @@ model User {
   // Follow.followingId 기준 - 나를 팔로우한 요청 (follower 목록)
   followers Follow[] @relation("UserFollowers")
 
+  // 친구 일정 열람 시각 (프로필 링 "안 본 일정" — hasUnviewedSchedule)
+  scheduleViews  FriendScheduleView[] @relation("ScheduleViewer")
+  viewedByOthers FriendScheduleView[] @relation("ScheduleViewed")
+
   @@unique([nickname, uniqueTag])
 }
 
@@ -132,6 +136,23 @@ model Follow {
 
   @@unique([followerId, followingId])
   @@index([followingId])
+}
+
+// 친구 일정 열람 시각 — 뷰어가 특정 친구의 캘린더를 마지막으로 조회한 시각을 저장한다.
+// hasUnviewedSchedule(프로필 링 "안 본 일정") 계산에 쓰인다: 이 시각 이후 생성된 친구의 공개 일정이
+// 있으면 링을 켠다. (viewer, target) 쌍당 1행이며 POST /follows/{userId}/viewed로 upsert된다.
+model FriendScheduleView {
+  id           Int      @id @default(autoincrement())
+  viewerId     Int // 보는 사람
+  targetUserId Int // 일정 주인(친구)
+  lastViewedAt DateTime @updatedAt // 마지막 조회 시각 (upsert마다 갱신)
+  createdAt    DateTime @default(now())
+
+  viewer User @relation("ScheduleViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  target User @relation("ScheduleViewed", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@unique([viewerId, targetUserId])
+  @@index([targetUserId])
 }
 
 model Report {

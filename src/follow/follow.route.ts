@@ -9,6 +9,7 @@ import {
   getFollows,
   acceptFollow,
   deleteFollow,
+  markScheduleViewed,
 } from './follow.controller';
 import {
   requestFollowSchema,
@@ -206,7 +207,8 @@ router.post('/follows', authMiddleware, validateBody(requestFollowSchema), reque
  *                           uniqueTag: { type: string, example: '1234' }
  *                           profileImageUrl: { type: string, nullable: true, example: 'https://...' }
  *                           bio: { type: string, nullable: true, example: 하루가 빙글빙글 돌아감 }
- *                           hasTodaySchedule: { type: boolean, description: 프로필 테두리 활성화용, example: true }
+ *                           hasTodaySchedule: { type: boolean, description: 금일 일정 유무 — 프로필 테두리 활성화용, example: true }
+ *                           hasUnviewedSchedule: { type: boolean, description: 마지막 열람 이후 새로 생긴 공개 일정 유무 — POST /follows/{userId}/viewed 호출 시 해제, example: false }
  *                     page:
  *                       type: object
  *                       properties:
@@ -310,5 +312,45 @@ router.post('/follows/:followId/accept', authMiddleware, acceptFollow);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.delete('/follows/:followId', authMiddleware, deleteFollow);
+
+/**
+ * @swagger
+ * /follows/{userId}/viewed:
+ *   post:
+ *     summary: 친구 일정 열람 기록 (PLB-034)
+ *     description: >
+ *       친구의 캘린더를 조회한 뒤 호출해 "안 본 일정" 링(hasUnviewedSchedule)을 끕니다.
+ *       마지막 열람 시각을 현재로 갱신하며, 이후 새로 생성된 공개 일정이 있으면 링이 다시 켜집니다.
+ *       FE는 친구 캘린더 조회가 성공한 뒤 호출하는 것을 권장합니다. 멱등(중복 호출 안전)하며,
+ *       ACCEPTED 친구가 아니면 403입니다.
+ *     tags: [Follow]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: userId
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *         description: 일정을 열람한 대상(친구) 사용자 id
+ *         example: 2
+ *     responses:
+ *       200:
+ *         description: 열람 처리 완료
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             example: { success: true, message: 열람 처리 완료, data: null }
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: 친구(ACCEPTED)가 아님
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             example: { success: false, message: 친구의 일정만 열람할 수 있습니다., error: { code: "COMMON_FORBIDDEN" } }
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post('/follows/:userId/viewed', authMiddleware, markScheduleViewed);
 
 export default router;
