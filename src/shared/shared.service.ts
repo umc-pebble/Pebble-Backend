@@ -234,8 +234,8 @@ export const sharedService = {
   },
 
   // 자진 탈퇴. 오너는 탈퇴할 수 없고 공유 삭제를 사용해야 한다 (PLB-045).
-  // 탈퇴 시 본인이 그 카테고리에 만든 미완료 태스크는 삭제된다(완료 태스크는 유지) —
-  // 프론트 확정 정책(진행률이 나간 사람의 미완료 태스크에 막히지 않도록).
+  // 탈퇴해도 본인이 그 카테고리에 만든 마일스톤·태스크는 완료 여부와 관계없이 그대로 유지된다
+  // (프론트 확정 정책, #111 — 이전엔 미완료 태스크를 삭제했으나 정책이 "전부 보존"으로 뒤집힘).
   async leaveSharedCategory(userId: number, categoryId: number) {
     const membership = await sharedRepository.findMembership(categoryId, userId);
     if (!membership) {
@@ -247,11 +247,11 @@ export const sharedService = {
         '오너는 탈퇴할 수 없습니다. 공유 삭제를 이용해주세요.',
       );
     }
-    await sharedRepository.deleteMembershipAndIncompleteTasks(categoryId, userId);
+    await sharedRepository.deleteMembership(categoryId, userId);
   },
 
   // 오너가 특정 멤버를 강퇴한다. 강퇴 알림은 발송하지 않는다 (PLB-045).
-  // 강퇴 시에도 자진 탈퇴와 동일하게, 그 멤버가 만든 미완료 태스크는 삭제되고 완료 태스크는 유지된다.
+  // 강퇴 시에도 자진 탈퇴와 동일하게, 그 멤버가 만든 마일스톤·태스크는 완료 여부와 관계없이 유지된다.
   async removeMember(ownerId: number, categoryId: number, targetUserId: number) {
     await getSharedCategoryOrThrow(categoryId);
     await getOwnerMembershipOrThrow(categoryId, ownerId);
@@ -263,7 +263,7 @@ export const sharedService = {
     if (target.role === 'OWNER') {
       throw new AppError('COMMON_INVALID_INPUT', '오너는 강퇴할 수 없습니다.');
     }
-    await sharedRepository.deleteMembershipAndIncompleteTasks(categoryId, targetUserId);
+    await sharedRepository.deleteMembership(categoryId, targetUserId);
   },
 
   // 오너가 공유 카테고리를 삭제한다. 하위 마일스톤/태스크/멤버십은 CASCADE로 함께 삭제된다.
