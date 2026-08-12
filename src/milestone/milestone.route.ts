@@ -683,11 +683,14 @@ router.patch('/milestones/:milestoneId', validateBody(updateMilestoneSchema), up
  *   delete:
  *     summary: 마일스톤 삭제 (PLB-014)
  *     description: >
- *       마일스톤을 삭제합니다. 하위 태스크가 함께 삭제(CASCADE)되며 복구할 수 없습니다.
+ *       마일스톤을 삭제합니다. **하위 태스크는 함께 삭제되지 않습니다** — 완료 여부와 무관하게
+ *       모두 살아남아 해당 카테고리의 직속 태스크가 됩니다(응답의 milestoneId가 null로 바뀝니다).
+ *       화면에서는 마일스톤 하위가 아니라 카테고리 바로 아래에 표시하면 됩니다.
+ *       옮겨진 태스크는 기존 직속 태스크 뒤에 붙고 서로의 상대 순서는 유지됩니다.
  *       다중(MULTIPLE) 마일스톤은 deleteScope로 "이 항목만 삭제 / 전체 삭제"를 반드시 지정합니다(기본값 없음, 둘 중 택1).
  *       deleteScope=THIS_ONLY → URL로 지정한 회차 row 1건만 삭제,
  *       deleteScope=ALL → 지정 회차 + 같은 seriesId 중 "오늘 이후 + 미완료" 회차 일괄 삭제
- *       (완료된 과거 회차는 보존, PLB-014).
+ *       (완료된 과거 회차는 보존, PLB-014). 이 경우 정리되는 회차 전부의 하위 태스크가 직속으로 내려옵니다.
  *       SINGLE/RANGE 마일스톤에는 deleteScope를 지정할 수 없습니다.
  *       확인 모달(네/아니오)은 프론트엔드에서 처리합니다.
  *     tags: [Milestone]

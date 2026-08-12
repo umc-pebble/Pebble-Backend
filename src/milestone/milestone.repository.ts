@@ -217,6 +217,55 @@ async function applyMove(tx: Tx, milestoneIds: number[], targetCategoryId: numbe
   });
 }
 
+// 마일스톤 삭제 전에 하위 태스크를 카테고리 직속 태스크로 내보낸다(프론트 확정 정책).
+// Task.milestoneId가 onDelete: Cascade라, 옮기지 않고 마일스톤을 지우면 하위 태스크가
+// 완료된 것까지 통째로 함께 삭제된다. 그래서 삭제 경로는 반드시 이 함수를 먼저 거친다.
+//
+// displayOrder를 다시 채번하는 이유: 태스크의 순번은 (categoryId, milestoneId) 조합 단위로
+// 매겨진다(task.repository의 getNextTaskDisplayOrder). 옮긴 태스크가 마일스톤 시절의 순번을
+// 그대로 들고 오면 이미 직속에 있던 태스크와 번호가 겹쳐, 목록 순서가 조회할 때마다 달라진다.
+// 직속 버킷의 맨 뒤에 이어 붙이고, 옮기는 태스크끼리의 상대 순서는 그대로 유지한다.
+// 채번 중 같은 카테고리에 태스크가 새로 생기면 번호가 또 겹치므로, task.repository의
+// lockTaskDisplayOrder와 같은 대상(카테고리 row)을 FOR UPDATE로 잠가 직렬화한다.
+//
+// categoryId는 호출자가 마일스톤에서 읽어 넘긴다. 하위 태스크는 그 마일스톤과 같은 카테고리에
+// 있다는 것이 도메인 불변식이라(applyMove도 같은 전제로 태스크의 categoryId를 함께 옮긴다)
+// 여기서도 명시적으로 다시 써준다 — 혹시 어긋난 행이 있어도 이 시점에 바로잡힌다.
+//
+// 트랜잭션은 호출자가 연다. 삭제와 같은 트랜잭션이어야 "태스크만 떨어져 나오고 마일스톤은
+// 남은" 중간 상태가 생기지 않는다.
+async function detachTasksToCategory(
+  tx: Tx,
+  milestoneIds: number[],
+  categoryId: number,
+) {
+  if (milestoneIds.length === 0) return;
+
+  await tx.$queryRaw`SELECT id FROM Category WHERE id = ${categoryId} FOR UPDATE`;
+
+  const tasks = await tx.task.findMany({
+    where: { milestoneId: { in: milestoneIds } },
+    select: { id: true },
+    orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+  });
+  if (tasks.length === 0) return;
+
+  const max = await tx.task.aggregate({
+    where: { categoryId, milestoneId: null },
+    _max: { displayOrder: true },
+  });
+
+  // 직속 태스크의 채번은 1부터 시작한다(getNextTaskDisplayOrder의 `(max ?? 0) + 1`).
+  let next = (max._max.displayOrder ?? 0) + 1;
+  for (const task of tasks) {
+    await tx.task.update({
+      where: { id: task.id },
+      data: { milestoneId: null, categoryId, displayOrder: next },
+    });
+    next += 1;
+  }
+}
+
 export const milestoneRepository = {
   // 카테고리에 속한 마일스톤 목록. 수동 순서(displayOrder) 우선, 같으면 D-Day(startDate) 순.
   findManyByCategoryId(categoryId: number) {
@@ -471,22 +520,50 @@ export const milestoneRepository = {
     );
   },
 
-  // 삭제. 하위 task는 스키마 onDelete: Cascade로 함께 삭제된다.
-  delete(milestoneId: number) {
-    return prisma.milestone.delete({ where: { id: milestoneId } });
+  // 삭제. 하위 태스크는 함께 지우지 않고 카테고리 직속으로 내보낸 뒤 마일스톤만 삭제한다
+  // (프론트 확정 정책). 하위 태스크가 없으면 detach가 아무것도 하지 않으므로 분기가 필요 없다.
+  delete(milestoneId: number, categoryId: number) {
+    return withDeadlockRetry(() =>
+      prisma.$transaction(async (tx) => {
+        await detachTasksToCategory(tx, [milestoneId], categoryId);
+        return tx.milestone.delete({ where: { id: milestoneId } });
+      }, TX_OPTIONS),
+    );
   },
 
   // 시리즈 삭제(deleteScope=ALL, PLB-014): 지정 회차 + 같은 seriesId의
   // "fromDate 이후 + 미완료" 회차를 일괄 삭제한다(완료된 과거 회차 보존).
-  deleteWithSeries(milestoneId: number, seriesId: number, fromDate: Date) {
-    return prisma.milestone.deleteMany({
-      where: {
-        OR: [
-          { id: milestoneId },
-          { seriesId, startDate: { gte: fromDate }, isCompleted: false },
-        ],
-      },
-    });
+  // 단건 삭제와 마찬가지로 정리 대상 회차의 하위 태스크를 먼저 카테고리 직속으로 내보낸다 —
+  // 여러 회차를 한 번에 지우므로 여기가 빠지면 정책 구멍이 가장 크게 뚫리는 지점이다.
+  //
+  // 삭제는 조회해둔 id 목록이 아니라 같은 where 조건으로 다시 건다. 조회 직후 회차가 늘어나도
+  // 함께 정리되어 고아 회차가 남지 않는다(갓 생긴 회차에는 하위 태스크가 없어 detach 대상도 아니다).
+  // changeDateType이 형제 회차를 정리할 때 쓰는 것과 같은 방식이다.
+  deleteWithSeries(
+    milestoneId: number,
+    seriesId: number,
+    fromDate: Date,
+    categoryId: number,
+  ) {
+    return withDeadlockRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const where = {
+          OR: [
+            { id: milestoneId },
+            { seriesId, startDate: { gte: fromDate }, isCompleted: false },
+          ],
+        };
+
+        const targets = await tx.milestone.findMany({ where, select: { id: true } });
+        await detachTasksToCategory(
+          tx,
+          targets.map((row) => row.id),
+          categoryId,
+        );
+
+        return tx.milestone.deleteMany({ where });
+      }, TX_OPTIONS),
+    );
   },
 
   // 순서 일괄 변경(한 트랜잭션). orderedIds 순서대로 displayOrder 0,1,2...

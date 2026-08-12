@@ -332,9 +332,13 @@ export const milestoneService = {
     return toMilestoneResponse(updated);
   },
 
-  // 삭제 (PLB-014, 하위 task는 CASCADE).
+  // 삭제 (PLB-014).
+  // - 하위 태스크는 함께 삭제되지 않고 카테고리 직속 태스크로 남는다(프론트 확정 정책).
+  //   Task.milestoneId가 onDelete: Cascade라 그냥 지우면 완료된 태스크까지 함께 사라지므로,
+  //   repository가 삭제 전에 milestoneId를 비워 카테고리 직속으로 내보낸다.
   // - MULTIPLE는 deleteScope 필수 택1(기본값 없음): THIS_ONLY=해당 회차 1건,
   //   ALL=해당 회차 + 같은 seriesId의 "오늘 이후 + 미완료" 회차 일괄(완료된 과거 회차 보존).
+  //   ALL은 정리되는 회차 전부의 하위 태스크가 직속으로 내려온다.
   // - SINGLE/RANGE에는 deleteScope를 지정할 수 없다.
   async deleteMilestone(userId: number, milestoneId: number, deleteScope?: string) {
     const existing = await getAccessibleMilestoneOrThrow(userId, milestoneId);
@@ -351,10 +355,11 @@ export const milestoneService = {
           milestoneId,
           existing.seriesId,
           kstToday(),
+          existing.categoryId,
         );
         return;
       }
-      await milestoneRepository.delete(milestoneId);
+      await milestoneRepository.delete(milestoneId, existing.categoryId);
       return;
     }
 
@@ -365,7 +370,7 @@ export const milestoneService = {
       );
     }
 
-    await milestoneRepository.delete(milestoneId);
+    await milestoneRepository.delete(milestoneId, existing.categoryId);
   },
 
   // 순서 변경. orderedIds가 모두 해당 카테고리 소속이고 중복이 없어야 한다(아니면 400).
