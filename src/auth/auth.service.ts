@@ -168,11 +168,20 @@ export const authService = {
 
   // 소셜 로그인 (PLB-002) — 인가코드 교환·프로필 조회는 auth.social이 담당하고, 여기서는 계정 연결 규칙만 다룬다.
   // 반환의 isNewUser로 컨트롤러가 200(기존)/201(가입)을 가른다.
+  // intent(FE 요청) — 로그인/회원가입 진입 목적 구분: SIGNUP인데 기존 계정이면 토큰 없이 409,
+  // LOGIN인데 미가입이면 404. 생략 시 기존처럼 자동 로그인·가입한다(하위 호환).
   socialLogin: async (provider: string, dto: SocialLoginDto) => {
     if (provider !== 'google' && provider !== 'naver') {
       throw new AppError('COMMON_INVALID_INPUT', '지원하지 않는 소셜 플랫폼입니다.');
     }
     const socialProvider = provider as SocialProvider;
+
+    // 기존 계정으로 로그인시키려는 지점마다 호출 — intent=SIGNUP이면 토큰 없이 409로 막는다.
+    const rejectSignupOnExisting = () => {
+      if (dto.intent === 'SIGNUP') {
+        throw new AppError('AUTH_SOCIAL_ACCOUNT_ALREADY_REGISTERED', '이미 가입된 소셜 계정입니다.');
+      }
+    };
 
     const profile = await getSocialProfile(socialProvider, dto.code, dto.redirectUri);
 
@@ -182,6 +191,7 @@ export const authService = {
       profile.providerAccountId,
     );
     if (linked) {
+      rejectSignupOnExisting();
       const tokens = await issueInitialTokens(linked.user.id);
       return { user: toPublicUser(linked.user), ...tokens, isNewUser: false };
     }
@@ -190,6 +200,7 @@ export const authService = {
     //    provider가 이메일 소유를 검증한 뒤 넘겨준 값이라 안전하며, 계정이 둘로 갈라지는 것을 막는다.
     const existing = await authRepository.findByEmail(profile.email);
     if (existing) {
+      rejectSignupOnExisting();
       await authRepository.linkSocialAccount(
         existing.id,
         socialProvider,
@@ -199,7 +210,10 @@ export const authService = {
       return { user: toPublicUser(existing), ...tokens, isNewUser: false };
     }
 
-    // 3) 완전 신규 — 자체 회원가입과 동일하게 태그 충돌 시 재발급하며 생성한다.
+    // 3) 완전 신규 — intent=LOGIN이면 자동 가입하지 않고 404. 그 외엔 자체 회원가입과 동일하게 태그 충돌 시 재발급하며 생성한다.
+    if (dto.intent === 'LOGIN') {
+      throw new AppError('AUTH_SOCIAL_ACCOUNT_NOT_REGISTERED', '가입되지 않은 소셜 계정입니다.');
+    }
     const nickname = resolveSocialNickname(profile);
     for (let attempt = 0; attempt < TAG_MAX_ATTEMPTS; attempt += 1) {
       const uniqueTag = generateTag();
@@ -237,6 +251,7 @@ export const authService = {
             profile.providerAccountId,
           );
           if (created) {
+            rejectSignupOnExisting();
             const tokens = await issueInitialTokens(created.user.id);
             return { user: toPublicUser(created.user), ...tokens, isNewUser: false };
           }
