@@ -278,6 +278,21 @@ export const milestoneRepository = {
     });
   },
 
+  // 친구 프로필 조회 중 "친구가 소유하지 않은" 공유 카테고리를 볼 때 쓴다.
+  // 그 카테고리에는 오너와 다른 멤버가 만든 마일스톤이 섞여 있는데, 친구 프로필은 어디까지나
+  // 그 친구의 일정을 보는 화면이라 작성자가 대상 유저인 것만 골라야 한다
+  // (친구 소유 카테고리는 카테고리 소유자에게 귀속시키므로 findManyByCategoryId를 그대로 쓴다 —
+  // follow.repository의 findFriendIdsWithTodaySchedule에 적힌 귀속 규칙과 같은 기준이다).
+  //
+  // createdByUserId가 NULL인 행(컬럼 도입 이전 생성분·작성자 탈퇴)은 대상에서 빠진다.
+  // 작성자를 확인할 수 없는 항목을 남의 프로필에 띄우는 것보다 감추는 쪽이 안전하다.
+  findManyByCategoryIdAndCreator(categoryId: number, createdByUserId: number) {
+    return prisma.milestone.findMany({
+      where: { categoryId, createdByUserId },
+      orderBy: [{ displayOrder: 'asc' }, { startDate: 'asc' }],
+    });
+  },
+
   // 월별 마일스톤 목록(사이드바 조립용). 카테고리를 가리지 않고 "조회 월에 걸치는" 마일스톤만
   // 한 번에 반환한다 — 카테고리마다 findManyByCategoryId를 부르면 N번 왕복이 되기 때문이다.
   //

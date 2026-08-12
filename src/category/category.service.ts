@@ -148,7 +148,15 @@ export const categoryService = {
   // 멤버로 참여 중인 남의 공개 공유 카테고리를 함께 반환한다 — 친구가 공유 카테고리에만
   // 일정을 쓰고 있으면 소유 카테고리만 보여줄 때 프로필이 비어 보이기 때문이다.
   //
-  // 공유 쪽은 오너도 요청자와 친구일 때만 노출한다(filterByFriendlyOwner 참고).
+  // 남의 공유 카테고리에는 두 겹의 조건이 더 붙는다. 친구 프로필은 "그 친구의 일정을 보는"
+  // 화면이라, 친구와 무관한 정보가 딸려 나가지 않게 막는 것이다.
+  //   1) 오너도 요청자와 친구여야 한다 (filterByFriendlyOwner)
+  //   2) 대상 유저가 그 카테고리에 실제로 뭔가 작성했어야 한다
+  // 2번이 없으면 친구가 아무것도 쓰지 않은 카테고리까지 내려가, 일정은 하나도 없이 남의
+  // 카테고리 이름과 색만 노출된다("A가 B의 어떤 카테고리에 속해 있다"는 사실 자체가 새어나간다).
+  //
+  // 대상 유저 소유 카테고리에는 2번을 적용하지 않는다. 비어 있어도 본인 카테고리는 프로필에
+  // 보이는 게 맞고, 기존 동작이기도 하다.
   //
   // 정렬은 소유를 먼저, 공유받은 것을 뒤에 둔다. displayOrder가 오너 기준 순번이라 오너가
   // 다른 카테고리를 한 줄로 섞으면 순번이 겹쳐 순서가 조회할 때마다 달라진다
@@ -159,8 +167,14 @@ export const categoryService = {
     const owned = await categoryRepository.findPublicManyByUserId(targetUserId);
     const sharedCandidates =
       await categoryRepository.findPublicSharedByMemberId(targetUserId);
+    const byFriendlyOwner = await filterByFriendlyOwner(requesterId, sharedCandidates);
 
-    return [...owned, ...(await filterByFriendlyOwner(requesterId, sharedCandidates))];
+    const withContent = await categoryRepository.findCategoryIdsWithContentByAuthor(
+      byFriendlyOwner.map((category) => category.id),
+      targetUserId,
+    );
+
+    return [...owned, ...byFriendlyOwner.filter((category) => withContent.has(category.id))];
   },
 
   // 친구 프로필에서 특정 카테고리 1건을 검증해 반환한다(하위 마일스톤 조회 등에서 재사용).
@@ -168,7 +182,7 @@ export const categoryService = {
   // 목록에 없는데 URL로 열리면 두 화면의 규칙이 갈린다. 그래서 두 경로 모두 아래 두 가지를 허용한다.
   //   1) 대상 유저가 오너인 공개 카테고리
   //   2) 대상 유저가 ACCEPTED 멤버로 참여 중인 남의 공개 공유 카테고리
-  //      (단 오너도 요청자와 친구여야 한다 — filterByFriendlyOwner와 같은 이유)
+  //      (오너도 요청자와 친구여야 하고, 대상 유저가 그 카테고리에 뭔가 작성했어야 한다)
   // 권한 없는 카테고리는 존재 자체를 숨기기 위해 403이 아닌 404로 처리한다.
   async getFriendPublicCategory(
     requesterId: number,
@@ -193,6 +207,17 @@ export const categoryService = {
     if (!targetIsMember || !ownerIsVisible) {
       throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
     }
+
+    // 목록과 같은 "작성한 게 있어야 한다" 조건. 이게 빠지면 목록에는 안 뜨는 카테고리를
+    // URL로는 열 수 있게 되어 두 경로의 노출 범위가 갈린다.
+    const withContent = await categoryRepository.findCategoryIdsWithContentByAuthor(
+      [categoryId],
+      targetUserId,
+    );
+    if (!withContent.has(categoryId)) {
+      throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
+    }
+
     return category;
   },
 

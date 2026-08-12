@@ -197,6 +197,50 @@ export const categoryRepository = {
     });
   },
 
+  // 주어진 카테고리들 중 "그 유저가 작성한 항목이 하나라도 있는" 카테고리 id 집합.
+  // 친구 프로필에서 남의 공유 카테고리를 걸러내는 데 쓴다 — 친구가 아무것도 쓰지 않은
+  // 카테고리까지 내려보내면 일정은 하나도 없이 남의 카테고리 이름과 색만 노출된다.
+  //
+  // 판정을 "전 기간" 기준으로 하는 게 핵심이다. 월 필터를 걸면 이 목록이 내용 조회보다 좁아져,
+  // 내용은 있는데 목록에서 카테고리가 조용히 사라지는 상태가 생긴다(findVisibleByUserId의
+  // taskCount 주석에 적힌 것과 같은 함정). 목록 기준이 더 넓으면 "목록엔 있는데 이번 달엔
+  // 비어 보임"만 생기고 이건 정상 동작이다.
+  //
+  // 마일스톤은 createdByUserId, 태스크는 userId가 작성자다. 카테고리 개수와 무관하게 쿼리는
+  // 2번이라 N+1이 되지 않는다(findVisibleByUserId가 같은 이유로 task.groupBy를 쓰는 것과 동일).
+  //
+  // 태스크 담당에게: 친구 태스크 조회(task.repository의 findFriendTasksByMonth)가 공유 카테고리를
+  // 지원하게 될 때 작성자 기준을 여기와 똑같이 Task.userId로 맞춰야 한다. 한쪽만 기준이 달라지면
+  // 목록에는 뜨는데 내용이 비거나, 반대로 내용이 있는데 목록에서 빠진다.
+  async findCategoryIdsWithContentByAuthor(categoryIds: number[], userId: number) {
+    if (categoryIds.length === 0) {
+      return new Set<number>();
+    }
+
+    const [milestoneRows, taskRows] = await Promise.all([
+      prisma.milestone.groupBy({
+        by: ['categoryId'],
+        where: { categoryId: { in: categoryIds }, createdByUserId: userId },
+      }),
+      prisma.task.groupBy({
+        by: ['categoryId'],
+        where: { categoryId: { in: categoryIds }, userId },
+      }),
+    ]);
+
+    const withContent = new Set<number>();
+    for (const row of milestoneRows) {
+      withContent.add(row.categoryId);
+    }
+    for (const row of taskRows) {
+      // by에 넣은 categoryId는 위 where에서 non-null만 걸렀지만 타입상 nullable이다.
+      if (row.categoryId !== null) {
+        withContent.add(row.categoryId);
+      }
+    }
+    return withContent;
+  },
+
   // 유저 존재 확인용(친구 프로필 조회). 없으면 null → 서비스에서 404 판정.
   findUserById(userId: number) {
     return prisma.user.findUnique({

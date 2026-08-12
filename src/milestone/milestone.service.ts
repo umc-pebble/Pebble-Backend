@@ -148,9 +148,25 @@ export const milestoneService = {
   // 친구 프로필 조회(#64): 친구(또는 본인)의 공개 카테고리 하위 마일스톤 목록.
   // 친구 접근 판정 + 공개 카테고리 검증은 categoryService에 위임한다(마일스톤은 카테고리로 소유·공개를 판정).
   // 비공개 카테고리는 categoryService가 404로 막으므로 여기서 별도 처리는 필요 없다.
+  //
+  // 반환 범위는 카테고리 소유자에 따라 갈린다. 친구 프로필은 "그 친구의 일정을 보는" 화면이라
+  // 무엇을 친구의 것으로 볼지(귀속)를 기준으로 나눈 것이다.
+  // - 대상 유저 소유 카테고리: 그 안의 마일스톤 전부. 카테고리 자체가 친구 것이라 내용도 친구에게
+  //   귀속시킨다(follow.repository의 findFriendIdsWithTodaySchedule이 쓰는 규칙과 동일).
+  // - 남의 공유 카테고리(대상 유저가 멤버로 참여 중): 대상 유저가 작성한 것만. 카테고리 통째로
+  //   열면 오너와 다른 멤버의 마일스톤까지 남의 프로필에 딸려 나간다.
   async getFriendMilestones(requesterId: number, targetUserId: number, categoryId: number) {
-    await categoryService.getFriendPublicCategory(requesterId, targetUserId, categoryId);
-    const milestones = await milestoneRepository.findManyByCategoryId(categoryId);
+    const category = await categoryService.getFriendPublicCategory(
+      requesterId,
+      targetUserId,
+      categoryId,
+    );
+
+    const milestones =
+      category.userId === targetUserId
+        ? await milestoneRepository.findManyByCategoryId(categoryId)
+        : await milestoneRepository.findManyByCategoryIdAndCreator(categoryId, targetUserId);
+
     return milestones.map(toMilestoneResponse);
   },
 
