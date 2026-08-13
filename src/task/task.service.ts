@@ -4,7 +4,7 @@ import { taskRepository, CreateTaskData, ReplaceTaskData } from './task.reposito
 import { CreateTaskBody, ReorderTasksBody, UpdateTaskBody } from './task.schema';
 import { isFriend } from '../follow/follow.service';
 import { categoryService } from '../category/category.service';
-import { sharedRepository } from '../shared/shared.repository';
+import { findAcceptedSharedCategoryIds } from '../shared/shared.service';
 
 const toDate = (value: string): Date => {
     const [year, month, day] = value.split('-').map(Number);
@@ -65,7 +65,7 @@ const parseBaseDate = (baseDate?: string): string => {
 
 type TaskMutationResult = {
     id: number;
-    userId: number;
+    userId: number | null;
     categoryId: number | null;
     milestoneId: number | null;
     name: string;
@@ -168,7 +168,7 @@ const assertTaskAccess = async (
 const formatTaskList = <
     T extends {
         id: number;
-        userId: number;
+        userId: number | null;
         categoryId: number | null;
         milestoneId: number | null;
         name: string;
@@ -374,6 +374,13 @@ export const taskService = {
                         ? task.color
                         : null
                 : null;
+
+        if (categoryId === null && task.userId === null) {
+            throw new AppError(
+                'COMMON_FORBIDDEN',
+                '작성자가 탈퇴한 태스크는 독립 태스크로 변경할 수 없습니다.',
+            );
+        }
 
         const replacementData: ReplaceTaskData = {
             userId: task.userId,
@@ -784,15 +791,7 @@ export const taskService = {
 
         const acceptedSharedCategoryIds =
             includeSharedCategories
-                ? (
-                    await sharedRepository
-                        .findAcceptedSharedCategoryIds(
-                            userId,
-                        )
-                ).map(
-                    (membership) =>
-                        membership.categoryId,
-                )
+                ? await findAcceptedSharedCategoryIds(userId)
                 : [];
 
         const tasks =
@@ -923,9 +922,13 @@ export const taskService = {
             Date.UTC(year, month, 1),
         );
 
+        const acceptedSharedCategoryIds =
+            await findAcceptedSharedCategoryIds(targetUserId);
+
         const tasks =
             await taskRepository.findFriendTasksByMonth(
                 targetUserId,
+                acceptedSharedCategoryIds,
                 monthStart,
                 nextMonthStart,
             );
