@@ -63,7 +63,7 @@ export interface CreateTaskData {
 }
 
 export interface ReplaceTaskData {
-  userId: number;
+  userId: number | null;
   categoryId: number | null;
   milestoneId: number | null;
   name: string;
@@ -75,7 +75,7 @@ export interface ReplaceTaskData {
 }
 
 type TaskOrderScope = {
-    userId: number;
+    userId: number | null;
     categoryId: number | null;
     milestoneId: number | null;
 };
@@ -85,6 +85,12 @@ const lockTaskDisplayOrder = async (
     scope: TaskOrderScope,
 ) => {
     if (scope.categoryId === null) {
+        if (scope.userId === null) {
+            throw new Error(
+                '작성자가 탈퇴한 독립 태스크의 순서는 변경할 수 없습니다.',
+            );
+        }
+
         const lockedUsers =
             await tx.$queryRaw<Array<{ id: number }>>`
                 SELECT id

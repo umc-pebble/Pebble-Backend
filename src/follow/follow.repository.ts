@@ -214,7 +214,9 @@ export const followRepository = {
       }
     }
     for (const task of independentTasks) {
-      result.add(task.userId);
+      if (task.userId !== null) {
+        result.add(task.userId);
+      }
     }
     return result;
   },
@@ -276,7 +278,9 @@ export const followRepository = {
       }
     }
     for (const task of independentTasks) {
-      put(task.userId, task.createdAt);
+      if (task.userId !== null) {
+        put(task.userId, task.createdAt);
+      }
     }
     return latest;
   },

@@ -65,7 +65,7 @@ const parseBaseDate = (baseDate?: string): string => {
 
 type TaskMutationResult = {
     id: number;
-    userId: number;
+    userId: number | null;
     categoryId: number | null;
     milestoneId: number | null;
     name: string;
@@ -168,7 +168,7 @@ const assertTaskAccess = async (
 const formatTaskList = <
     T extends {
         id: number;
-        userId: number;
+        userId: number | null;
         categoryId: number | null;
         milestoneId: number | null;
         name: string;
@@ -374,6 +374,13 @@ export const taskService = {
                         ? task.color
                         : null
                 : null;
+
+        if (categoryId === null && task.userId === null) {
+            throw new AppError(
+                'COMMON_FORBIDDEN',
+                '작성자가 탈퇴한 태스크는 독립 태스크로 변경할 수 없습니다.',
+            );
+        }
 
         const replacementData: ReplaceTaskData = {
             userId: task.userId,
