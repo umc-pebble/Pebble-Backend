@@ -11,6 +11,11 @@ export const ERROR_CODE = {
   AUTH_INVALID_CREDENTIAL: { code: 'AUTH_INVALID_CREDENTIAL', status: 401 },
   AUTH_TOKEN_EXPIRED: { code: 'AUTH_TOKEN_EXPIRED', status: 401 },
   AUTH_SOCIAL_ONLY: { code: 'AUTH_SOCIAL_ONLY', status: 400 }, // 소셜 전용 계정의 비밀번호 발급/변경 시도 (PLB-035/042)
+  AUTH_SOCIAL_ACCOUNT_NOT_REGISTERED: { code: 'AUTH_SOCIAL_ACCOUNT_NOT_REGISTERED', status: 404 }, // intent=LOGIN인데 미가입 소셜 계정 (자동 가입 안 함)
+  AUTH_SOCIAL_ACCOUNT_ALREADY_REGISTERED: {
+    code: 'AUTH_SOCIAL_ACCOUNT_ALREADY_REGISTERED',
+    status: 409,
+  }, // intent=SIGNUP인데 이미 가입된 소셜 계정 (토큰 미발급)
 
   // Follow
   FOLLOW_DUPLICATED: { code: 'FOLLOW_DUPLICATED', status: 409 }, // 이미 요청/친구 상태 (PLB-033)

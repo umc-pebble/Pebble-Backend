@@ -142,6 +142,11 @@ router.post('/auth/login', validateBody(loginSchema), login);
  *       인가코드 교환은 서버에서만 수행합니다(클라이언트 시크릿 보호).
  *       연동된 계정이 없으면 가입 처리 후 isNewUser: true를 반환하며,
  *       프론트는 이를 보고 프로필 설정 화면으로 유도합니다. 소셜 유저는 password가 NULL입니다.
+ *
+ *       intent(선택)로 로그인/회원가입 진입 목적을 구분할 수 있습니다.
+ *       LOGIN + 미가입 계정이면 404(AUTH_SOCIAL_ACCOUNT_NOT_REGISTERED),
+ *       SIGNUP + 기존 계정이면 409(AUTH_SOCIAL_ACCOUNT_ALREADY_REGISTERED)로 토큰을 발급하지 않습니다.
+ *       intent를 생략하면 기존처럼 자동으로 로그인·가입합니다(하위 호환).
  *     tags: [Auth]
  *     security: []
  *     parameters:
@@ -161,6 +166,11 @@ router.post('/auth/login', validateBody(loginSchema), login);
  *             properties:
  *               code: { type: string, description: 프론트가 OAuth 콜백으로 받은 인가코드, example: '4/0AX4XfW...' }
  *               redirectUri: { type: string, description: 인가코드 발급에 사용한 redirect URI, example: 'https://pebble.app/oauth/callback' }
+ *               intent:
+ *                 type: string
+ *                 enum: [LOGIN, SIGNUP]
+ *                 description: 진입 목적 구분(선택). 생략 시 자동 로그인·가입. LOGIN=로그인 전용, SIGNUP=회원가입 전용.
+ *                 example: SIGNUP
  *     responses:
  *       200:
  *         description: 로그인 성공 (기존 유저)
@@ -206,6 +216,18 @@ router.post('/auth/login', validateBody(loginSchema), login);
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiResponse' }
  *             example: { success: false, message: 소셜 인증에 실패했습니다., error: { code: "AUTH_INVALID_CREDENTIAL" } }
+ *       404:
+ *         description: intent=LOGIN인데 가입되지 않은 소셜 계정 (자동 가입 안 함)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             example: { success: false, message: 가입되지 않은 소셜 계정입니다., error: { code: "AUTH_SOCIAL_ACCOUNT_NOT_REGISTERED" } }
+ *       409:
+ *         description: intent=SIGNUP인데 이미 가입된 소셜 계정 (토큰 미발급)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ApiResponse' }
+ *             example: { success: false, message: 이미 가입된 소셜 계정입니다., error: { code: "AUTH_SOCIAL_ACCOUNT_ALREADY_REGISTERED" } }
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
