@@ -178,11 +178,9 @@ export const categoryRepository = {
   // 참여 중인 남의 공개 카테고리를 반환한다. 위 findPublicManyByUserId가 대상 유저 소유만
   // 반환하는 것과 짝을 이룬다 — 둘을 합쳐야 "친구가 일정을 쓰고 있는 공개 카테고리 전부"가 된다.
   //
-  // 여기서 걸러지지 않는 조건이 하나 있다: 오너가 요청자와 친구인지. 이 카테고리의 오너는
-  // 대상 유저가 아니라 제3자이고, isPublic은 그 오너가 자기 팔로워에게 건 공개 설정이다.
-  // 친구가 멤버라는 이유만으로 열어주면 오너가 공개한 적 없는 사람에게까지 노출되므로,
-  // 서비스가 오너와 요청자의 친구 관계를 확인해 다시 거른다(팔로우 판정을 이 계층에서
-  // 다시 구현하지 않기 위해 여기서 하지 않는다 — categoryService의 isFriend 재사용 원칙).
+  // 여기서 끝나지 않고 서비스가 한 번 더 거른다: 대상 유저가 그 카테고리에 실제로 뭔가
+  // 작성했는지(findCategoryIdsWithContentByAuthor). 아무것도 안 쓴 카테고리까지 내려보내면
+  // 일정은 하나도 없이 남의 카테고리 이름과 색만 노출되기 때문이다.
   //
   // 정렬은 findVisibleByUserId의 공유 구간과 같다. displayOrder가 오너 기준 순번이라
   // 오너가 제각각인 목록에서는 겹칠 수 있어, 같으면 id(생성 순)로 갈라 순서를 고정한다.
@@ -209,9 +207,9 @@ export const categoryRepository = {
   // 마일스톤은 createdByUserId, 태스크는 userId가 작성자다. 카테고리 개수와 무관하게 쿼리는
   // 2번이라 N+1이 되지 않는다(findVisibleByUserId가 같은 이유로 task.groupBy를 쓰는 것과 동일).
   //
-  // 태스크 담당에게: 친구 태스크 조회(task.repository의 findFriendTasksByMonth)가 공유 카테고리를
-  // 지원하게 될 때 작성자 기준을 여기와 똑같이 Task.userId로 맞춰야 한다. 한쪽만 기준이 달라지면
-  // 목록에는 뜨는데 내용이 비거나, 반대로 내용이 있는데 목록에서 빠진다.
+  // 친구 태스크 조회(task.repository의 findFriendTasksByMonth)와 작성자 기준을 맞춰야 한다.
+  // 양쪽 다 Task.userId를 쓰며, 한쪽만 기준이 달라지면 목록에는 뜨는데 내용이 비거나
+  // 반대로 내용이 있는데 목록에서 빠진다.
   async findCategoryIdsWithContentByAuthor(categoryIds: number[], userId: number) {
     if (categoryIds.length === 0) {
       return new Set<number>();
@@ -292,6 +290,45 @@ export const categoryRepository = {
   delete(categoryId: number) {
     return prisma.category.delete({
       where: { id: categoryId },
+    });
+  },
+
+  // 어떤 유저가 오너인 공유 카테고리 id 목록. 회원탈퇴 시 오너 이관 대상을 찾는 데 쓴다.
+  // 개인 카테고리(isShared=false)는 지켜줄 멤버가 없어 대상이 아니다 — 종전대로 유저와 함께 삭제된다.
+  findOwnedSharedCategoryIds(userId: number) {
+    return prisma.category.findMany({
+      where: { userId, isShared: true },
+      select: { id: true },
+    });
+  },
+
+  // 공유 카테고리의 오너를 넘긴다. 회원탈퇴하는 오너의 카테고리를 남은 멤버에게 이관할 때 쓴다.
+  //
+  // 왜 필요한가: Category.userId가 onDelete: Cascade라 오너가 탈퇴하면 카테고리와 그 하위
+  // 마일스톤·태스크가 전부 삭제된다. 다른 멤버가 만든 완료 태스크까지 사라져서 "탈퇴·강퇴해도
+  // 완료 여부와 관계없이 유지" 정책을 어긴다. 유저 삭제 전에 오너를 바꿔두면 Cascade가 잡을
+  // 카테고리가 남지 않는다(스키마 변경 없이 막을 수 있는 이유).
+  //
+  // 호출부가 지켜야 할 계약:
+  //  - 반드시 User row 삭제 "전에" 호출해야 한다. 삭제 후에는 되돌릴 방법이 없다.
+  //  - tx를 필수로 받는다. 별도 트랜잭션으로 나누면 이관만 커밋되고 유저 삭제가 실패하거나
+  //    그 반대가 되어 데이터가 어긋난다. 호출부의 트랜잭션에 합류해야 한다.
+  //  - 이 함수는 Category row만 바꾼다. SharedCategoryMember의 role 변경(새 오너를 OWNER로,
+  //    기존 오너 row 삭제)과 후계자 선정은 호출부(shared 도메인) 책임이다. 멤버십은 그쪽
+  //    도메인의 테이블이라 여기서 건드리지 않는다.
+  //
+  // displayOrder를 다시 채번하는 이유: 순번이 오너 단위로 매겨져서(create의 채번 규칙) 옛 순번을
+  // 그대로 들고 가면 새 오너의 다른 카테고리와 겹친다. 새 오너 목록의 맨 뒤에 붙인다.
+  // 채번 중 새 오너가 카테고리를 만들면 또 겹치므로 create와 같은 방식으로 FOR UPDATE로 잠근다.
+  async transferOwnership(tx: Prisma.TransactionClient, categoryId: number, newOwnerId: number) {
+    const rows = await tx.$queryRaw<{ displayOrder: number }[]>`
+      SELECT displayOrder FROM Category WHERE userId = ${newOwnerId}
+      ORDER BY displayOrder DESC LIMIT 1 FOR UPDATE`;
+    const next = (rows[0]?.displayOrder ?? -1) + 1;
+
+    return tx.category.update({
+      where: { id: categoryId },
+      data: { userId: newOwnerId, displayOrder: next },
     });
   },
 
