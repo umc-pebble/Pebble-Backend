@@ -22,6 +22,41 @@ export const isFriend = async (userIdA: number, userIdB: number) => {
   return relation?.status === FollowStatus.ACCEPTED;
 };
 
+// hasUnviewedSchedule 계산 — 친구별로 "마지막 열람 이후 새로 생성된 공개 일정"이 있는지 판정한다.
+// baseline: 마지막 열람 시각(FriendScheduleView) ?? 친구 수락 시각(Follow.updatedAt).
+// 한 번도 안 봤으면 친구 된 뒤 올라온 새 일정만 잡히도록 수락 시각을 기준으로 쓴다.
+const computeUnviewedIds = async (
+  viewerId: number,
+  follows: Awaited<ReturnType<typeof followRepository.findList>>[0],
+): Promise<Set<number>> => {
+  const otherIds = follows.map((follow) =>
+    follow.followerId === viewerId ? follow.followingId : follow.followerId,
+  );
+  if (otherIds.length === 0) {
+    return new Set();
+  }
+
+  const [views, latestByFriend] = await Promise.all([
+    followRepository.findScheduleViews(viewerId, otherIds),
+    followRepository.findFriendsLatestScheduleCreatedAt(otherIds),
+  ]);
+  const lastViewedByFriend = new Map(views.map((view) => [view.targetUserId, view.lastViewedAt]));
+
+  const unviewed = new Set<number>();
+  for (const follow of follows) {
+    const otherId = follow.followerId === viewerId ? follow.followingId : follow.followerId;
+    const latest = latestByFriend.get(otherId);
+    if (!latest) {
+      continue; // 공개 일정이 아예 없으면 "안 본 것"도 없다
+    }
+    const baseline = lastViewedByFriend.get(otherId) ?? follow.updatedAt;
+    if (latest > baseline) {
+      unviewed.add(otherId);
+    }
+  }
+  return unviewed;
+};
+
 export const followService = {
   // 유저 검색 (PLB-032) — 닉네임 부분 일치 / 이메일 완전 일치, 본인 제외
   searchUsers: async (userId: number, query: SearchUsersQuery) => {
@@ -126,13 +161,17 @@ export const followService = {
     const others = follows.map((follow) =>
       follow.followerId === userId ? follow.following : follow.follower,
     );
-    const todayScheduleIds =
+    // 금일 일정(hasTodaySchedule)과 안 본 새 일정(hasUnviewedSchedule) 두 링을 친구에게만 계산한다.
+    const [todayScheduleIds, unviewedIds] =
       type === 'friends'
-        ? await followRepository.findFriendIdsWithTodaySchedule(
-            others.map((other) => other.id),
-            getTodayKST(),
-          )
-        : new Set<number>();
+        ? await Promise.all([
+            followRepository.findFriendIdsWithTodaySchedule(
+              others.map((other) => other.id),
+              getTodayKST(),
+            ),
+            computeUnviewedIds(userId, follows),
+          ])
+        : [new Set<number>(), new Set<number>()];
 
     const data = follows.map((follow) => {
       // row 하나로 양방향이므로 내가 아닌 쪽이 상대
@@ -146,9 +185,20 @@ export const followService = {
         bio: other.bio,
         // 금일 일정(공개 카테고리 기준)이 있으면 프로필 테두리 활성화 (PLB-034·040)
         hasTodaySchedule: todayScheduleIds.has(other.id),
+        // 마지막 열람 이후 새로 생긴 공개 일정이 있으면 활성화 (안 본 일정 링)
+        hasUnviewedSchedule: unviewedIds.has(other.id),
       };
     });
 
     return { data, page: { offset, limit, total } };
+  },
+
+  // 친구 일정 열람 기록 (PLB-034 프로필 링 "안 본 일정" 해제용).
+  // FE가 친구 캘린더 조회 성공 후 호출한다. ACCEPTED 친구만 가능하며 멱등(중복 호출 안전).
+  markScheduleViewed: async (viewerId: number, targetUserId: number) => {
+    if (!(await isFriend(viewerId, targetUserId))) {
+      throw new AppError('COMMON_FORBIDDEN', '친구의 일정만 열람할 수 있습니다.');
+    }
+    await followRepository.upsertScheduleView(viewerId, targetUserId);
   },
 };
