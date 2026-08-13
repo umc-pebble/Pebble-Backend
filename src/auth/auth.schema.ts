@@ -55,5 +55,7 @@ export const socialLoginSchema = z.object({
     .string({ required_error: '인가코드가 필요합니다.' })
     .min(1, '인가코드가 필요합니다.'),
   redirectUri: z.string().url('redirectUri 형식이 올바르지 않습니다.').optional(),
+  // 로그인/회원가입 진입 목적 구분 (FE 요청). 생략 시 기존 동작(자동 로그인·가입) 유지 — 하위 호환.
+  intent: z.enum(['LOGIN', 'SIGNUP']).optional(),
 });
 export type SocialLoginDto = z.infer<typeof socialLoginSchema>;

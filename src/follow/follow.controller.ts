@@ -28,6 +28,14 @@ const parseFollowId = (value: string) => {
   return followId;
 };
 
+const parseUserId = (value: string) => {
+  const userId = Number(value);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    throw new AppError('COMMON_INVALID_INPUT', '유효하지 않은 userId입니다.');
+  }
+  return userId;
+};
+
 export const searchUsers = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = requireUserId(req);
@@ -79,6 +87,17 @@ export const deleteFollow = async (req: AuthRequest, res: Response, next: NextFu
     const userId = requireUserId(req);
     await followService.deleteFollow(userId, parseFollowId(req.params.followId));
     sendSuccess(res, null, '처리 완료');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// 친구 일정 열람 기록 (PLB-034) — FE가 친구 캘린더 조회 성공 후 호출해 "안 본 일정" 링을 끈다.
+export const markScheduleViewed = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = requireUserId(req);
+    await followService.markScheduleViewed(userId, parseUserId(req.params.userId));
+    sendSuccess(res, null, '열람 처리 완료');
   } catch (err) {
     next(err);
   }
