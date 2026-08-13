@@ -248,7 +248,7 @@ async function detachTasksToCategory(
 
   const tasks = await tx.task.findMany({
     where: { milestoneId: { in: milestoneIds } },
-    select: { id: true },
+    select: { id: true, displayOrder: true },
     orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
   });
   if (tasks.length === 0) return;
@@ -259,13 +259,22 @@ async function detachTasksToCategory(
   });
 
   // 직속 태스크의 채번은 1부터 시작한다(getNextTaskDisplayOrder의 `(max ?? 0) + 1`).
-  let next = (max._max.displayOrder ?? 0) + 1;
-  for (const task of tasks) {
-    await tx.task.update({
-      where: { id: task.id },
-      data: { milestoneId: null, categoryId, displayOrder: next },
+  // 태스크마다 update를 돌리면 옮기는 개수만큼 왕복이 생기고, 그동안 위에서 잠근 카테고리 row가
+  // 계속 물려 있어 같은 카테고리의 태스크 생성이 전부 대기한다(deleteScope=ALL이면 회차 수만큼 늘어난다).
+  // 최종 순번은 위 정렬로 이미 확정되므로, 밀어야 할 양(delta)이 같은 행끼리 묶어 updateMany로 반영한다
+  // — reserveDateOrderSlots가 마일스톤 순번에 쓰는 방식과 같다.
+  // 다만 여기서는 delta가 0인 묶음도 건너뛰면 안 된다. 순번이 그대로여도 milestoneId를 떼는 갱신이 필요하다.
+  const start = (max._max.displayOrder ?? 0) + 1;
+  const byDelta = new Map<number, number[]>();
+  tasks.forEach((task, index) => {
+    const delta = start + index - task.displayOrder;
+    byDelta.set(delta, [...(byDelta.get(delta) ?? []), task.id]);
+  });
+  for (const [delta, ids] of byDelta) {
+    await tx.task.updateMany({
+      where: { id: { in: ids } },
+      data: { milestoneId: null, categoryId, displayOrder: { increment: delta } },
     });
-    next += 1;
   }
 }
 
