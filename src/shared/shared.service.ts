@@ -28,6 +28,12 @@ export async function isAcceptedSharedMember(userId: number, categoryId: number)
   return membership?.status === 'ACCEPTED';
 }
 
+// 다른 도메인이 공유 카테고리 접근 범위를 계산할 때 repository에 직접 의존하지 않도록 제공한다.
+export async function findAcceptedSharedCategoryIds(userId: number): Promise<number[]> {
+  const memberships = await sharedRepository.findAcceptedSharedCategoryIds(userId);
+  return memberships.map((membership) => membership.categoryId);
+}
+
 async function getCategoryOrThrow(categoryId: number) {
   const category = await sharedRepository.findCategoryById(categoryId);
   if (!category) {

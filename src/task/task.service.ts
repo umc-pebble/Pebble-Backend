@@ -4,7 +4,7 @@ import { taskRepository, CreateTaskData, ReplaceTaskData } from './task.reposito
 import { CreateTaskBody, ReorderTasksBody, UpdateTaskBody } from './task.schema';
 import { isFriend } from '../follow/follow.service';
 import { categoryService } from '../category/category.service';
-import { sharedRepository } from '../shared/shared.repository';
+import { findAcceptedSharedCategoryIds } from '../shared/shared.service';
 
 const toDate = (value: string): Date => {
     const [year, month, day] = value.split('-').map(Number);
@@ -784,15 +784,7 @@ export const taskService = {
 
         const acceptedSharedCategoryIds =
             includeSharedCategories
-                ? (
-                    await sharedRepository
-                        .findAcceptedSharedCategoryIds(
-                            userId,
-                        )
-                ).map(
-                    (membership) =>
-                        membership.categoryId,
-                )
+                ? await findAcceptedSharedCategoryIds(userId)
                 : [];
 
         const tasks =
@@ -923,11 +915,8 @@ export const taskService = {
             Date.UTC(year, month, 1),
         );
 
-        const acceptedSharedCategoryIds = (
-            await sharedRepository.findAcceptedSharedCategoryIds(
-                targetUserId,
-            )
-        ).map((membership) => membership.categoryId);
+        const acceptedSharedCategoryIds =
+            await findAcceptedSharedCategoryIds(targetUserId);
 
         const tasks =
             await taskRepository.findFriendTasksByMonth(
