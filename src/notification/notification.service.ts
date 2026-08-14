@@ -121,7 +121,9 @@ export const notificationService = {
         type: 'TASK_DUE' as const,
         relatedId: td.task.id,
       })),
-    ];
+    ].filter((candidate): candidate is typeof candidate & { userId: number } =>
+      candidate.userId !== null,
+    );
     if (candidates.length === 0) return { count: 0 };
 
     const notifyEnabledIds = await userRepository.findNotifyEnabledIds([

@@ -63,7 +63,7 @@ export interface CreateTaskData {
 }
 
 export interface ReplaceTaskData {
-  userId: number;
+  userId: number | null;
   categoryId: number | null;
   milestoneId: number | null;
   name: string;
@@ -75,7 +75,7 @@ export interface ReplaceTaskData {
 }
 
 type TaskOrderScope = {
-    userId: number;
+    userId: number | null;
     categoryId: number | null;
     milestoneId: number | null;
 };
@@ -85,6 +85,12 @@ const lockTaskDisplayOrder = async (
     scope: TaskOrderScope,
 ) => {
     if (scope.categoryId === null) {
+        if (scope.userId === null) {
+            throw new Error(
+                '작성자가 탈퇴한 독립 태스크의 순서는 변경할 수 없습니다.',
+            );
+        }
+
         const lockedUsers =
             await tx.$queryRaw<Array<{ id: number }>>`
                 SELECT id
@@ -1221,10 +1227,11 @@ export const taskRepository = {
     },
 
 
-    // 카테고리/마일스톤 하위 태스크는 공개 카테고리만 포함한다.(비공개 제외)
-    // 공유 카테고리는 대상 사용자가 소유한 카테고리가 아니므로 제외된다.
+    // 독립 태스크와 대상 사용자가 소유한 공개 카테고리의 태스크를 포함한다.
+    // 대상 사용자가 ACCEPTED 멤버인 공개 공유 카테고리는 직접 작성한 태스크만 포함한다.
     findFriendTasksByMonth: async (
         targetUserId: number,
+        acceptedSharedCategoryIds: number[],
         monthStart: Date,
         nextMonthStart: Date,
     ) => {
@@ -1245,6 +1252,19 @@ export const taskRepository = {
                                     is: {
                                         userId: targetUserId,
                                         isPublic: true,
+                                    },
+                                },
+                            },
+                            // 친구가 ACCEPTED 멤버로 참여 중인 공개 공유 카테고리에 직접 작성한 태스크
+                            {
+                                userId: targetUserId,
+                                categoryId: {
+                                    in: acceptedSharedCategoryIds,
+                                },
+                                category: {
+                                    is: {
+                                        isPublic: true,
+                                        isShared: true,
                                     },
                                 },
                             },

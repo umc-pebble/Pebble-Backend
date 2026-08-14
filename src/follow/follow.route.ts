@@ -208,7 +208,10 @@ router.post('/follows', authMiddleware, validateBody(requestFollowSchema), reque
  *                           profileImageUrl: { type: string, nullable: true, example: 'https://...' }
  *                           bio: { type: string, nullable: true, example: 하루가 빙글빙글 돌아감 }
  *                           hasTodaySchedule: { type: boolean, description: 금일 일정 유무 — 프로필 테두리 활성화용, example: true }
- *                           hasUnviewedSchedule: { type: boolean, description: 마지막 열람 이후 새로 생긴 공개 일정 유무 — POST /follows/{userId}/viewed 호출 시 해제, example: false }
+ *                           hasUnviewedSchedule:
+ *                             type: boolean
+ *                             description: 마지막 열람 이후 새로 생긴 공개 일정 유무 — POST /follows/{userId}/viewed 호출 시 해제
+ *                             example: false
  *                     page:
  *                       type: object
  *                       properties:
