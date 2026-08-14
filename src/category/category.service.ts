@@ -117,24 +117,77 @@ export const categoryService = {
   },
 
   // 친구(또는 본인)의 공개 카테고리 목록 (#64·PLB-040). 비공개(isPublic=false)는 노출하지 않는다.
+  // 대상 유저가 "오너인" 공개 카테고리와, 대상 유저가 멤버로 참여 중인 남의 공개 공유 카테고리를
+  // 함께 반환한다 — 친구가 공유 카테고리에만 일정을 쓰고 있으면 소유 카테고리만 보여줄 때
+  // 프로필이 비어 보이기 때문이다.
+  //
+  // 남의 공유 카테고리에는 "대상 유저가 그 카테고리에 실제로 뭔가 작성했어야 한다"는 조건이
+  // 하나 더 붙는다. 없으면 친구가 아무것도 쓰지 않은 카테고리까지 내려가, 일정은 하나도 없이
+  // 남의 카테고리 이름과 색만 노출된다("A가 B의 어떤 카테고리에 속해 있다"는 사실이 새어나간다).
+  //
+  // 대상 유저 소유 카테고리에는 이 조건을 적용하지 않는다. 비어 있어도 본인 카테고리는
+  // 프로필에 보이는 게 맞고, 기존 동작이기도 하다.
+  //
+  // 오너가 요청자와 친구인지는 보지 않는다. 친구 태스크 조회(task.repository의
+  // findFriendTasksByMonth)가 같은 범위를 오너 관계 없이 열기 때문에, 여기만 좁히면
+  // 목록에 없는 카테고리의 태스크가 내려가 프론트가 이름도 색도 모르는 항목을 받게 된다.
+  // 목록은 내용 조회의 상위집합이어야 한다.
+  //
+  // 정렬은 소유를 먼저, 공유받은 것을 뒤에 둔다. displayOrder가 오너 기준 순번이라 오너가
+  // 다른 카테고리를 한 줄로 섞으면 순번이 겹쳐 순서가 조회할 때마다 달라진다
+  // (findVisibleByUserId가 내 목록에서 같은 이유로 쓰는 정렬과 동일하다).
   async getFriendCategories(requesterId: number, targetUserId: number) {
     await assertFriendProfileAccess(requesterId, targetUserId);
-    return categoryRepository.findPublicManyByUserId(targetUserId);
+
+    const owned = await categoryRepository.findPublicManyByUserId(targetUserId);
+    const shared = await categoryRepository.findPublicSharedByMemberId(targetUserId);
+
+    const withContent = await categoryRepository.findCategoryIdsWithContentByAuthor(
+      shared.map((category) => category.id),
+      targetUserId,
+    );
+
+    return [...owned, ...shared.filter((category) => withContent.has(category.id))];
   },
 
   // 친구 프로필에서 특정 카테고리 1건을 검증해 반환한다(하위 마일스톤 조회 등에서 재사용).
-  // 접근 판정 후, 그 카테고리가 대상 유저 소유이면서 공개(isPublic=true)일 때만 반환한다.
-  // 남의 비공개 카테고리는 존재 자체를 숨기기 위해 403이 아닌 404로 처리한다.
+  // 노출 범위는 getFriendCategories(목록)와 반드시 같아야 한다 — 목록에 보이는데 열리지 않거나,
+  // 목록에 없는데 URL로 열리면 두 화면의 규칙이 갈린다. 그래서 두 경로 모두 아래 두 가지를 허용한다.
+  //   1) 대상 유저가 오너인 공개 카테고리
+  //   2) 대상 유저가 ACCEPTED 멤버로 참여 중인 남의 공개 공유 카테고리
+  //      (대상 유저가 그 카테고리에 뭔가 작성했어야 한다)
+  // 권한 없는 카테고리는 존재 자체를 숨기기 위해 403이 아닌 404로 처리한다.
   async getFriendPublicCategory(
     requesterId: number,
     targetUserId: number,
     categoryId: number,
   ) {
     await assertFriendProfileAccess(requesterId, targetUserId);
+
     const category = await categoryRepository.findById(categoryId);
-    if (!category || category.userId !== targetUserId || !category.isPublic) {
+    if (!category || !category.isPublic) {
       throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
     }
+    if (category.userId === targetUserId) {
+      return category;
+    }
+
+    // 여기부터는 제3자 소유 카테고리다. 대상 유저가 실제로 참여 중이어야 한다.
+    // 오너와 요청자의 친구 관계는 보지 않는다(getFriendCategories의 주석 참고).
+    if (!(await isAcceptedSharedMember(targetUserId, categoryId))) {
+      throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
+    }
+
+    // 목록과 같은 "작성한 게 있어야 한다" 조건. 이게 빠지면 목록에는 안 뜨는 카테고리를
+    // URL로는 열 수 있게 되어 두 경로의 노출 범위가 갈린다.
+    const withContent = await categoryRepository.findCategoryIdsWithContentByAuthor(
+      [categoryId],
+      targetUserId,
+    );
+    if (!withContent.has(categoryId)) {
+      throw new AppError('COMMON_NOT_FOUND', '카테고리를 찾을 수 없습니다.');
+    }
+
     return category;
   },
 

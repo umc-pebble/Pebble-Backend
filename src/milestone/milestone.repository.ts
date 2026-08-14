@@ -9,6 +9,7 @@ type Tx = Prisma.TransactionClient;
 
 interface CreateRowInput {
   categoryId: number;
+  createdByUserId: number;
   name: string;
   dateType: 'SINGLE' | 'RANGE' | 'MULTIPLE';
   startDate: Date;
@@ -111,7 +112,7 @@ async function reserveDateOrderSlots(
 // 반환 배열의 0번은 항상 가장 이른 날짜의 회차다.
 async function createSeriesRows(
   tx: Tx,
-  input: { categoryId: number; name: string; dates: Date[] },
+  input: { categoryId: number; createdByUserId: number; name: string; dates: Date[] },
 ) {
   const sorted = [...input.dates].sort((a, b) => a.getTime() - b.getTime());
   const slots = await reserveDateOrderSlots(tx, input.categoryId, sorted);
@@ -119,6 +120,7 @@ async function createSeriesRows(
   const first = await tx.milestone.create({
     data: {
       categoryId: input.categoryId,
+      createdByUserId: input.createdByUserId,
       name: input.name,
       dateType: 'MULTIPLE',
       startDate: sorted[0],
@@ -133,6 +135,7 @@ async function createSeriesRows(
     await tx.milestone.createMany({
       data: sorted.slice(1).map((date, i) => ({
         categoryId: input.categoryId,
+        createdByUserId: input.createdByUserId,
         name: input.name,
         dateType: 'MULTIPLE' as const,
         startDate: date,
@@ -217,11 +220,84 @@ async function applyMove(tx: Tx, milestoneIds: number[], targetCategoryId: numbe
   });
 }
 
+// 마일스톤 삭제 전에 하위 태스크를 카테고리 직속 태스크로 내보낸다(프론트 확정 정책).
+// Task.milestoneId가 onDelete: Cascade라, 옮기지 않고 마일스톤을 지우면 하위 태스크가
+// 완료된 것까지 통째로 함께 삭제된다. 그래서 삭제 경로는 반드시 이 함수를 먼저 거친다.
+//
+// displayOrder를 다시 채번하는 이유: 태스크의 순번은 (categoryId, milestoneId) 조합 단위로
+// 매겨진다(task.repository의 getNextTaskDisplayOrder). 옮긴 태스크가 마일스톤 시절의 순번을
+// 그대로 들고 오면 이미 직속에 있던 태스크와 번호가 겹쳐, 목록 순서가 조회할 때마다 달라진다.
+// 직속 버킷의 맨 뒤에 이어 붙이고, 옮기는 태스크끼리의 상대 순서는 그대로 유지한다.
+// 채번 중 같은 카테고리에 태스크가 새로 생기면 번호가 또 겹치므로, task.repository의
+// lockTaskDisplayOrder와 같은 대상(카테고리 row)을 FOR UPDATE로 잠가 직렬화한다.
+//
+// categoryId는 호출자가 마일스톤에서 읽어 넘긴다. 하위 태스크는 그 마일스톤과 같은 카테고리에
+// 있다는 것이 도메인 불변식이라(applyMove도 같은 전제로 태스크의 categoryId를 함께 옮긴다)
+// 여기서도 명시적으로 다시 써준다 — 혹시 어긋난 행이 있어도 이 시점에 바로잡힌다.
+//
+// 트랜잭션은 호출자가 연다. 삭제와 같은 트랜잭션이어야 "태스크만 떨어져 나오고 마일스톤은
+// 남은" 중간 상태가 생기지 않는다.
+async function detachTasksToCategory(
+  tx: Tx,
+  milestoneIds: number[],
+  categoryId: number,
+) {
+  if (milestoneIds.length === 0) return;
+
+  await tx.$queryRaw`SELECT id FROM Category WHERE id = ${categoryId} FOR UPDATE`;
+
+  const tasks = await tx.task.findMany({
+    where: { milestoneId: { in: milestoneIds } },
+    select: { id: true, displayOrder: true },
+    orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+  });
+  if (tasks.length === 0) return;
+
+  const max = await tx.task.aggregate({
+    where: { categoryId, milestoneId: null },
+    _max: { displayOrder: true },
+  });
+
+  // 직속 태스크의 채번은 1부터 시작한다(getNextTaskDisplayOrder의 `(max ?? 0) + 1`).
+  // 태스크마다 update를 돌리면 옮기는 개수만큼 왕복이 생기고, 그동안 위에서 잠근 카테고리 row가
+  // 계속 물려 있어 같은 카테고리의 태스크 생성이 전부 대기한다(deleteScope=ALL이면 회차 수만큼 늘어난다).
+  // 최종 순번은 위 정렬로 이미 확정되므로, 밀어야 할 양(delta)이 같은 행끼리 묶어 updateMany로 반영한다
+  // — reserveDateOrderSlots가 마일스톤 순번에 쓰는 방식과 같다.
+  // 다만 여기서는 delta가 0인 묶음도 건너뛰면 안 된다. 순번이 그대로여도 milestoneId를 떼는 갱신이 필요하다.
+  const start = (max._max.displayOrder ?? 0) + 1;
+  const byDelta = new Map<number, number[]>();
+  tasks.forEach((task, index) => {
+    const delta = start + index - task.displayOrder;
+    byDelta.set(delta, [...(byDelta.get(delta) ?? []), task.id]);
+  });
+  for (const [delta, ids] of byDelta) {
+    await tx.task.updateMany({
+      where: { id: { in: ids } },
+      data: { milestoneId: null, categoryId, displayOrder: { increment: delta } },
+    });
+  }
+}
+
 export const milestoneRepository = {
   // 카테고리에 속한 마일스톤 목록. 수동 순서(displayOrder) 우선, 같으면 D-Day(startDate) 순.
   findManyByCategoryId(categoryId: number) {
     return prisma.milestone.findMany({
       where: { categoryId },
+      orderBy: [{ displayOrder: 'asc' }, { startDate: 'asc' }],
+    });
+  },
+
+  // 친구 프로필 조회 중 "친구가 소유하지 않은" 공유 카테고리를 볼 때 쓴다.
+  // 그 카테고리에는 오너와 다른 멤버가 만든 마일스톤이 섞여 있는데, 친구 프로필은 어디까지나
+  // 그 친구의 일정을 보는 화면이라 작성자가 대상 유저인 것만 골라야 한다
+  // (친구 소유 카테고리는 카테고리 소유자에게 귀속시키므로 findManyByCategoryId를 그대로 쓴다 —
+  // follow.repository의 findFriendIdsWithTodaySchedule에 적힌 귀속 규칙과 같은 기준이다).
+  //
+  // createdByUserId가 NULL인 행(컬럼 도입 이전 생성분·작성자 탈퇴)은 대상에서 빠진다.
+  // 작성자를 확인할 수 없는 항목을 남의 프로필에 띄우는 것보다 감추는 쪽이 안전하다.
+  findManyByCategoryIdAndCreator(categoryId: number, createdByUserId: number) {
+    return prisma.milestone.findMany({
+      where: { categoryId, createdByUserId },
       orderBy: [{ displayOrder: 'asc' }, { startDate: 'asc' }],
     });
   },
@@ -303,7 +379,12 @@ export const milestoneRepository = {
 
   // 다중(MULTIPLE) 생성: 날짜마다 회차 row를 만들고 같은 seriesId로 묶는다(PLB-012).
   // 전체를 한 트랜잭션으로 묶어 일부 회차만 생성되는 상태를 방지한다.
-  createMultiple(input: { categoryId: number; name: string; dates: Date[] }) {
+  createMultiple(input: {
+    categoryId: number;
+    createdByUserId: number;
+    name: string;
+    dates: Date[];
+  }) {
     return withDeadlockRetry(() =>
       prisma.$transaction((tx) => createSeriesRows(tx, input), TX_OPTIONS),
     );
@@ -382,7 +463,7 @@ export const milestoneRepository = {
 
         // MULTIPLE: 앵커가 가장 이른 날짜의 첫 회차가 되고 seriesId로 자기 id를 쓴다
         // (생성 경로의 "seriesId = 첫 회차 id" 규칙과 동일).
-        await tx.milestone.update({
+        const anchor = await tx.milestone.update({
           where: { id: input.anchorId },
           data: {
             name: input.name,
@@ -396,8 +477,12 @@ export const milestoneRepository = {
 
         if (dates.length > 1) {
           await tx.milestone.createMany({
+            // 새로 생기는 회차의 작성자는 "수정한 사람"이 아니라 앵커의 작성자를 그대로 쓴다.
+            // 날짜 재지정은 같은 마일스톤의 형태를 바꾸는 것이라, 회차마다 작성자가 갈리면
+            // 한 시리즈 안에서 표시가 어긋난다. 앵커가 NULL이면(도입 이전 행·탈퇴자) 그대로 NULL이다.
             data: dates.slice(1).map((date, i) => ({
               categoryId: input.categoryId,
+              createdByUserId: anchor.createdByUserId,
               name: input.name,
               dateType: 'MULTIPLE' as const,
               startDate: date,
@@ -471,22 +556,50 @@ export const milestoneRepository = {
     );
   },
 
-  // 삭제. 하위 task는 스키마 onDelete: Cascade로 함께 삭제된다.
-  delete(milestoneId: number) {
-    return prisma.milestone.delete({ where: { id: milestoneId } });
+  // 삭제. 하위 태스크는 함께 지우지 않고 카테고리 직속으로 내보낸 뒤 마일스톤만 삭제한다
+  // (프론트 확정 정책). 하위 태스크가 없으면 detach가 아무것도 하지 않으므로 분기가 필요 없다.
+  delete(milestoneId: number, categoryId: number) {
+    return withDeadlockRetry(() =>
+      prisma.$transaction(async (tx) => {
+        await detachTasksToCategory(tx, [milestoneId], categoryId);
+        return tx.milestone.delete({ where: { id: milestoneId } });
+      }, TX_OPTIONS),
+    );
   },
 
   // 시리즈 삭제(deleteScope=ALL, PLB-014): 지정 회차 + 같은 seriesId의
   // "fromDate 이후 + 미완료" 회차를 일괄 삭제한다(완료된 과거 회차 보존).
-  deleteWithSeries(milestoneId: number, seriesId: number, fromDate: Date) {
-    return prisma.milestone.deleteMany({
-      where: {
-        OR: [
-          { id: milestoneId },
-          { seriesId, startDate: { gte: fromDate }, isCompleted: false },
-        ],
-      },
-    });
+  // 단건 삭제와 마찬가지로 정리 대상 회차의 하위 태스크를 먼저 카테고리 직속으로 내보낸다 —
+  // 여러 회차를 한 번에 지우므로 여기가 빠지면 정책 구멍이 가장 크게 뚫리는 지점이다.
+  //
+  // 삭제는 조회해둔 id 목록이 아니라 같은 where 조건으로 다시 건다. 조회 직후 회차가 늘어나도
+  // 함께 정리되어 고아 회차가 남지 않는다(갓 생긴 회차에는 하위 태스크가 없어 detach 대상도 아니다).
+  // changeDateType이 형제 회차를 정리할 때 쓰는 것과 같은 방식이다.
+  deleteWithSeries(
+    milestoneId: number,
+    seriesId: number,
+    fromDate: Date,
+    categoryId: number,
+  ) {
+    return withDeadlockRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const where = {
+          OR: [
+            { id: milestoneId },
+            { seriesId, startDate: { gte: fromDate }, isCompleted: false },
+          ],
+        };
+
+        const targets = await tx.milestone.findMany({ where, select: { id: true } });
+        await detachTasksToCategory(
+          tx,
+          targets.map((row) => row.id),
+          categoryId,
+        );
+
+        return tx.milestone.deleteMany({ where });
+      }, TX_OPTIONS),
+    );
   },
 
   // 순서 일괄 변경(한 트랜잭션). orderedIds 순서대로 displayOrder 0,1,2...
