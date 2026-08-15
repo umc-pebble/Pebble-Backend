@@ -3,6 +3,7 @@
 // DB 쿼리는 sharedRepository에 위임하고, 규칙 위반 시 AppError를 던진다.
 
 import { NotificationType, Prisma } from '@prisma/client';
+import { categoryRepository } from '../category/category.repository';
 import { isFriend } from '../follow/follow.service';
 import { AppError } from '../utils/app-error';
 import { logger } from '../utils/logger';
@@ -26,6 +27,33 @@ async function notifySafely(userId: number, type: NotificationType, relatedId: n
 export async function isAcceptedSharedMember(userId: number, categoryId: number): Promise<boolean> {
   const membership = await sharedRepository.findMembership(categoryId, userId);
   return membership?.status === 'ACCEPTED';
+}
+
+// 회원탈퇴하는 오너가 소유한 공유 카테고리들을 남은 멤버에게 이관한다. User/Auth 도메인의
+// withdraw()가 유저 삭제 "직전에", 같은 트랜잭션(tx) 안에서 호출해야 한다 — 그래야 이관과
+// 삭제가 하나로 묶여 "이관만 되고 삭제 실패" 또는 "삭제됐는데 이관 안 됨" 상태가 안 생긴다.
+//
+// 카테고리별로 후계자(가장 먼저 수락한 ACCEPTED 멤버)가 있으면 categoryRepository의
+// transferOwnership(Category.userId 이관)을 호출하고 SharedCategoryMember role을 OWNER로
+// 승격한다. 후계자가 없으면(다른 ACCEPTED 멤버가 아예 없음) 아무것도 하지 않는다 — 기존
+// 동작대로 유저 삭제 시 카테고리가 CASCADE로 함께 삭제된다.
+//
+// categoryRepository.transferOwnership 내부의 FOR UPDATE가 갭 락 교착(P2034)을 낼 수 있어,
+// 호출부(withdraw)가 트랜잭션 전체를 재시도 루프로 감싸야 한다(category 도메인의 계약 명시 사항).
+export async function reassignOwnedSharedCategoriesBeforeWithdrawal(
+  tx: Prisma.TransactionClient,
+  userId: number,
+): Promise<void> {
+  const ownedCategories = await categoryRepository.findOwnedSharedCategoryIds(userId);
+
+  for (const { id: categoryId } of ownedCategories) {
+    const successor = await sharedRepository.findEarliestAcceptedMember(tx, categoryId, userId);
+    if (!successor) {
+      continue;
+    }
+    await categoryRepository.transferOwnership(tx, categoryId, successor.userId);
+    await sharedRepository.promoteToOwner(tx, categoryId, successor.userId);
+  }
 }
 
 // 다른 도메인이 공유 카테고리 접근 범위를 계산할 때 repository에 직접 의존하지 않도록 제공한다.

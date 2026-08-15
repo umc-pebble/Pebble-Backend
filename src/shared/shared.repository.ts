@@ -1,4 +1,4 @@
-import { NotificationType, SharedCategoryRole, SharedCategoryStatus } from '@prisma/client';
+import { NotificationType, Prisma, SharedCategoryRole, SharedCategoryStatus } from '@prisma/client';
 import prisma from '../config/database';
 
 // Shared Category Repository
@@ -30,7 +30,13 @@ export const sharedRepository = {
         return null;
       }
       await tx.sharedCategoryMember.create({
-        data: { categoryId, userId: ownerId, role: 'OWNER', status: 'ACCEPTED' },
+        data: {
+          categoryId,
+          userId: ownerId,
+          role: 'OWNER',
+          status: 'ACCEPTED',
+          acceptedAt: new Date(),
+        },
       });
       if (inviteeUserIds.length > 0) {
         await tx.sharedCategoryMember.createMany({
@@ -75,10 +81,12 @@ export const sharedRepository = {
     return prisma.sharedCategoryMember.create({ data: { categoryId, userId, role, status } });
   },
 
+  // status를 ACCEPTED로 바꿀 때는 acceptedAt도 함께 채운다 — 오너 회원탈퇴 시 후계자
+  // (가장 먼저 수락한 멤버) 선정에 실제 수락 순서가 필요하다(createdAt은 초대 생성 시각이라 다르다).
   updateMemberStatus(categoryId: number, userId: number, status: SharedCategoryStatus) {
     return prisma.sharedCategoryMember.update({
       where: { categoryId_userId: { categoryId, userId } },
-      data: { status },
+      data: { status, ...(status === 'ACCEPTED' ? { acceptedAt: new Date() } : {}) },
     });
   },
 
@@ -164,6 +172,29 @@ export const sharedRepository = {
         where: { completedByUserId: userId, task: { categoryId } },
         data: { completedByUserId: null },
       });
+    });
+  },
+
+  // 오너 회원탈퇴 시 후계자 선정: 그 카테고리에서 ACCEPTED 상태이고 탈퇴자 본인이 아닌 멤버 중
+  // acceptedAt이 가장 이른(가장 먼저 수락한) 멤버 1명을 반환한다. 없으면 null(후계자 없음 —
+  // 호출부는 이관을 건너뛰고 카테고리를 기존처럼 CASCADE로 삭제되게 둔다).
+  //
+  // tx를 받는다 — 회원탈퇴 트랜잭션 안에서 호출되어야 같은 스냅샷에서 읽는다.
+  findEarliestAcceptedMember(tx: Prisma.TransactionClient, categoryId: number, excludeUserId: number) {
+    return tx.sharedCategoryMember.findFirst({
+      where: { categoryId, status: 'ACCEPTED', userId: { not: excludeUserId } },
+      orderBy: [{ acceptedAt: 'asc' }, { id: 'asc' }],
+    });
+  },
+
+  // 후계자를 새 오너로 승격한다. Category.userId 이관(categoryRepository.transferOwnership)과
+  // 같은 트랜잭션에서 호출해야 한다 — 하나만 반영되면 Category 오너와 SharedCategoryMember의
+  // OWNER role이 어긋난다. 기존 오너(탈퇴자)의 멤버십 row는 User 삭제 시 CASCADE로 함께
+  // 삭제되므로 여기서 따로 지우지 않는다.
+  promoteToOwner(tx: Prisma.TransactionClient, categoryId: number, userId: number) {
+    return tx.sharedCategoryMember.update({
+      where: { categoryId_userId: { categoryId, userId } },
+      data: { role: 'OWNER' },
     });
   },
 };
