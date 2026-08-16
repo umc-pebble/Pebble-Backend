@@ -69,6 +69,12 @@ export const userRepository = {
     return prisma.user.delete({ where: { id: userId } });
   },
 
+  // 회원탈퇴 트랜잭션 안에서 유저를 삭제한다 — 공유 카테고리 오너 이관과 원자적으로 묶기 위함.
+  // 오너 이관을 먼저 하고 유저를 지워야 Category onDelete: Cascade가 남은 멤버의 공유방을 삼키지 않는다.
+  deleteWithinTx(tx: Prisma.TransactionClient, userId: number) {
+    return tx.user.delete({ where: { id: userId } });
+  },
+
   // 비밀번호 변경 시 refreshToken을 새 값으로 덮어써 기존 세션(이전 refreshToken)을 함께 무효화한다.
   updatePassword(userId: number, passwordHash: string, refreshTokenHash: string) {
     return prisma.user.update({
