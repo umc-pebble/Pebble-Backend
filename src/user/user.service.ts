@@ -12,6 +12,7 @@ import { uploadService } from '../upload/upload.service';
 import { userRepository } from './user.repository';
 import { UpdateMeBody, UpdateSettingsBody, ChangePasswordBody } from './user.schema';
 import { followRepository } from '../follow/follow.repository';
+import { reassignOwnedSharedCategoriesBeforeWithdrawal } from '../shared/shared.service';
 import prisma from '../config/database';
 
 const NICKNAME_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000; // 15일 (PLB-003·043)
@@ -40,6 +41,27 @@ async function getUserOrThrow(userId: number) {
     throw new AppError('COMMON_UNAUTHORIZED', '유효하지 않은 사용자입니다.');
   }
   return user;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// FOR UPDATE 잠금 경합에서 갭 락 교착(deadlock)이 가능해 짧은 재시도를 둔다.
+// 즉시 재시도하면 충돌했던 트랜잭션끼리 같은 시점에 다시 부딪히므로,
+// 재시도 전에 지수 백오프(20·40ms)에 랜덤 지터(0~25ms)를 더해 재경합을 줄인다.
+// (milestone.repository의 동명 헬퍼와 같은 정책 — 회원탈퇴는 도메인이 달라 여기 인라인한다.)
+async function withDeadlockRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '';
+      const isDeadlock = (e as { code?: string }).code === 'P2034' || /deadlock/i.test(message);
+      if (!isDeadlock || attempt >= 3) throw e;
+      await sleep(20 * 2 ** (attempt - 1) + Math.floor(Math.random() * 25));
+    }
+  }
 }
 
 export const userService = {
@@ -373,6 +395,12 @@ export const userService = {
   // 회원탈퇴 (PLB-006). DELETE /users/me — 담당 분리상 이 메서드만 하은현(Auth) 소유다.
   // User row를 삭제하면 스키마의 onDelete: Cascade로 카테고리·마일스톤·태스크·팔로우·알림·
   // 구독·소셜계정·공유멤버가 함께 삭제된다(refreshToken도 같은 row라 함께 파기).
+  //
+  // 단, 탈퇴자가 오너인 "공유" 카테고리는 그대로 두면 Cascade로 통째 삭제돼 다른 멤버의
+  // 마일스톤·완료 태스크까지 사라진다(PLB-045 "탈퇴·강퇴해도 유지" 정책 위반). 그래서 유저 삭제
+  // "전에" 남은 멤버에게 오너를 이관하고(reassignOwnedSharedCategoriesBeforeWithdrawal),
+  // 이관과 삭제를 한 트랜잭션으로 묶어 둘 다 성공하거나 둘 다 취소되게 한다. 이관 내부
+  // transferOwnership의 FOR UPDATE가 갭 락 교착(P2034)을 낼 수 있어 트랜잭션 전체를 짧게 재시도한다.
   async withdraw(userId: number) {
       // 유효한 토큰인데 유저가 이미 없으면(중복 탈퇴 등) 인증 실패로 처리한다.
       await getUserOrThrow(userId);
@@ -382,6 +410,12 @@ export const userService = {
       //   남는 이미지 파일은 고아 상태로만 남고 기능 영향은 없다.
       // TODO(소셜 로그인 구현 후): 연동된 소셜 계정이 있으면 provider unlink API도 호출한다.
 
-      await userRepository.delete(userId);
+      await withDeadlockRetry(() =>
+        prisma.$transaction(async (tx) => {
+          // 오너인 공유 카테고리를 남은 멤버에게 이관 (유저 삭제 전 · 같은 트랜잭션)
+          await reassignOwnedSharedCategoriesBeforeWithdrawal(tx, userId);
+          await userRepository.deleteWithinTx(tx, userId);
+        }),
+      );
     },
   };
